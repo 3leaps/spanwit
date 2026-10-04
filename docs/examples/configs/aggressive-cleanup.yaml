@@ -1,0 +1,28 @@
+# Aggressive maintenance profile (shorter floors, broader patterns).
+# Posture: MAINTENANCE (still uses min_age floors) — not a crisis profile.
+# For disk-full recovery without an age floor, see crisis-dev.yaml.
+version: 1
+defaults:
+  min_size: 50M
+  min_age: 60d  # older-than floor
+paths:
+  - path: ~/dev
+    enabled: true
+    max_depth: 12
+    targets:
+      - signature: development.rust.cargo-target
+        min_age: 14d  # Be more aggressive on Rust targets
+      - pattern: "**/node_modules"
+      - pattern: "**/dist"
+      - pattern: "**/build"
+  - path: ~/Library/Caches
+    enabled: true
+    max_depth: 4
+    targets:
+      - pattern: "**"
+  - path: ~/Downloads
+    enabled: true
+    max_depth: 2
+    targets:
+      - pattern: "**/*.{iso,dmg,pkg,exe,zip}"
+        min_age: 7d

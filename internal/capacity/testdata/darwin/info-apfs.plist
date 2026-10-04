@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>DeviceIdentifier</key><string>disk9s5</string>
+  <key>FilesystemType</key><string>apfs</string>
+  <key>APFSContainerReference</key><string>disk9</string>
+  <key>VolumeUUID</key><string>VOL-TARGET</string>
+  <key>MountPoint</key><string>/System/Volumes/Data</string>
+  <key>AdditiveFutureKey</key><string>ignored</string>
+</dict>
+</plist>

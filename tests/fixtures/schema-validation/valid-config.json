@@ -1,0 +1,17 @@
+{
+  "version": "v1.0.0",
+  "environment": "staging",
+  "logLevel": "info",
+  "deployment": {
+    "mode": "direct",
+    "target": "https://staging.example.com/api",
+    "timeout": 300
+  },
+  "notifications": {
+    "enabled": true,
+    "channels": [
+      "email",
+      "slack"
+    ]
+  }
+}

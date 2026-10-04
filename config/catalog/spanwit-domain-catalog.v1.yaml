@@ -1,0 +1,297 @@
+# Spanwit built-in domain catalog (SSOT)
+#
+# This file is the single source of truth for curated use domains and their
+# disk-concern entries. It is validated against
+# config/schema/spanwit-domain-catalog.v1.schema.json at load time and by
+# `make validate-schemas`.
+#
+# Trust model (fail-closed): an entry's class_ceiling is a *ceiling*, not a
+# delete authority. Only a code-registered capability (a signature with
+# evidence + guards) can ever produce a deletion path. A catalog entry with
+# class_ceiling: prunable does not by itself make anything deletable.
+#
+# Go owns OS path resolution, evidence, and every destructive guard. The
+# catalog owns stable ids, labels, class ceiling, rebuild expectation,
+# per-platform applicability, and recipe/signature linkage.
+version: 1
+domains:
+  - name: development
+    label: Development
+    status: curated
+    description: >-
+      Language build trees, toolchains, package/module caches, and developer tool databases. The one fully wired domain in this catalog version.
+  - name: media
+    label: Media production
+    status: curated
+    description: >-
+      Curated app media caches (streaming offline content) plus the reserved model for editor project caches, renders, proxy media, and app scratch. Entries are diagnostic-only; user libraries and profiles are never targets.
+  - name: ml
+    label: Machine learning / data
+    status: stub
+    description: >-
+      Reserved model + extension point for datasets, checkpoints, and warehouse spill. No reclaim rules ship in this version.
+entries:
+  # --- development.rust ---
+  - id: development.rust.cargo-target
+    label: Rust Cargo build output
+    class_ceiling: prunable
+    rebuild_expectation: high
+    signature: development.rust.cargo-target
+    description: >-
+      Cargo build output (target/ next to Cargo.toml). Context-verified and safe_to_prune; the only prunable-ceiling entry, backed by a registered signature. Discovered under an analysis root, not a home cache.
+  - id: development.rust.rustup
+    label: Rustup toolchains
+    class_ceiling: diagnostic-only
+    rebuild_expectation: low
+    recipes:
+      - rustup-toolchains
+    locations:
+      default:
+        rel_home: .rustup
+    description: Installed rustup toolchains. Slow refill, high reinstall cost.
+  - id: development.rust.cargo-home
+    label: Cargo home (registry/git)
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    recipes:
+      - cargo-cache
+    locations:
+      default:
+        rel_home: .cargo
+    description: Cargo registry index, source cache, and git checkouts.
+  # --- development.go ---
+  - id: development.go.go-pkg
+    label: Go module cache (GOPATH/pkg)
+    class_ceiling: diagnostic-only
+    rebuild_expectation: high
+    locations:
+      default:
+        rel_home: go/pkg
+    description: Downloaded module cache under GOPATH/pkg.
+  - id: development.go.go-build
+    label: Go build cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: high
+    recipes:
+      - go-build-cache
+    locations:
+      darwin:
+        rel_home: Library/Caches/go-build
+      linux:
+        rel_home: .cache/go-build
+      windows:
+        rel_home: AppData/Local/go-build
+      default:
+        rel_home: .cache/go-build
+    description: Compiled build cache. High refill, low regret to clear.
+  # --- development.python ---
+  - id: development.python.uv-cache
+    label: uv package cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    recipes:
+      - uv-cache-prune
+    locations:
+      darwin:
+        rel_home: Library/Caches/uv
+      linux:
+        rel_home: .cache/uv
+      windows:
+        rel_home: AppData/Local/uv
+      default:
+        rel_home: .cache/uv
+    description: uv package/download cache. macOS location is Library/Caches/uv.
+  # --- development.node ---
+  - id: development.node.npm-cache
+    label: npm cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    locations:
+      default:
+        rel_home: .npm
+    description: npm content-addressable cache.
+  - id: development.node.yarn-cache
+    label: Yarn cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Library/Caches/Yarn
+    description: Yarn downloaded package cache (macOS). Refills on next install.
+  # --- development.python (tool caches) ---
+  - id: development.python.pip-cache
+    label: pip cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: high
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Library/Caches/pip
+    description: pip wheel/http cache (macOS). High refill, low regret.
+  - id: development.python.poetry-cache
+    label: Poetry cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Library/Caches/pypoetry
+    description: Poetry artifact and repository cache (macOS). Refills on next install.
+  - id: development.python.virtualenv-seeds
+    label: virtualenv seed cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Library/Caches/virtualenv
+    description: virtualenv seed wheels (macOS). Environments are not caches; this entry covers seed packages only and never a venv itself.
+  # --- development.security ---
+  - id: development.security.grype
+    label: grype DB cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: low
+    locations:
+      darwin:
+        rel_home: Library/Caches/grype
+      linux:
+        rel_home: .cache/grype
+      windows:
+        rel_home: AppData/Local/grype
+      default:
+        rel_home: .cache/grype
+    description: grype vulnerability database cache.
+  - id: development.security.trivy
+    label: trivy DB cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: low
+    locations:
+      darwin:
+        rel_home: Library/Caches/trivy
+      linux:
+        rel_home: .cache/trivy
+      windows:
+        rel_home: AppData/Local/trivy
+      default:
+        rel_home: .cache/trivy
+    description: trivy vulnerability database cache.
+  # --- development.browser ---
+  - id: development.browser.playwright
+    label: Playwright browsers
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Library/Caches/ms-playwright
+    description: Downloaded Playwright browser bundles (macOS location).
+  - id: development.browser.vivaldi
+    label: Vivaldi cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Library/Caches/Vivaldi
+    description: Vivaldi web cache (macOS). Cache only; profiles and user data are out of scope.
+  - id: development.browser.chrome
+    label: Chrome cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Library/Caches/Google/Chrome
+    description: Chrome web cache (macOS). Cache only; profiles and user data are out of scope.
+  - id: development.browser.firefox
+    label: Firefox cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Library/Caches/Firefox
+    description: Firefox web cache (macOS). Cache only; profiles and user data are out of scope.
+  # --- development.iot ---
+  - id: development.iot.esphome
+    label: ESPHome build cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Library/Caches/esphome
+    description: ESPHome compiled firmware cache (macOS). Recompiles on next build; device configurations are out of scope.
+  # --- development.virtualization ---
+  - id: development.virtualization.lima
+    label: Lima virtual machines
+    class_ceiling: diagnostic-only
+    rebuild_expectation: low
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: .lima
+    description: >-
+      Lima VM instances (macOS). These are machines, not caches — removing one destroys it. Listed for visibility only; low refill, high cost.
+  # --- media.audio ---
+  - id: media.audio.spotify
+    label: Spotify cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: high
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Library/Caches/com.spotify.client
+    description: Spotify offline/streaming cache (macOS). High refill; libraries and downloads are out of scope.
+  # --- development.system ---
+  - id: development.system.homebrew
+    label: Homebrew cache
+    class_ceiling: diagnostic-only
+    rebuild_expectation: medium
+    platforms:
+      - darwin
+    recipes:
+      - brew-cleanup
+    locations:
+      darwin:
+        rel_home: Library/Caches/Homebrew
+    description: Homebrew download cache (macOS).
+  - id: development.system.software-update
+    label: macOS software update staging
+    class_ceiling: diagnostic-only
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Library/Caches/softwareupdate
+    description: System-managed update staging (macOS). Owned by the OS, not by the user; listed for explanation only. No rebuild expectation is claimed.
+  - id: development.system.trash
+    label: Trash
+    class_ceiling: diagnostic-only
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: .Trash
+    description: Deleted files awaiting emptying (macOS). Empty via Finder only; there is no delete recipe. TCC may deny reads, which stays a coverage gap.
+  - id: development.system.downloads
+    label: Downloads
+    class_ceiling: diagnostic-only
+    platforms:
+      - darwin
+    locations:
+      darwin:
+        rel_home: Downloads
+    description: User downloads (macOS). Content review belongs to file-level diagnosis, not deletion; there is no delete recipe.

@@ -1,0 +1,353 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/config/v1.json",
+  "title": "Spanwit Configuration v1",
+  "description": "Schema for spanwit configuration files. All file-based configuration must validate against this schema.",
+  "type": "object",
+  "required": [
+    "version",
+    "defaults",
+    "paths"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version. Must be 1 for this version of the schema."
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Global default values. This section is required (even if empty).",
+      "additionalProperties": false,
+      "properties": {
+        "min_size": {
+          "type": "string",
+          "description": "Optional default minimum size for candidates. Omit for no size floor (opt-in). Examples: 100M, 1G, 500K",
+          "pattern": "^$|^[0-9]+[BKMGTP]?$",
+          "examples": [
+            "100M",
+            "1G",
+            "500K"
+          ]
+        },
+        "min_age": {
+          "type": "string",
+          "description": "Optional older-than floor (only reclaim if at least this old). Omit for no floor. Examples: 30d, 12h, 90m, 1w",
+          "pattern": "^$|^[0-9]+[smhdw]$",
+          "examples": [
+            "30d",
+            "12h",
+            "90m",
+            "1w"
+          ]
+        },
+        "max_age": {
+          "type": "string",
+          "description": "Optional younger-than ceiling (only reclaim if at most this old). Omit for no ceiling. Examples: 7d, 12h",
+          "pattern": "^$|^[0-9]+[smhdw]$",
+          "examples": [
+            "30d",
+            "12h",
+            "90m",
+            "1w"
+          ]
+        }
+      }
+    },
+    "signatures": {
+      "type": "object",
+      "description": "Optional user-defined signature hierarchy. Keys use domain -> ecosystem -> name, for example development.rust.cargo-target.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "candidate_patterns"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "candidate_patterns": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required_ancestor_files": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "any_child_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "safe_to_prune": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "domains": {
+      "type": "object",
+      "description": "Optional use-domain policy. Authorizes recipes and reclaim eligibility (never view projection). Discover-broad / authorize-narrow: disabled domains stay visible in inventory but are not domain-driven reclaim/recipe targets.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "array",
+          "description": "Enabled use domains. Omit for the built-in default ([development]). An explicit empty list means broad inventory with no domain-driven recipes or reclaim.",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$"
+          },
+          "uniqueItems": true
+        },
+        "catalog": {
+          "type": "array",
+          "description": "User catalog overlays: full-entry replacement by id. Overlays may add diagnostic inventory but can never set class_ceiling=prunable (trust-ceiling escalation is rejected).",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label",
+              "class_ceiling"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9]([a-z0-9_-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9_-]*[a-z0-9])?){2}$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "class_ceiling": {
+                "type": "string",
+                "enum": [
+                  "diagnostic-only",
+                  "recipe"
+                ],
+                "description": "User overlays are capped at diagnostic-only/recipe; prunable is not allowed (fail-closed)."
+              },
+              "rebuild_expectation": {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              "platforms": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "darwin",
+                    "linux",
+                    "windows"
+                  ]
+                },
+                "uniqueItems": true,
+                "minItems": 1
+              },
+              "locations": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "default": {
+                    "$ref": "#/$defs/catalog_location"
+                  },
+                  "darwin": {
+                    "$ref": "#/$defs/catalog_location"
+                  },
+                  "linux": {
+                    "$ref": "#/$defs/catalog_location"
+                  },
+                  "windows": {
+                    "$ref": "#/$defs/catalog_location"
+                  }
+                }
+              },
+              "signature": {
+                "type": "string",
+                "pattern": "^[a-z0-9]([a-z0-9_-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9_-]*[a-z0-9])?){2}$"
+              },
+              "recipes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "paths": {
+      "type": "array",
+      "description": "List of paths to scan.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Base path to scan. Tilde (~) expansion is supported.",
+            "minLength": 1
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether this path should be scanned.",
+            "default": true
+          },
+          "min_size": {
+            "type": "string",
+            "description": "Path-level minimum size override.",
+            "pattern": "^$|^[0-9]+[BKMGTP]?$"
+          },
+          "min_age": {
+            "type": "string",
+            "description": "Path-level min_age (older-than floor) override.",
+            "pattern": "^$|^[0-9]+[smhdw]$",
+            "examples": [
+              "30d",
+              "12h",
+              "90m",
+              "1w"
+            ]
+          },
+          "max_age": {
+            "type": "string",
+            "description": "Path-level max_age (younger-than ceiling) override.",
+            "pattern": "^$|^[0-9]+[smhdw]$",
+            "examples": [
+              "7d",
+              "12h",
+              "24h"
+            ]
+          },
+          "max_depth": {
+            "type": "integer",
+            "description": "Maximum directory depth to descend (0 = only the base path itself).",
+            "minimum": 0,
+            "default": 0
+          },
+          "targets": {
+            "type": "array",
+            "description": "Patterns to consider for reclamation. Targets use doublestar/gitignore-style matching.",
+            "items": {
+              "type": "object",
+              "oneOf": [
+                {
+                  "required": [
+                    "pattern"
+                  ]
+                },
+                {
+                  "required": [
+                    "signature"
+                  ]
+                }
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "signature": {
+                  "type": "string",
+                  "description": "Signature id in domain.ecosystem.name form, such as development.rust.cargo-target.",
+                  "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+                },
+                "pattern": {
+                  "type": "string",
+                  "description": "Glob pattern (supports doublestar **). Matches against the path relative to the configured root.",
+                  "minLength": 1
+                },
+                "min_size": {
+                  "type": "string",
+                  "description": "Override of the global min_size for this pattern only.",
+                  "pattern": "^$|^[0-9]+[BKMGTP]?$"
+                },
+                "min_age": {
+                  "type": "string",
+                  "description": "Override of the global min_age (older-than floor) for this target only.",
+                  "pattern": "^$|^[0-9]+[smhdw]$",
+                  "examples": [
+                    "30d",
+                    "12h",
+                    "90m",
+                    "1w"
+                  ]
+                },
+                "max_age": {
+                  "type": "string",
+                  "description": "Override of the global max_age (younger-than ceiling) for this target only.",
+                  "pattern": "^$|^[0-9]+[smhdw]$",
+                  "examples": [
+                    "7d",
+                    "12h",
+                    "24h"
+                  ]
+                }
+              }
+            }
+          },
+          "ignores": {
+            "type": "array",
+            "description": "Patterns to skip while walking this path.",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "catalog_location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rel_home"
+      ],
+      "properties": {
+        "rel_home": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path relative to the user home directory (slash-separated)."
+        }
+      }
+    }
+  }
+}

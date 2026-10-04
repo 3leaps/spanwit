@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>Containers</key>
+  <array>
+    <dict>
+      <key>ContainerReference</key><string>disk7</string>
+      <key>CapacityCeiling</key><integer>500000</integer>
+      <key>CapacityFree</key><integer>200000</integer>
+      <key>Volumes</key>
+      <array>
+        <dict>
+          <key>DeviceIdentifier</key><string>disk7s1</string>
+          <key>Name</key><string>Other VM</string>
+          <key>Roles</key><array><string>VM</string></array>
+          <key>CapacityInUse</key><integer>10000</integer>
+        </dict>
+      </array>
+    </dict>
+    <dict>
+      <key>ContainerReference</key><string>disk9</string>
+      <key>CapacityCeiling</key><integer>1000000</integer>
+      <key>CapacityFree</key><integer>400000</integer>
+      <key>Volumes</key>
+      <array>
+        <dict>
+          <key>DeviceIdentifier</key><string>disk9s1</string>
+          <key>Name</key><string>System</string>
+          <key>Roles</key><array><string>System</string></array>
+          <key>CapacityInUse</key><integer>90000</integer>
+        </dict>
+        <dict>
+          <key>DeviceIdentifier</key><string>disk9s5</string>
+          <key>Name</key><string>Data</string>
+          <key>Roles</key><array><string>Data</string></array>
+          <key>MountPoint</key><string>/System/Volumes/Data</string>
+          <key>CapacityInUse</key><integer>487000</integer>
+        </dict>
+        <dict>
+          <key>DeviceIdentifier</key><string>disk9s2</string>
+          <key>Name</key><string>Preboot</string>
+          <key>Roles</key><array><string>Preboot</string></array>
+          <key>CapacityInUse</key><integer>20000</integer>
+        </dict>
+        <dict>
+          <key>DeviceIdentifier</key><string>disk9s3</string>
+          <key>Name</key><string>Recovery</string>
+          <key>Roles</key><array><string>Recovery</string></array>
+          <key>CapacityInUse</key><integer>12000</integer>
+        </dict>
+        <dict>
+          <key>DeviceIdentifier</key><string>disk9s4</string>
+          <key>Name</key><string>VM</string>
+          <key>Roles</key><array><string>VM</string></array>
+          <key>CapacityInUse</key><integer>8000</integer>
+        </dict>
+        <dict>
+          <key>DeviceIdentifier</key><string>disk9s6</string>
+          <key>Name</key><string>Update</string>
+          <key>Roles</key><array><string>Update</string></array>
+          <key>CapacityInUse</key><integer>3000</integer>
+        </dict>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

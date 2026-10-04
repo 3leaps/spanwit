@@ -1,0 +1,1028 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/filesystem-inventory-aggregation/v2/record.schema.json",
+  "title": "Spanwit filesystem inventory directory audit record (v2)",
+  "description": "One JSONL record of the spanwit.filesystem-inventory-aggregation/v2 directory-audit stream. Per-record shape only: stream order, run identity, sequence contiguity, root references and the count equations (E=M+I+X+U, S=E-X, K=S or min(top,S), emitted=K when complete) are checked by the semantic stream validator, not this schema. Byte values are per-path-entry sums over the declared subject; they never imply unique physical or reclaimable bytes. All integers are within int64 and must be decoded losslessly.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "run_id",
+    "seq",
+    "ts",
+    "data"
+  ],
+  "properties": {
+    "type": {
+      "enum": [
+        "spanwit.inventory.header.v2",
+        "spanwit.inventory.directory.v2",
+        "spanwit.inventory.gap.v1",
+        "spanwit.inventory.summary.v2"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "type": {
+          "const": "spanwit.inventory.header.v2"
+        },
+        "data": {
+          "$ref": "#/$defs/header"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "spanwit.inventory.directory.v2"
+        },
+        "data": {
+          "$ref": "#/$defs/directory"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "spanwit.inventory.gap.v1"
+        },
+        "data": {
+          "$ref": "#/$defs/gap"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "spanwit.inventory.summary.v2"
+        },
+        "data": {
+          "$ref": "#/$defs/summary"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "local_path"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "local_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "exclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "basename",
+            "root_relative"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "directory_selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "floor_applied",
+        "size_basis",
+        "depth",
+        "top"
+      ],
+      "properties": {
+        "floor_applied": {
+          "type": "boolean"
+        },
+        "floor_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "size_basis": {
+          "enum": [
+            "apparent",
+            "allocated"
+          ]
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": -1
+        },
+        "top": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "if": {
+        "properties": {
+          "floor_applied": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "floor_bytes"
+        ]
+      },
+      "else": {
+        "properties": {
+          "floor_bytes": false
+        }
+      }
+    },
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "roots",
+        "backend",
+        "workers",
+        "max_open_dirs",
+        "max_pending_dirs",
+        "one_filesystem",
+        "emission_mode",
+        "max_aggregate_directories",
+        "subject",
+        "directory_selection",
+        "exclusions",
+        "ordering",
+        "path_protection",
+        "mutation_contract"
+      ],
+      "properties": {
+        "profile": {
+          "const": "spanwit.filesystem-inventory-aggregation/v2"
+        },
+        "roots": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/root"
+          }
+        },
+        "backend": {
+          "enum": [
+            "serial",
+            "parallel"
+          ]
+        },
+        "workers": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_open_dirs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_pending_dirs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "one_filesystem": {
+          "type": "boolean"
+        },
+        "emission_mode": {
+          "const": "directory_audit"
+        },
+        "max_aggregate_directories": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "subject": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "accounting_scope",
+            "entry_type",
+            "symlink_posture"
+          ],
+          "properties": {
+            "accounting_scope": {
+              "const": "full_subject"
+            },
+            "entry_type": {
+              "const": "file"
+            },
+            "symlink_posture": {
+              "const": "not_followed"
+            }
+          }
+        },
+        "directory_selection": {
+          "$ref": "#/$defs/directory_selection"
+        },
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/exclusion"
+          }
+        },
+        "ordering": {
+          "const": "directory_audit_rank_v1"
+        },
+        "path_protection": {
+          "const": "source_structure:block_export"
+        },
+        "mutation_contract": {
+          "enum": [
+            "open",
+            "read_only"
+          ]
+        }
+      }
+    },
+    "apparent_claim": {
+      "description": "One observed per-path-entry byte sum. Status/bound combinations are fixed: measured implies exact, partial implies lower. exact means exact for the named sum over the declared subject only; affecting coverage gaps or unmeasured allocation make the claim partial/lower. A missing number is never serialized as zero.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "basis",
+        "bound",
+        "bytes"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "measured",
+            "partial"
+          ]
+        },
+        "basis": {
+          "const": "path_entry_logical_size_sum"
+        },
+        "bound": {
+          "enum": [
+            "exact",
+            "lower"
+          ]
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "unmeasured_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "measured"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "bound": {
+                "const": "exact"
+              },
+              "unmeasured_count": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "partial"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "bound": {
+                "const": "lower"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "allocated_claim": {
+      "description": "One observed per-path-entry byte sum. Status/bound combinations are fixed: measured implies exact, partial implies lower. exact means exact for the named sum over the declared subject only; affecting coverage gaps or unmeasured allocation make the claim partial/lower. A missing number is never serialized as zero.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "basis",
+        "bound",
+        "bytes"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "measured",
+            "partial"
+          ]
+        },
+        "basis": {
+          "const": "path_entry_allocated_blocks_sum"
+        },
+        "bound": {
+          "enum": [
+            "exact",
+            "lower"
+          ]
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "unmeasured_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "measured"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "bound": {
+                "const": "exact"
+              },
+              "unmeasured_count": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "partial"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "bound": {
+                "const": "lower"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "unsupported_claim": {
+      "description": "A byte plane that portable public metadata cannot observe. It carries no number and no bound.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "detail"
+      ],
+      "properties": {
+        "status": {
+          "const": "unsupported"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "directory_accounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "apparent",
+        "allocated",
+        "unique_physical",
+        "shared_cloned",
+        "expected_reclaim"
+      ],
+      "properties": {
+        "apparent": {
+          "$ref": "#/$defs/apparent_claim"
+        },
+        "allocated": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/allocated_claim"
+            },
+            {
+              "$ref": "#/$defs/unsupported_claim"
+            }
+          ]
+        },
+        "unique_physical": {
+          "$ref": "#/$defs/unsupported_claim"
+        },
+        "shared_cloned": {
+          "$ref": "#/$defs/unsupported_claim"
+        },
+        "expected_reclaim": {
+          "$ref": "#/$defs/unsupported_claim"
+        }
+      }
+    },
+    "directory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root_id",
+        "relative_path",
+        "depth",
+        "file_count",
+        "descendant_directory_count",
+        "allocated_unmeasured_count",
+        "lifecycle",
+        "affecting_gap_count",
+        "accounting",
+        "floor_decision"
+      ],
+      "properties": {
+        "root_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "relative_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "file_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "descendant_directory_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "allocated_unmeasured_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "affecting_gap_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "lifecycle": {
+          "enum": [
+            "complete",
+            "partial"
+          ]
+        },
+        "accounting": {
+          "$ref": "#/$defs/directory_accounting"
+        },
+        "floor_decision": {
+          "enum": [
+            "meets",
+            "indeterminate",
+            "not_applied"
+          ],
+          "description": "Excluded rows are never emitted."
+        }
+      }
+    },
+    "gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root_id",
+        "kind",
+        "affects_completeness"
+      ],
+      "properties": {
+        "root_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "relative_path": {
+          "type": "string"
+        },
+        "local_absolute_path": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "affects_completeness": {
+          "type": "boolean"
+        }
+      }
+    },
+    "failure": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "limit",
+            "retained",
+            "attempted_retained"
+          ],
+          "properties": {
+            "code": {
+              "const": "aggregate_directory_budget_exhausted"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "retained": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "attempted_retained": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code"
+          ],
+          "properties": {
+            "code": {
+              "enum": [
+                "aggregate_accounting_overflow",
+                "traversal_failed"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "root_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root_id",
+        "lifecycle",
+        "visited_entries",
+        "visited_directories",
+        "gap_count",
+        "boundary_skip_count",
+        "exclusion_count",
+        "vanished_count",
+        "queue_limit_skip_count",
+        "canceled",
+        "failed"
+      ],
+      "properties": {
+        "root_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lifecycle": {
+          "enum": [
+            "complete",
+            "partial",
+            "failed"
+          ]
+        },
+        "visited_entries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "visited_directories": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "gap_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "boundary_skip_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "exclusion_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "vanished_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "queue_limit_skip_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "remote_skip_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "stalled_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "canceled": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lifecycle",
+        "canceled",
+        "selection_reconciled",
+        "emission_completed",
+        "directory_emitted_count",
+        "directory_indeterminate_emitted_count",
+        "directory_unavailable_size_emitted_count",
+        "backend",
+        "visited_entries",
+        "visited_directories",
+        "gap_count",
+        "boundary_skip_count",
+        "vanished_count",
+        "queue_limit_skip_count",
+        "exclusion_count",
+        "peak_depth",
+        "peak_pending_directories",
+        "duration_nanos",
+        "terminal_observed_at",
+        "roots"
+      ],
+      "properties": {
+        "lifecycle": {
+          "enum": [
+            "complete",
+            "partial",
+            "failed"
+          ]
+        },
+        "canceled": {
+          "type": "boolean"
+        },
+        "selection_reconciled": {
+          "type": "boolean"
+        },
+        "emission_completed": {
+          "type": "boolean"
+        },
+        "directory_emitted_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "directory_indeterminate_emitted_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "directory_unavailable_size_emitted_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "directory_depth_eligible_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "directory_meets_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "directory_indeterminate_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "directory_excluded_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "directory_not_applied_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "directory_selected_before_top_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "directory_planned_emission_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "directory_unavailable_size_eligible_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "visited_entries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "visited_directories": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "gap_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "boundary_skip_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "vanished_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "queue_limit_skip_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "exclusion_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "peak_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "peak_pending_directories": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "duration_nanos": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "directory_selection_truncated": {
+          "type": "boolean"
+        },
+        "failure": {
+          "$ref": "#/$defs/failure"
+        },
+        "backend": {
+          "enum": [
+            "serial",
+            "parallel"
+          ]
+        },
+        "remote_skip_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "stalled_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "terminal_observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "roots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/root_summary"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "selection_reconciled": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "directory_depth_eligible_count",
+              "directory_meets_count",
+              "directory_indeterminate_count",
+              "directory_excluded_count",
+              "directory_not_applied_count",
+              "directory_selected_before_top_count",
+              "directory_planned_emission_count",
+              "directory_unavailable_size_eligible_count",
+              "directory_selection_truncated"
+            ]
+          },
+          "else": {
+            "properties": {
+              "directory_depth_eligible_count": false,
+              "directory_meets_count": false,
+              "directory_indeterminate_count": false,
+              "directory_excluded_count": false,
+              "directory_not_applied_count": false,
+              "directory_selected_before_top_count": false,
+              "directory_planned_emission_count": false,
+              "directory_unavailable_size_eligible_count": false,
+              "directory_selection_truncated": false
+            },
+            "allOf": [
+              {
+                "properties": {
+                  "emission_completed": {
+                    "const": false
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "lifecycle": {
+                "const": "failed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "failure"
+            ],
+            "properties": {
+              "emission_completed": {
+                "const": false
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "failure": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "canceled": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "lifecycle": {
+                "const": "partial"
+              },
+              "emission_completed": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "emission_completed": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "selection_reconciled": {
+                "const": true
+              },
+              "canceled": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "lifecycle": {
+                "const": "complete"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "selection_reconciled": {
+                "const": true
+              },
+              "emission_completed": {
+                "const": true
+              },
+              "canceled": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

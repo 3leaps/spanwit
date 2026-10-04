@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/observe-state/v1.json",
+  "title": "Spanwit Observe State v1",
+  "type": "object",
+  "required": [
+    "$schema",
+    "version",
+    "volumes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.3leaps.dev/spanwit/observe-state/v1.json"
+    },
+    "version": {
+      "const": 1
+    },
+    "volumes": {
+      "type": "object",
+      "maxProperties": 64,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/runtime"
+      }
+    }
+  },
+  "$defs": {
+    "level": {
+      "enum": [
+        "ok",
+        "warn",
+        "critical"
+      ]
+    },
+    "coverage": {
+      "enum": [
+        "complete",
+        "partial",
+        "degraded",
+        "incomparable",
+        "unavailable",
+        "indeterminate"
+      ]
+    },
+    "loss": {
+      "enum": [
+        "overflow",
+        "sequence_gap",
+        "watcher_error",
+        "dropped_work",
+        "corrupt_state",
+        "identity_mismatch",
+        "alias_path_change",
+        "sample_error",
+        "incomplete_sample"
+      ]
+    },
+    "volume": {
+      "type": "object",
+      "required": [
+        "id",
+        "register_path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "register_path": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "sample": {
+      "type": "object",
+      "required": [
+        "captured_at",
+        "volume_id",
+        "basis",
+        "avail_bytes",
+        "total_bytes",
+        "used_bytes",
+        "used_percent",
+        "level",
+        "coverage",
+        "seq",
+        "size_complete"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "captured_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "volume_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "mount_path": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "basis": {
+          "const": "statfs_primary"
+        },
+        "avail_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "used_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "used_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source": {
+          "enum": [
+            "capacity.SampleFilesystem",
+            "sample_error",
+            "identity_mismatch"
+          ]
+        },
+        "size_complete": {
+          "type": "boolean"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": [
+        "volume",
+        "level",
+        "coverage",
+        "reconcile_needed",
+        "next_seq",
+        "foreground",
+        "scan_in_flight"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "volume": {
+          "$ref": "#/$defs/volume"
+        },
+        "last_success": {
+          "$ref": "#/$defs/sample"
+        },
+        "last_attempt": {
+          "$ref": "#/$defs/sample"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        },
+        "last_notified_level": {
+          "$ref": "#/$defs/level"
+        },
+        "loss_reason": {
+          "$ref": "#/$defs/loss"
+        },
+        "reconcile_needed": {
+          "type": "boolean"
+        },
+        "next_seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "foreground": {
+          "type": "boolean"
+        },
+        "scan_in_flight": {
+          "const": false
+        }
+      }
+    }
+  }
+}

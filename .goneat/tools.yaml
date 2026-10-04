@@ -1,0 +1,178 @@
+# Note: goneat version for this Go project is defined in Makefile GONEAT_VERSION variable
+# For non-Go projects, use top-level 'version:' field with checksums (see tsfulmen example)
+#
+# Note: brew cannot be used in GitHub CI runners until goneat adds support for curated
+# package management (requires sudo - complicated for CI). Use mise for cross-platform
+# tool installation instead.
+scopes:
+  bootstrap:
+    description: "Bootstrap tools required before installing other tools (installed first)"
+    tools: ["curl", "mise", "scoop"]
+    replace: true
+  foundation:
+    description: "Core foundation tools for goneat formatting and basic operations"
+    tools: ["ripgrep", "jq", "yamlfmt", "prettier"]
+    replace: true
+  security:
+    description: "Security scanning and vulnerability detection tools"
+    tools: ["gosec", "govulncheck", "gitleaks"]
+  format:
+    description: "Code formatting tools for Go"
+    tools: ["goimports"]
+  lint:
+    description: "Lint support tools (shell, make, GitHub Actions)"
+    tools: ["shfmt", "checkmake", "actionlint"]
+    replace: true
+tools:
+  curl:
+    name: "curl"
+    description: "HTTP client used for fetching remote assets"
+    kind: "system"
+    detect_command: "curl --version"
+    platforms: ["linux", "darwin", "windows"]
+    installer_priority:
+      linux: ["manual"]
+      darwin: ["manual"]
+      windows: ["manual"]
+    install_commands:
+      manual: "echo 'curl should be preinstalled on runners; install via OS package manager if missing.' && exit 1"
+    cooling:
+      enabled: false
+  mise:
+    name: "mise"
+    description: "Polyglot runtime manager for Linux/macOS (Windows uses scoop instead)"
+    kind: "system"
+    detect_command: "mise --version"
+    platforms: ["linux", "darwin"]
+    installer_priority:
+      linux: ["manual"]
+      darwin: ["manual"]
+    install_commands:
+      manual: |
+        curl https://mise.jdx.dev/install.sh | sh \
+          && echo '📦 mise installed. export PATH="$HOME/.local/bin:$PATH"'
+    cooling:
+      enabled: true
+      alert_only: true
+  scoop:
+    name: "scoop"
+    description: "Package manager for Windows (Linux/macOS use mise instead)"
+    kind: "system"
+    detect_command: "scoop --version"
+    platforms: ["windows"]
+    installer_priority:
+      windows: ["manual"]
+    install_commands:
+      manual: |
+        powershell -ExecutionPolicy RemoteSigned -Command "Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression" \
+          && echo '📦 scoop installed. Restart shell or check PATH'
+    cooling:
+      enabled: false
+  ripgrep:
+    name: "ripgrep"
+    description: "Fast text search tool"
+    kind: "system"
+    detect_command: "rg --version"
+    platforms: ["linux", "darwin", "windows"]
+    installer_priority:
+      linux: ["mise", "apt-get"]
+      darwin: ["mise"]
+      windows: ["mise", "scoop", "winget"]
+    install_commands:
+      mise: "mise use -g ripgrep@latest"
+      apt-get: "sudo apt-get update && sudo apt-get install -y ripgrep"
+      scoop: "scoop install ripgrep"
+      winget: "winget install BurntSushi.ripgrep.MSVC"
+  jq:
+    name: "jq"
+    description: "JSON processing tool for CI/CD scripts"
+    kind: "system"
+    detect_command: "jq --version"
+    version_scheme: "lexical"
+    minimum_version: "1.6"
+    recommended_version: "1.7"
+    platforms: ["linux", "darwin", "windows"]
+    installer_priority:
+      linux: ["mise", "apt-get"]
+      darwin: ["mise"]
+      windows: ["mise", "scoop", "winget"]
+    install_commands:
+      mise: "mise use -g jq@latest"
+      apt-get: "sudo apt-get update && sudo apt-get install -y jq"
+      scoop: "scoop install jq"
+      winget: "winget install jqlang.jq"
+  yamlfmt:
+    name: "yamlfmt"
+    description: "YAML formatter for configuration files"
+    kind: "go"
+    install_package: "github.com/google/yamlfmt/cmd/yamlfmt@latest"
+    detect_command: "yamlfmt --version"
+    version_scheme: "semver"
+    minimum_version: "0.10.0"
+    recommended_version: "0.12.0"
+    platforms: ["linux", "darwin", "windows"]
+  prettier:
+    name: "prettier"
+    description: "Code formatter for Markdown and other formats"
+    kind: "node"
+    detect_command: "prettier --version"
+    version_scheme: "semver"
+    minimum_version: "3.8.0"
+    recommended_version: "3.9.6"
+    platforms: ["linux", "darwin", "windows"]
+    installer_priority:
+      darwin: ["mise", "brew"]
+      linux: ["mise", "brew"]
+      windows: ["bun"]
+    # Currently disabled because prettier is not in a tracked directory
+    cooling:
+      enabled: false
+  gosec:
+    name: "gosec"
+    description: "Go security linter that identifies security issues in Go code"
+    kind: "go"
+    install_package: "github.com/securego/gosec/v2/cmd/gosec@latest"
+    detect_command: "gosec --version"
+    platforms: ["linux", "darwin", "windows"]
+  govulncheck:
+    name: "govulncheck"
+    description: "Go vulnerability database checker for Go dependencies"
+    kind: "go"
+    install_package: "golang.org/x/vuln/cmd/govulncheck@latest"
+    detect_command: "govulncheck --version"
+    platforms: ["linux", "darwin", "windows"]
+  gitleaks:
+    name: "gitleaks"
+    description: "Secret scanning tool to prevent committing sensitive information"
+    kind: "go"
+    install_package: "github.com/gitleaks/gitleaks/v8@latest"
+    detect_command: "gitleaks version"
+    platforms: ["linux", "darwin", "windows"]
+  goimports:
+    name: "goimports"
+    description: "Go import formatter and organizer"
+    kind: "go"
+    install_package: "golang.org/x/tools/cmd/goimports@latest"
+    detect_command: "goimports --help"
+    platforms: ["linux", "darwin", "windows"]
+  shfmt:
+    name: "shfmt"
+    description: "Shell formatter used by goneat lint"
+    kind: "go"
+    install_package: "mvdan.cc/sh/v3/cmd/shfmt@latest"
+    detect_command: "shfmt --version"
+    platforms: ["linux", "darwin", "windows"]
+  checkmake:
+    name: "checkmake"
+    description: "Makefile linter used by goneat lint"
+    kind: "go"
+    install_package: "github.com/mrtazz/checkmake@latest"
+    detect_command: "checkmake --help"
+    platforms: ["linux", "darwin", "windows"]
+  actionlint:
+    name: "actionlint"
+    description: "GitHub Actions workflow linter used by goneat lint"
+    kind: "go"
+    install_package: "github.com/rhysd/actionlint/cmd/actionlint@latest"
+    detect_command: "actionlint -version"
+    platforms: ["linux", "darwin", "windows"]

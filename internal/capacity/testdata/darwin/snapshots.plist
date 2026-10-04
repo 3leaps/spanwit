@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>Snapshots</key>
+  <array>
+    <dict>
+      <key>SnapshotUUID</key><string>SNAP-ONE</string>
+      <key>Name</key><string>com.apple.os.update-example</string>
+      <key>XID</key><integer>12345</integer>
+      <key>Purgeable</key><false/>
+      <key>LimitsContainerShrink</key><true/>
+    </dict>
+  </array>
+</dict>
+</plist>

@@ -1,0 +1,85 @@
+# yamllint disable rule:document-start
+# yamllint disable rule:truthy
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+# The goneat-tools runner image's default shell is dash (sh); force bash so
+# `set -euo pipefail` and other bashisms in run steps work.
+defaults:
+  run:
+    shell: bash
+jobs:
+  # Single quality job on the goneat-tools runner image, which bundles the full
+  # toolchain (Go, goneat, golangci-lint, gofmt, yamlfmt, prettier, …).
+  quality:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.6
+      # actions/checkout@v4 needs write access to /__w/_temp/_runner_file_commands/.
+      options: --user root
+    env:
+      # CI-only boundary hint for gofulmen/pathfinder repo-root discovery
+      FULMEN_WORKSPACE_ROOT: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Fix temp permissions
+        run: |
+          set -euo pipefail
+          install -d -m 0777 /__w/_temp || true
+          install -d -m 0777 /__w/_temp/_runner_file_commands || true
+          chown -R "$(id -u)":"$(id -g)" /__w/_temp || true
+          chmod -R 777 /__w/_temp || true
+          # Avoid git "dubious ownership" so Go VCS stamping / git rev-parse work in-container.
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}" || true
+      - name: Verify toolchain (preinstalled in container)
+        run: |
+          set -euo pipefail
+          echo "Go:           $(go version)"
+          echo "goneat:       $(goneat --version 2>/dev/null | head -n1 || echo 'not found')"
+          echo "golangci-lint: $(golangci-lint version 2>/dev/null | head -n1 || echo 'not found')"
+          echo "yamlfmt:      $(yamlfmt --version 2>/dev/null || echo 'not found')"
+          echo "prettier:     $(prettier --version 2>/dev/null || echo 'not found')"
+          actual=$(GOTOOLCHAIN=local go env GOVERSION | sed 's/^go//')
+          minimum=1.26.6
+          if [ "$(printf '%s\n' "$minimum" "$actual" | sort -V | head -n1)" != "$minimum" ]; then
+            echo "ERROR: Go $actual is below required $minimum"
+            exit 1
+          fi
+      - name: Verify embedded identity mirror
+        run: make verify-embedded-identity
+      - name: Download dependencies
+        run: go mod download
+      - name: Check formatting (goneat, non-mutating)
+        run: make fmt-check
+      - name: Lint
+        run: make lint
+      - name: Test
+        run: make test
+      - name: Build binary
+        run: make build
+      - name: Standalone binary works outside repo
+        run: make test-standalone-binary
+  # Signed-tag ceremony regression tests run on the host runner, which provides
+  # gpg; they use throwaway keys only and need no secrets.
+  release-tag-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Signed-tag tooling tests
+        run: |
+          set -euo pipefail
+          git config --global user.name 'CI Fixture'
+          git config --global user.email 'ci-fixture@example.invalid'
+          make release-tag-tests

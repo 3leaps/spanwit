@@ -1,0 +1,60 @@
+version: 1
+lint:
+  # YAML linting (uses yamlfmt -lint under the hood)
+  yamllint:
+    enabled: true
+    strict: true
+    paths:
+      - ".github/workflows/**/*.yml"
+      - ".github/workflows/**/*.yaml"
+    ignore: []
+  # Shell linting
+  shell:
+    shfmt:
+      enabled: true
+      # Keep lint read-only by default (formatting is handled by `goneat format`).
+      fix: false
+      args:
+        - "-i"
+        - "4"
+        - "-ci"
+        - "-sr"
+    shellcheck:
+      # GPL tool used for verification only: it analyses source and is never
+      # linked or redistributed, so it imposes nothing on this repo's licence.
+      # Enabled so `make lint` is the single runner for shell analysis rather
+      # than something a contributor has to remember to run by hand.
+      # Scripts carry `# shellcheck source-path=SCRIPTDIR` so sourced siblings
+      # resolve whatever directory the runner starts from.
+      enabled: true
+      path: ""
+    paths:
+      - "**/*.sh"
+      - "scripts/**/*.sh"
+      - ".goneat/hooks/*"
+    # goneat v0.3.21 respects .gitignore and .goneatignore for discovery,
+    # so we avoid repeating broad ignore globs here.
+    ignore: []
+  # GitHub Actions workflow linting
+  github_actions:
+    actionlint:
+      enabled: true
+      paths:
+        - ".github/workflows/**/*.yml"
+        - ".github/workflows/**/*.yaml"
+      ignore: []
+  # Makefile linting
+  make:
+    checkmake:
+      enabled: true
+      config:
+        # Default checkmake max body length (5) is too strict for
+        # template Makefiles that intentionally print detailed help.
+        max_body_length: 50
+        min_phony_targets:
+          - all
+          - clean
+          - test
+    paths:
+      - "**/Makefile"
+    ignore: []

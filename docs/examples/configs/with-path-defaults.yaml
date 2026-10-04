@@ -1,0 +1,18 @@
+# Path/target override demo (maintenance posture with min_age floors).
+# Crisis path without age gate: crisis-dev.yaml.
+version: 1
+defaults:
+  min_size: 200M
+  min_age: 180d  # older-than floor
+paths:
+  - path: ~/dev
+    min_age: 45d  # More aggressive age limit for dev code
+    targets:
+      - signature: development.rust.cargo-target
+        min_age: 14d
+      - pattern: "**/node_modules"
+        min_size: 1G  # Only nuke truly huge node_modules
+  - path: /tmp
+    enabled: true
+    max_depth: 3
+    # Uses global defaults (200M / 180d)

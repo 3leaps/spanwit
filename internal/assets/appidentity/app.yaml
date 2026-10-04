@@ -1,0 +1,9 @@
+# Fulmen Application Identity
+# Spanwit - Safe disk space reclamation microtool
+app:
+  vendor: 3leaps
+  binary_name: spanwit
+  env_prefix: SPANWIT_
+  config_name: spanwit
+  description: "Safe disk space reclamation tool for development machines (dry-run by default)"
+  version: "0.2.0"

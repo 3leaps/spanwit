@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/deployment-config.json",
+  "title": "Deployment Configuration",
+  "description": "Configuration schema for deployment automation microtool",
+  "type": "object",
+  "required": [
+    "version",
+    "environment",
+    "deployment"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^v?\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the configuration format"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "development",
+        "staging",
+        "production"
+      ],
+      "description": "Target deployment environment"
+    },
+    "logLevel": {
+      "type": "string",
+      "enum": [
+        "trace",
+        "debug",
+        "info",
+        "warn",
+        "error"
+      ],
+      "default": "info",
+      "description": "Logging level for deployment operations"
+    },
+    "deployment": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "direct",
+            "blue-green",
+            "canary"
+          ],
+          "description": "Deployment strategy to use"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "mode": {
+              "const": "direct"
+            },
+            "target": {
+              "type": "string",
+              "description": "Direct deployment target URL"
+            },
+            "timeout": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3600,
+              "default": 300,
+              "description": "Deployment timeout in seconds"
+            }
+          },
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "properties": {
+            "mode": {
+              "const": "blue-green"
+            },
+            "blueTarget": {
+              "type": "string",
+              "description": "Blue environment target URL"
+            },
+            "greenTarget": {
+              "type": "string",
+              "description": "Green environment target URL"
+            },
+            "switchDelay": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 60,
+              "description": "Delay in seconds before switching traffic"
+            }
+          },
+          "required": [
+            "blueTarget",
+            "greenTarget"
+          ]
+        },
+        {
+          "properties": {
+            "mode": {
+              "const": "canary"
+            },
+            "mainTarget": {
+              "type": "string",
+              "description": "Main deployment target URL"
+            },
+            "canaryTarget": {
+              "type": "string",
+              "description": "Canary deployment target URL"
+            },
+            "trafficPercentage": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10,
+              "description": "Percentage of traffic to route to canary"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 60,
+              "default": 600,
+              "description": "Canary test duration in seconds"
+            }
+          },
+          "required": [
+            "mainTarget",
+            "canaryTarget"
+          ]
+        }
+      ]
+    },
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "email",
+              "slack",
+              "webhook"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

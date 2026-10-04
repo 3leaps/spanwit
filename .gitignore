@@ -1,0 +1,53 @@
+# Build artifacts
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+coverage.out
+coverage.html
+*.test
+
+# SBOM artifacts (generated)
+sbom/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Go vendored dependencies
+vendor/
+
+# Environment files
+.env
+.env.local
+*.local
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Planning files (local only)
+.plans/
+
+# Claude Code local settings
+**/.claude/settings.local.json
+
+# goneat local overrides
+.goneat/tools.local.yaml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Logs
+*.log
+logs/

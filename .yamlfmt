@@ -1,0 +1,23 @@
+# yamlfmt configuration for spanwit
+# This file configures yamlfmt to match goneat's YAML formatting preferences
+
+formatter:
+  type: basic
+  indent: 2
+  line_ending: lf
+  pad_line_comments: 2
+  # eof_newline: false - goneat's finalizer handles EOF normalization (single trailing newline)
+  # so we don't need yamlfmt to add one (which would cause instability with multiline scalars)
+  # retain_line_breaks_single: false - causes #magic___^_^___line markers in output, yamlfmt bug
+  # Note: yamlfmt doesn't support all the options goneat tracks:
+  # - quote_style (single/double)
+  # - trailing_newline control
+  # These would need to be enforced by other means or accepted as yamlfmt defaults
+
+# Exclude patterns
+exclude:
+  - node_modules/**
+  - vendor/**
+  - .git/**
+  - dist/**
+  - bin/**

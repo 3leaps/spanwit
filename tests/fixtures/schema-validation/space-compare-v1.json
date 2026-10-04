@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schemas.3leaps.dev/spanwit/space-compare/v1.json",
+  "version": 1,
+  "generated_at": "2026-07-30T15:06:00Z",
+  "left": {
+    "captured_at": "2026-07-30T15:00:00Z",
+    "capture_mode": "capacity_only",
+    "report_schema": "https://schemas.3leaps.dev/spanwit/space-report/v2.json",
+    "platform": "linux",
+    "volume_id": "fs:1"
+  },
+  "right": {
+    "captured_at": "2026-07-30T15:05:00Z",
+    "capture_mode": "full",
+    "report_schema": "https://schemas.3leaps.dev/spanwit/space-report/v2.json",
+    "platform": "linux",
+    "volume_id": "fs:1"
+  },
+  "compatibility": {
+    "status": "compatible",
+    "checks": [
+      {
+        "name": "platform",
+        "ok": true
+      },
+      {
+        "name": "volume_id",
+        "ok": true
+      },
+      {
+        "name": "capture_mode",
+        "ok": false,
+        "informational": true
+      }
+    ]
+  },
+  "plane_deltas": [
+    {
+      "plane": "filesystem",
+      "field": "available",
+      "left_bytes": 400000,
+      "right_bytes": 390000,
+      "delta_bytes": -10000,
+      "delta_status": "exact",
+      "left_bound": "exact",
+      "right_bound": "exact",
+      "left_basis": "statfs_bavail",
+      "right_basis": "statfs_bavail",
+      "left_source": "statfs",
+      "right_source": "statfs"
+    }
+  ],
+  "coverage": {
+    "left_plane_notes": [],
+    "right_plane_notes": [],
+    "asymmetric_planes": []
+  }
+}

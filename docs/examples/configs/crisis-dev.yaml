@@ -1,0 +1,58 @@
+# Crisis recovery profile (signature-backed cargo targets only)
+#
+# Use when the disk is critically full and you need reclaimable build output
+# without a maintenance older-than floor hiding fresh target/ trees.
+#
+# Safety:
+# - Dry-run first (default). Pass --execute only after reviewing the plan.
+# - Only development.rust.cargo-target (context-verified, safe_to_prune).
+# - No min_age / max_age — age is opt-in; omit means no age gate.
+# - Prefer idle repos; rebuild cost is real after --execute.
+# - Rank idle-first: add --sort idle (complete cold activity before unknown).
+# - Lower rebuild tax: --reclaim-scope incremental (Cargo **/incremental only).
+#
+# Recipe (from a spanwit checkout or with a copied path):
+#   spanwit space ~/dev --min-size 100M
+#   spanwit prune --config docs/examples/configs/crisis-dev.yaml --sort idle
+#   spanwit prune --config docs/examples/configs/crisis-dev.yaml --sort idle --execute
+#   # optional partial reclaim (incremental caches only):
+#   spanwit prune --config docs/examples/configs/crisis-dev.yaml --reclaim-scope incremental --sort idle
+#
+# Posture: CRISIS (capacity). For routine cleanup see typical-dev.yaml
+# (maintenance floor) or aggressive-cleanup.yaml.
+version: 1
+defaults:
+  # Noise floor only — no age gate (do not set min_age / max_age here).
+  min_size: 50M
+paths:
+  - path: ~/dev
+    enabled: true
+    max_depth: 12
+    targets:
+      - signature: development.rust.cargo-target
+    ignores:
+      - "**/.git/**"
+
+# --- Temp planes (INERT TEMPLATE — commented out on purpose) -----------------
+#
+# Under pressure, `spanwit space` names the OS temp roots it did not walk
+# (temp_plane_coverage) with a bounded size. Inspect one explicitly first:
+#
+#   spanwit space /private/tmp            # macOS shared temp (/tmp on Linux)
+#   spanwit space "$TMPDIR"               # per-user temp
+#
+# `space --config <this file>` only imports signatures/targets; it never
+# activates the paths below. Only `prune --config` acts on enabled paths.
+#
+# Shared temp is a multi-principal namespace: other sessions and agents may be
+# live there, and a verified target/ authorizes that candidate only — never
+# its parent snapshot. Do NOT drop the age gate here the way ~/dev does above.
+# Enabling an entry in a copied profile is a new, explicit authorization
+# boundary chosen by the operator; this shipped example enables none.
+#
+#  - path: /private/tmp
+#    enabled: false
+#    max_depth: 4
+#    min_age: 3d
+#    targets:
+#      - signature: development.rust.cargo-target

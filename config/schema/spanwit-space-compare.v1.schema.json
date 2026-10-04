@@ -1,0 +1,378 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/space-compare/v1.json",
+  "title": "Spanwit Space Compare v1",
+  "description": "Result of comparing two SpaceReport v2 captures (explicit files/stdin). Not a capture carrier. No explained_bytes / reconciled total. Inputs must be schema-validated SpaceReport v2; treat as untrusted.",
+  "type": "object",
+  "required": [
+    "$schema",
+    "version",
+    "generated_at",
+    "left",
+    "right",
+    "compatibility",
+    "plane_deltas",
+    "coverage"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://schemas.3leaps.dev/spanwit/space-compare/v1.json"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "left": {
+      "$ref": "#/$defs/compare_side"
+    },
+    "right": {
+      "$ref": "#/$defs/compare_side"
+    },
+    "compatibility": {
+      "$ref": "#/$defs/compatibility"
+    },
+    "plane_deltas": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/plane_delta"
+      }
+    },
+    "coverage": {
+      "$ref": "#/$defs/compare_coverage"
+    },
+    "narrative": {
+      "$ref": "#/$defs/compare_narrative"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "compare_side": {
+      "type": "object",
+      "required": [
+        "captured_at",
+        "capture_mode",
+        "report_schema"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Source path or '-' for stdin when known."
+        },
+        "captured_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "capture_mode": {
+          "type": "string",
+          "enum": [
+            "full",
+            "capacity_only"
+          ]
+        },
+        "report_schema": {
+          "type": "string",
+          "const": "https://schemas.3leaps.dev/spanwit/space-report/v2.json"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "volume_id": {
+          "type": "string"
+        },
+        "container_id": {
+          "type": "string"
+        },
+        "session_boundary": {
+          "type": "string",
+          "enum": [
+            "before-running",
+            "before-quiesced",
+            "after-reboot",
+            "after-update"
+          ]
+        },
+        "boot_id": {
+          "type": "string"
+        }
+      }
+    },
+    "compat_check": {
+      "type": "object",
+      "required": [
+        "name",
+        "ok"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "platform",
+            "volume_id",
+            "container_id",
+            "measurement_semantics",
+            "capture_mode",
+            "boot_id",
+            "report_version"
+          ]
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "informational": {
+          "type": "boolean",
+          "description": "True when mismatch is metadata only (e.g. capture_mode, boot_id)."
+        }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "required": [
+        "status",
+        "checks"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "compatible",
+            "partial",
+            "incompatible"
+          ]
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/compat_check"
+          }
+        },
+        "detail": {
+          "type": "string"
+        }
+      }
+    },
+    "plane_delta": {
+      "type": "object",
+      "required": [
+        "plane",
+        "field",
+        "delta_status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "plane": {
+          "type": "string",
+          "enum": [
+            "filesystem",
+            "container",
+            "volumes",
+            "snapshots",
+            "system_managed",
+            "held_open"
+          ]
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Claim field within plane (e.g. available, free, logical_bytes)."
+        },
+        "left_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "right_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "delta_bytes": {
+          "type": "integer",
+          "description": "Present only when delta_status is exact."
+        },
+        "delta_status": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "indeterminate",
+            "incomparable"
+          ],
+          "description": "exact only when both claims present, bound=exact, compatible source+basis. Lower-bound subtraction is indeterminate."
+        },
+        "left_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower",
+            "upper",
+            "unknown"
+          ]
+        },
+        "right_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower",
+            "upper",
+            "unknown"
+          ]
+        },
+        "left_basis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "right_basis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "left_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "right_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "delta_status": {
+                "const": "exact"
+              }
+            },
+            "required": [
+              "delta_status"
+            ]
+          },
+          "then": {
+            "required": [
+              "left_bytes",
+              "right_bytes",
+              "delta_bytes",
+              "left_bound",
+              "right_bound",
+              "left_basis",
+              "right_basis",
+              "left_source",
+              "right_source"
+            ],
+            "properties": {
+              "left_bound": {
+                "const": "exact"
+              },
+              "right_bound": {
+                "const": "exact"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "delta_status": {
+                "enum": [
+                  "indeterminate",
+                  "incomparable"
+                ]
+              }
+            },
+            "required": [
+              "delta_status"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "delta_bytes"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "compare_coverage": {
+      "type": "object",
+      "required": [
+        "left_plane_notes",
+        "right_plane_notes",
+        "asymmetric_planes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "left_plane_notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "right_plane_notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "asymmetric_planes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "filesystem",
+              "container",
+              "volumes",
+              "snapshots",
+              "system_managed",
+              "held_open"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "compare_narrative": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "known": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unavailable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unexplained": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

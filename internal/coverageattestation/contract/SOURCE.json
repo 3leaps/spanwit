@@ -1,0 +1,9 @@
+{
+  "source_repository": "https://github.com/3leaps/crucible",
+  "source_commit": "14db609d7117a2910a2d0e5e3a868d24f27f490d",
+  "source_path": "schemas/coverage-attestation/v0",
+  "files": {
+    "contract.json": "sha256:68ff7cbe6c854679321e4f307022671bad1bfc522c1cffb48b01b4596037361d",
+    "coverage-attestation.schema.json": "sha256:e095c0919a405e288148c65577b33186881cd1a3a09e7e4d7ffd9d2f140482ff"
+  }
+}

@@ -1,0 +1,27 @@
+# Maintenance profile (routine reclaim of older build artifacts).
+# Posture: MAINTENANCE — min_age floor keeps actively rebuilt targets.
+# For capacity crisis (no age gate, cargo signatures only) see crisis-dev.yaml.
+version: 1
+defaults:
+  min_size: 100M
+  min_age: 90d  # older-than floor: skip fresh/active build trees
+paths:
+  - path: ~/dev
+    enabled: true
+    max_depth: 10
+    targets:
+      - signature: development.rust.cargo-target
+      - pattern: "**/node_modules"
+    ignores:
+      - "**/.git/**"
+  - path: ~/go
+    enabled: true
+    max_depth: 5
+    ignores:
+      - "**/pkg/mod/**"  # Usually want to keep the module cache
+  - path: ~/Downloads
+    enabled: true
+    max_depth: 3
+    targets:
+      - pattern: "**/*.iso"
+      - pattern: "**/*.dmg"

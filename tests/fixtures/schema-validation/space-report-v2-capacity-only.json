@@ -1,0 +1,100 @@
+{
+  "$schema": "https://schemas.3leaps.dev/spanwit/space-report/v2.json",
+  "version": 2,
+  "generated_at": "2026-07-30T15:00:00Z",
+  "root": "/workspace",
+  "capture_mode": "capacity_only",
+  "pressure": {
+    "path": "/workspace",
+    "mount": "/",
+    "volume_id": "fs:1",
+    "role": "primary_write",
+    "total_bytes": 1000000,
+    "total_human": "976.6 KiB",
+    "used_bytes": 600000,
+    "used_human": "585.9 KiB",
+    "avail_bytes": 400000,
+    "avail_human": "390.6 KiB",
+    "used_percent": 60,
+    "level": "ok"
+  },
+  "capacity_accounting": {
+    "capture": {
+      "captured_at": "2026-07-30T15:00:00Z",
+      "tool": {
+        "name": "spanwit",
+        "version": "0.1.0"
+      },
+      "os": {
+        "goos": "linux",
+        "goarch": "amd64"
+      }
+    },
+    "target": {
+      "path": "/workspace",
+      "mount": "/",
+      "fs_type": "ext4",
+      "volume_id": "fs:1",
+      "platform": "linux"
+    },
+    "planes": {
+      "filesystem": {
+        "collection_status": "measured",
+        "source": "statfs",
+        "coverage": {
+          "gaps": []
+        },
+        "pressure_relation": "same_observation",
+        "total": {
+          "status": "measured",
+          "bytes": 1000000,
+          "basis": "statfs_blocks",
+          "bound": "exact"
+        },
+        "used": {
+          "status": "measured",
+          "bytes": 600000,
+          "basis": "statfs_used",
+          "bound": "exact"
+        },
+        "available": {
+          "status": "measured",
+          "bytes": 400000,
+          "basis": "statfs_bavail",
+          "bound": "exact"
+        }
+      },
+      "container": {
+        "collection_status": "unsupported",
+        "coverage": {
+          "gaps": []
+        }
+      },
+      "volumes": {
+        "collection_status": "unsupported",
+        "coverage": {
+          "gaps": []
+        }
+      },
+      "snapshots": {
+        "collection_status": "unsupported",
+        "coverage": {
+          "gaps": []
+        }
+      },
+      "system_managed": {
+        "collection_status": "unsupported",
+        "coverage": {
+          "gaps": []
+        },
+        "policy": "diagnostic_only_never_prune_handoff"
+      },
+      "held_open": {
+        "collection_status": "not_requested",
+        "coverage": {
+          "gaps": []
+        }
+      }
+    }
+  }
+}

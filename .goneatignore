@@ -1,0 +1,17 @@
+# Goneat ignore file - exclude files/directories from goneat scanning
+# Same format as .gitignore
+
+# Test fixtures with intentionally invalid data
+tests/fixtures/schema-validation/invalid-*.yaml
+tests/fixtures/schema-validation/invalid-*.json
+
+# Planning files (already in .gitignore but explicit here)
+.plans/
+
+# Build artifacts
+bin/
+dist/
+
+# Canonical vendored contract bytes (verified against recorded source hashes)
+internal/coverageattestation/contract/contract.json
+internal/coverageattestation/contract/coverage-attestation.schema.json

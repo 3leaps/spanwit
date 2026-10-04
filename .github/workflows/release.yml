@@ -1,0 +1,124 @@
+# yamllint disable rule:document-start
+# yamllint disable rule:truthy
+name: Release
+on:
+  push:
+    tags:
+      - "v*"
+defaults:
+  run:
+    shell: bash
+permissions:
+  contents: read
+jobs:
+  # Early warning, not an authorization gate: this workflow is defined by the
+  # tagged commit, so it cannot authorize a release, and it is read-only. It
+  # holds no signing material and no write token, and never creates a release.
+  # The maintainer verifies the tag and creates the draft locally.
+  # See docs/decisions/ADR-0005-release-publication-gate.md.
+  verify-signature:
+    name: Verify pinned tag signature
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      commit: ${{ steps.verify.outputs.commit }}
+      tag_object: ${{ steps.verify.outputs.tag_object }}
+    steps:
+      - name: Checkout exact signed tag and committed pin
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify committed pin and GitHub signature
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPANWIT_RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ./scripts/release-restore-tag-ref.sh
+          SPANWIT_REQUIRE_TAG=1 ./scripts/release-guard-tag-version.sh
+          ./scripts/verify-pinned-tag.sh
+          EXPECTED_OBJECT="$(git rev-parse "refs/tags/$SPANWIT_RELEASE_TAG")"
+          tag_json="$(gh api "repos/3leaps/spanwit/git/tags/$EXPECTED_OBJECT")"
+          jq -e --arg tag "$SPANWIT_RELEASE_TAG" --arg commit "$(git rev-parse HEAD)" \
+            '.tag == $tag and .object.type == "commit" and .object.sha == $commit and
+             .verification.verified == true and .verification.reason == "valid"' \
+            <<<"$tag_json" >/dev/null
+          printf 'commit=%s\n' "$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+          printf 'tag_object=%s\n' "$EXPECTED_OBJECT" >>"$GITHUB_OUTPUT"
+  # Builds and packages the verified commit, then uploads the packages as a
+  # workflow artifact. This workflow holds no write authority: the maintainer
+  # creates the draft release from these artifacts on their own machine.
+  build:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: verify-signature
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Same runner image as CI; bundles Go + tooling. No tool installs.
+    container:
+      image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.6
+      options: --user root
+    env:
+      FULMEN_WORKSPACE_ROOT: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Fix temp permissions
+        run: |
+          set -euo pipefail
+          install -d -m 0777 /__w/_temp || true
+          install -d -m 0777 /__w/_temp/_runner_file_commands || true
+          chown -R "$(id -u)":"$(id -g)" /__w/_temp || true
+          chmod -R 777 /__w/_temp || true
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}" || true
+      - name: Verify toolchain (preinstalled in container)
+        run: |
+          set -euo pipefail
+          echo "Go: $(go version)"
+          actual=$(GOTOOLCHAIN=local go env GOVERSION | sed 's/^go//')
+          minimum=1.26.6
+          if [ "$(printf '%s\n' "$minimum" "$actual" | sort -V | head -n1)" != "$minimum" ]; then
+            echo "ERROR: Go $actual is below required $minimum"
+            exit 1
+          fi
+      # The verified annotated tag object, not just its commit, must still be
+      # the remote tag. A same-commit replacement tag fails here.
+      - name: Build only the verified tag object and commit
+        env:
+          VERIFIED_COMMIT: ${{ needs.verify-signature.outputs.commit }}
+          SPANWIT_EXPECTED_TAG_OBJECT: ${{ needs.verify-signature.outputs.tag_object }}
+          SPANWIT_RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [ -n "$VERIFIED_COMMIT" ] && [ "$(git rev-parse HEAD)" = "$VERIFIED_COMMIT" ] || {
+            echo "::error::checkout differs from the signature-verified commit"
+            exit 1
+          }
+          ./scripts/release-restore-tag-ref.sh
+      - name: Validate VERSION matches tag
+        run: |
+          set -euo pipefail
+          FILE_VERSION=$(cat VERSION)
+          TAG_VERSION=${GITHUB_REF_NAME#v}
+          echo "VERSION file: $FILE_VERSION"
+          echo "Git tag: $TAG_VERSION"
+          if [ "$FILE_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::VERSION ($FILE_VERSION) != tag ($TAG_VERSION)"
+            exit 1
+          fi
+      - name: Build and package artifacts
+        run: make package
+      - name: Upload release packages as a workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: release-packages-${{ github.ref_name }}
+          path: dist/release/*
+          if-no-files-found: error
+          retention-days: 30

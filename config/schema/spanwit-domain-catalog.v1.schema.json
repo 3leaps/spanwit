@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/domain-catalog/v1.json",
+  "title": "Spanwit Domain Catalog v1",
+  "description": "Curated, user-extensible catalog of use domains and their disk-concern entries. Catalog membership is classification metadata only: an entry's class_ceiling is a trust ceiling, never a delete authority. Executability always requires a code-registered capability with evidence and guards; catalog data cannot manufacture a deletion path.",
+  "type": "object",
+  "required": [
+    "version",
+    "domains",
+    "entries"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Catalog schema version. Must be 1 for this version of the schema."
+    },
+    "domains": {
+      "type": "array",
+      "description": "Curated use domains. A use domain is a top-level product category of disk concerns, not a filesystem root.",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/domain"
+      }
+    },
+    "entries": {
+      "type": "array",
+      "description": "Catalog entries keyed by domain.ecosystem.name id. Each entry is classification metadata for one disk-concern location or signature-backed target.",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "domain": {
+      "type": "object",
+      "required": [
+        "name",
+        "label",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Domain segment (first segment of entry ids).",
+          "pattern": "^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "curated",
+            "stub"
+          ],
+          "description": "curated: entries are wired for discovery/recipes. stub: reserved model + extension point only (no reclaim rules shipped)."
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "class_ceiling"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Full-spine taxonomy id in domain.ecosystem.name form (e.g. development.go.go-build).",
+          "pattern": "^[a-z0-9]([a-z0-9_-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9_-]*[a-z0-9])?){2}$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "class_ceiling": {
+          "type": "string",
+          "enum": [
+            "prunable",
+            "diagnostic-only",
+            "recipe"
+          ],
+          "description": "Maximum trust an entry may carry. A prunable ceiling still requires a code-registered capability (signature) to ever produce a delete path; it is not itself deletion authority."
+        },
+        "rebuild_expectation": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "description": "How quickly the location refills after a manual clean."
+        },
+        "platforms": {
+          "type": "array",
+          "description": "Operating systems where this entry applies. Omit to apply on all platforms.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "darwin",
+              "linux",
+              "windows"
+            ]
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "locations": {
+          "type": "object",
+          "description": "Per-platform home-relative location hints for hotspot discovery. Go owns actual path resolution, evidence, and guards; the catalog only names where to look. Omit for signature-discovered entries (e.g. build trees under an analysis root).",
+          "additionalProperties": false,
+          "properties": {
+            "default": {
+              "$ref": "#/$defs/location"
+            },
+            "darwin": {
+              "$ref": "#/$defs/location"
+            },
+            "linux": {
+              "$ref": "#/$defs/location"
+            },
+            "windows": {
+              "$ref": "#/$defs/location"
+            }
+          }
+        },
+        "signature": {
+          "type": "string",
+          "description": "Optional link to a signature id (verified-evidence spine). Must resolve to a registered/known signature; dangling links are rejected.",
+          "pattern": "^[a-z0-9]([a-z0-9_-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9_-]*[a-z0-9])?){2}$"
+        },
+        "recipes": {
+          "type": "array",
+          "description": "Optional links to guided recipe ids (classification linkage only; recipes remain inert argv suggestions).",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rel_home"
+      ],
+      "properties": {
+        "rel_home": {
+          "type": "string",
+          "description": "Path relative to the user home directory (slash-separated; resolved per-OS by Go).",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

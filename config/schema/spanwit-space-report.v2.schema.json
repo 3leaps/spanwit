@@ -1,0 +1,2851 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/space-report/v2.json",
+  "title": "Spanwit Space Report v2",
+  "description": "Read-only disk diagnostic report with capacity_accounting planes. capture_mode full preserves v1 inventory shape; capacity_only omits inventory/handoff. Never includes an execute/delete path. No cross-plane explained_bytes total. Application invariants (capacity target and filesystem plane exactly match the primary pressure observation; root remains the requested analysis scope; capacity_only prune hard-fail) are enforced in Go, not fully in JSON Schema.",
+  "type": "object",
+  "required": [
+    "$schema",
+    "version",
+    "generated_at",
+    "root",
+    "capture_mode",
+    "pressure",
+    "capacity_accounting"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://schemas.3leaps.dev/spanwit/space-report/v2.json"
+    },
+    "version": {
+      "type": "integer",
+      "const": 2
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capture_mode": {
+      "type": "string",
+      "enum": [
+        "full",
+        "capacity_only"
+      ],
+      "description": "full requires v1 inventory shape; capacity_only forbids inventory/handoff/tuning keys."
+    },
+    "pressure": {
+      "$ref": "#/$defs/pressure",
+      "description": "Unchanged v1 semantics (statfs primary write/home volume)."
+    },
+    "analysis_pressure": {
+      "$ref": "#/$defs/pressure",
+      "description": "Present when analysis root is on a different volume than pressure."
+    },
+    "capacity_accounting": {
+      "$ref": "#/$defs/capacity_accounting",
+      "description": "Required capacity planes section; self-contained for capacity_only mode."
+    },
+    "min_size": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opt-in size floor display; \"none\" when unset."
+    },
+    "include_home_caches": {
+      "type": "boolean"
+    },
+    "top": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_depth": {
+      "type": "integer",
+      "description": "Bound on name-shaped unverified and verified discovery depth under root."
+    },
+    "sort_mode": {
+      "type": "string",
+      "enum": [
+        "idle",
+        "size"
+      ],
+      "description": "Ranking policy for verified candidates (advisory only)."
+    },
+    "reclaim_scope": {
+      "type": "string",
+      "enum": [
+        "whole",
+        "incremental"
+      ],
+      "description": "Plan-wide reclaim granularity; carried into exact_plan for replay."
+    },
+    "mutation_contract": {
+      "type": "string",
+      "enum": [
+        "open",
+        "read_only"
+      ],
+      "description": "Effective invocation mutation contract (read_only when no-mutation assertion is active)."
+    },
+    "completion": {
+      "$ref": "#/$defs/completion"
+    },
+    "temp_plane_coverage": {
+      "$ref": "#/$defs/temp_plane_coverage"
+    },
+    "verified_reclaimable": {
+      "type": "object",
+      "required": [
+        "candidates",
+        "prunable_candidates",
+        "prunable_bytes",
+        "prunable_human",
+        "withheld_candidates",
+        "withheld_bytes",
+        "withheld_human",
+        "size_incomplete"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/verified_entry"
+          }
+        },
+        "prunable_candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "prunable_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "prunable_human": {
+          "type": "string"
+        },
+        "withheld_candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "withheld_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "withheld_human": {
+          "type": "string"
+        },
+        "size_incomplete": {
+          "type": "boolean",
+          "description": "True when any candidate size is a depth-bounded partial measurement; byte totals are lower bounds only."
+        }
+      }
+    },
+    "hotspots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/hotspot_entry"
+      }
+    },
+    "unverified": {
+      "type": "object",
+      "required": [
+        "count",
+        "total_bytes",
+        "total_human",
+        "entries",
+        "size_incomplete"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_human": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unverified_entry"
+          }
+        },
+        "size_incomplete": {
+          "type": "boolean",
+          "description": "True when any full-set unverified entry was depth-bounded; total_bytes is a lower bound even if incomplete rows are top-truncated out of entries."
+        }
+      }
+    },
+    "unknown": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unknown_entry"
+      }
+    },
+    "prune_handoff": {
+      "$ref": "#/$defs/prune_handoff",
+      "description": "Optional prune handoff: prunable-only rows from this report (the dry-run for those paths) plus allowlist revalidate commands. Never includes diagnostic-only mass."
+    },
+    "recipes": {
+      "type": "array",
+      "description": "Optional guided recipes for diagnostic-only cleanup. Suggested external commands only; never executable by spanwit.",
+      "items": {
+        "$ref": "#/$defs/recipe"
+      }
+    },
+    "applied_filters": {
+      "$ref": "#/$defs/applied_filters",
+      "description": "Present when opt-in --class/--domain projection was applied. Distinguishes honestly empty filtered views from unfiltered empty inventory."
+    },
+    "enabled_domains": {
+      "type": "array",
+      "description": "Resolved domains.enabled policy set (authorize-narrow): which use domains may drive recipes and reclaim. Present only when the config supplied a domains block; absent means the built-in default. This is policy, not the --domain view projection.",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$"
+      },
+      "uniqueItems": true
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "capture_mode": {
+            "const": "full"
+          }
+        },
+        "required": [
+          "capture_mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "$schema",
+          "version",
+          "generated_at",
+          "root",
+          "capture_mode",
+          "min_size",
+          "include_home_caches",
+          "top",
+          "max_depth",
+          "sort_mode",
+          "reclaim_scope",
+          "pressure",
+          "capacity_accounting",
+          "verified_reclaimable",
+          "hotspots",
+          "unverified",
+          "unknown"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capture_mode": {
+            "const": "capacity_only"
+          }
+        },
+        "required": [
+          "capture_mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "$schema",
+          "version",
+          "generated_at",
+          "root",
+          "capture_mode",
+          "pressure",
+          "capacity_accounting"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "min_size"
+              ]
+            },
+            {
+              "required": [
+                "include_home_caches"
+              ]
+            },
+            {
+              "required": [
+                "top"
+              ]
+            },
+            {
+              "required": [
+                "max_depth"
+              ]
+            },
+            {
+              "required": [
+                "sort_mode"
+              ]
+            },
+            {
+              "required": [
+                "reclaim_scope"
+              ]
+            },
+            {
+              "required": [
+                "verified_reclaimable"
+              ]
+            },
+            {
+              "required": [
+                "hotspots"
+              ]
+            },
+            {
+              "required": [
+                "unverified"
+              ]
+            },
+            {
+              "required": [
+                "unknown"
+              ]
+            },
+            {
+              "required": [
+                "prune_handoff"
+              ]
+            },
+            {
+              "required": [
+                "recipes"
+              ]
+            },
+            {
+              "required": [
+                "applied_filters"
+              ]
+            },
+            {
+              "required": [
+                "enabled_domains"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "applied_filters": {
+      "type": "object",
+      "required": [
+        "classes",
+        "domains"
+      ],
+      "additionalProperties": false,
+      "description": "Canonical inventory projection. Both arrays are always present (possibly empty) when the object is set.",
+      "properties": {
+        "classes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "prunable",
+              "withheld",
+              "diagnostic-only",
+              "unverified",
+              "unknown"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "domains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9]([a-z0-9_-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9_-]*[a-z0-9])?)*$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "pressure": {
+      "type": "object",
+      "required": [
+        "path",
+        "total_bytes",
+        "total_human",
+        "used_bytes",
+        "used_human",
+        "avail_bytes",
+        "avail_human",
+        "used_percent",
+        "level"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "mount": {
+          "type": "string"
+        },
+        "volume_id": {
+          "type": "string",
+          "description": "Opaque filesystem identity for same-volume comparison across platforms."
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "primary_write",
+            "analysis_root"
+          ]
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_human": {
+          "type": "string"
+        },
+        "used_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "used_human": {
+          "type": "string"
+        },
+        "avail_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "avail_human": {
+          "type": "string"
+        },
+        "used_percent": {
+          "type": "number",
+          "minimum": 0
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "warn",
+            "critical"
+          ]
+        }
+      }
+    },
+    "verified_entry": {
+      "type": "object",
+      "required": [
+        "path",
+        "size_bytes",
+        "size_human",
+        "state",
+        "reclaim_scope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size_human": {
+          "type": "string"
+        },
+        "size_incomplete": {
+          "type": "boolean"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "prunable",
+            "withheld"
+          ]
+        },
+        "withheld_reason": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "rebuild_expectation": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "effective_min_size": {
+          "type": "string"
+        },
+        "effective_min_age": {
+          "type": "string"
+        },
+        "effective_max_age": {
+          "type": "string"
+        },
+        "last_activity_at": {
+          "type": "string",
+          "description": "Newest observed descendant file mtime (RFC3339). Advisory ranking only."
+        },
+        "activity_basis": {
+          "type": "string",
+          "enum": [
+            "descendant_mtime",
+            "unknown"
+          ]
+        },
+        "activity_incomplete": {
+          "type": "boolean"
+        },
+        "reclaim_scope": {
+          "type": "string",
+          "enum": [
+            "whole",
+            "incremental"
+          ]
+        },
+        "parent_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "domain": {
+          "type": "string",
+          "description": "Derived from signature taxonomy spine (domain segment)."
+        },
+        "ecosystem": {
+          "type": "string",
+          "description": "Derived from signature taxonomy spine (ecosystem segment)."
+        },
+        "catalog_id": {
+          "type": "string",
+          "description": "Optional full-spine id; verified rows normally use signature instead."
+        },
+        "recipe_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional stable linkage to guided recipes."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reclaim_scope": {
+                "const": "incremental"
+              }
+            },
+            "required": [
+              "reclaim_scope"
+            ]
+          },
+          "then": {
+            "required": [
+              "parent_path"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reclaim_scope": {
+                "const": "whole"
+              }
+            },
+            "required": [
+              "reclaim_scope"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "parent_path"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "hotspot_entry": {
+      "type": "object",
+      "required": [
+        "path",
+        "size_bytes",
+        "size_human",
+        "state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size_human": {
+          "type": "string"
+        },
+        "size_incomplete": {
+          "type": "boolean"
+        },
+        "state": {
+          "type": "string",
+          "const": "diagnostic-only"
+        },
+        "withheld_reason": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "rebuild_expectation": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "domain": {
+          "type": "string"
+        },
+        "ecosystem": {
+          "type": "string"
+        },
+        "catalog_id": {
+          "type": "string",
+          "description": "Provisional full-spine catalog id for inventory filters."
+        },
+        "recipe_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "unverified_entry": {
+      "type": "object",
+      "required": [
+        "path",
+        "size_bytes",
+        "size_human",
+        "state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size_human": {
+          "type": "string"
+        },
+        "size_incomplete": {
+          "type": "boolean"
+        },
+        "state": {
+          "type": "string",
+          "const": "unverified"
+        },
+        "withheld_reason": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "rebuild_expectation": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "domain": {
+          "type": "string"
+        },
+        "ecosystem": {
+          "type": "string"
+        },
+        "catalog_id": {
+          "type": "string"
+        },
+        "recipe_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "unknown_entry": {
+      "type": "object",
+      "required": [
+        "path",
+        "size_bytes",
+        "size_human",
+        "state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size_human": {
+          "type": "string"
+        },
+        "size_incomplete": {
+          "type": "boolean"
+        },
+        "state": {
+          "type": "string",
+          "const": "unknown"
+        },
+        "withheld_reason": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "rebuild_expectation": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "domain": {
+          "type": "string"
+        },
+        "ecosystem": {
+          "type": "string"
+        },
+        "catalog_id": {
+          "type": "string"
+        },
+        "recipe_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "prune_handoff": {
+      "type": "object",
+      "required": [
+        "present",
+        "analysis_root",
+        "min_size",
+        "prunable_count",
+        "prunable_bytes",
+        "prunable_human",
+        "size_incomplete",
+        "candidates",
+        "suggested_commands",
+        "notes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "present": {
+          "type": "boolean"
+        },
+        "analysis_root": {
+          "type": "string"
+        },
+        "min_size": {
+          "type": "string"
+        },
+        "prunable_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "prunable_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "prunable_human": {
+          "type": "string"
+        },
+        "size_incomplete": {
+          "type": "boolean"
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/handoff_entry"
+          }
+        },
+        "exact_plan": {
+          "$ref": "#/$defs/exact_plan"
+        },
+        "suggested_commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/suggested_command"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "handoff_entry": {
+      "type": "object",
+      "required": [
+        "path",
+        "size_bytes",
+        "size_human",
+        "state",
+        "reclaim_scope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size_human": {
+          "type": "string"
+        },
+        "size_incomplete": {
+          "type": "boolean"
+        },
+        "state": {
+          "type": "string",
+          "const": "prunable"
+        },
+        "withheld_reason": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "rebuild_expectation": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "effective_min_size": {
+          "type": "string"
+        },
+        "effective_min_age": {
+          "type": "string"
+        },
+        "effective_max_age": {
+          "type": "string"
+        },
+        "last_activity_at": {
+          "type": "string"
+        },
+        "activity_basis": {
+          "type": "string",
+          "enum": [
+            "descendant_mtime",
+            "unknown"
+          ]
+        },
+        "activity_incomplete": {
+          "type": "boolean"
+        },
+        "reclaim_scope": {
+          "type": "string",
+          "enum": [
+            "whole",
+            "incremental"
+          ]
+        },
+        "parent_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "domain": {
+          "type": "string"
+        },
+        "ecosystem": {
+          "type": "string"
+        },
+        "catalog_id": {
+          "type": "string"
+        },
+        "recipe_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reclaim_scope": {
+                "const": "incremental"
+              }
+            },
+            "required": [
+              "reclaim_scope"
+            ]
+          },
+          "then": {
+            "required": [
+              "parent_path"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reclaim_scope": {
+                "const": "whole"
+              }
+            },
+            "required": [
+              "reclaim_scope"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "parent_path"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "exact_plan": {
+      "type": "object",
+      "required": [
+        "$schema",
+        "version",
+        "analysis_root",
+        "min_size",
+        "sort_mode",
+        "reclaim_scope",
+        "candidates"
+      ],
+      "additionalProperties": false,
+      "description": "Policy-preserving exact-path plan for prune --from-space-report revalidation.",
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "const": 1
+        },
+        "analysis_root": {
+          "type": "string"
+        },
+        "min_size": {
+          "type": "string"
+        },
+        "sort_mode": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "size"
+          ]
+        },
+        "reclaim_scope": {
+          "type": "string",
+          "enum": [
+            "whole",
+            "incremental"
+          ]
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/exact_candidate"
+          }
+        },
+        "signatures": {
+          "type": "object",
+          "description": "Additive signature catalog (custom signatures only).",
+          "additionalProperties": true
+        }
+      }
+    },
+    "exact_candidate": {
+      "type": "object",
+      "required": [
+        "path",
+        "effective_min_size",
+        "effective_min_age",
+        "effective_max_age",
+        "size_bytes",
+        "size_human",
+        "reclaim_scope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signature": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "effective_min_size": {
+          "type": "string"
+        },
+        "effective_min_age": {
+          "type": "string"
+        },
+        "effective_max_age": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size_human": {
+          "type": "string"
+        },
+        "size_incomplete": {
+          "type": "boolean"
+        },
+        "reclaim_scope": {
+          "type": "string",
+          "enum": [
+            "whole",
+            "incremental"
+          ]
+        },
+        "parent_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "last_activity_at": {
+          "type": "string"
+        },
+        "activity_basis": {
+          "type": "string",
+          "enum": [
+            "descendant_mtime",
+            "unknown"
+          ]
+        },
+        "activity_incomplete": {
+          "type": "boolean"
+        },
+        "rebuild_expectation": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reclaim_scope": {
+                "const": "incremental"
+              }
+            },
+            "required": [
+              "reclaim_scope"
+            ]
+          },
+          "then": {
+            "required": [
+              "parent_path"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reclaim_scope": {
+                "const": "whole"
+              }
+            },
+            "required": [
+              "reclaim_scope"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "parent_path"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "recipe": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "state",
+        "suggested_commands"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "type": "string",
+          "const": "diagnostic-only",
+          "description": "Recipes are always diagnostic-only; never prunable."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "argv",
+            "structural"
+          ],
+          "description": "argv (default when omitted) is a single-shot external-command suggestion; structural is a multi-step print-only journey (016A)."
+        },
+        "rebuild_expectation": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "keep": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "suggested_commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/suggested_command"
+          }
+        },
+        "steps": {
+          "type": "array",
+          "description": "Ordered steps for kind=structural recipes. Print-only; never auto-executed. Go load rejects argv recipes with steps and structural recipes without steps.",
+          "items": {
+            "$ref": "#/$defs/recipe_step"
+          }
+        },
+        "exact_plan": {
+          "$ref": "#/$defs/exact_plan",
+          "description": "Optional closed-set revalidation plan scoped to this recipe (e.g. Cargo-only). Revalidate with prune --from-exact-plan; not the report-wide prune_handoff."
+        },
+        "rationale": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "domain": {
+          "type": "string"
+        },
+        "ecosystem": {
+          "type": "string"
+        },
+        "catalog_id": {
+          "type": "string",
+          "description": "Full-spine taxonomy id for domain filtering (e.g. development.rust.rustup)."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "structural"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "steps"
+            ],
+            "properties": {
+              "steps": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "anyOf": [
+              {
+                "not": {
+                  "required": [
+                    "kind"
+                  ]
+                }
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "const": "argv"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "steps": {
+                "maxItems": 0
+              },
+              "exact_plan": false
+            }
+          }
+        }
+      ]
+    },
+    "recipe_step": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "description": "One ordered step in a structural guided recipe. Print-only; spanwit never writes config or deletes.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "observe",
+            "command",
+            "config_snippet",
+            "purge_hint",
+            "verify"
+          ]
+        },
+        "body": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "command": {
+          "$ref": "#/$defs/suggested_command"
+        },
+        "config_snippet": {
+          "$ref": "#/$defs/config_snippet"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "config_snippet"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "config_snippet"
+            ],
+            "properties": {
+              "command": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "command",
+                  "purge_hint",
+                  "verify"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "command"
+            ],
+            "properties": {
+              "config_snippet": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "observe"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "command": false,
+              "config_snippet": false
+            }
+          }
+        }
+      ]
+    },
+    "config_snippet": {
+      "type": "object",
+      "required": [
+        "label",
+        "content"
+      ],
+      "additionalProperties": false,
+      "description": "Copy-paste config fragment. Never written by spanwit.",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "suggested_command": {
+      "type": "object",
+      "required": [
+        "program",
+        "args",
+        "display"
+      ],
+      "additionalProperties": false,
+      "description": "Machine-safe argv form plus shell-safe display line. Never auto-executed by spanwit.",
+      "properties": {
+        "program": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "display": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "byte_claim": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false,
+      "description": "Numeric claim. Missing numbers are never serialized as zero. bytes is canonical; human is presentation-only.",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "measured",
+            "partial",
+            "unsupported",
+            "unavailable"
+          ]
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "human": {
+          "type": "string"
+        },
+        "basis": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable derivation token (not a command string)."
+        },
+        "bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower",
+            "upper",
+            "unknown"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "description": "Curated operator-facing reason; never raw tool stderr."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional override; otherwise inherits enclosing plane source."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "measured",
+                  "partial"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "bytes",
+              "basis",
+              "bound"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "unsupported",
+                  "unavailable"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "bytes"
+                  ]
+                },
+                {
+                  "required": [
+                    "human"
+                  ]
+                },
+                {
+                  "required": [
+                    "basis"
+                  ]
+                },
+                {
+                  "required": [
+                    "bound"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "held_open_byte_claim": {
+      "description": "Held-open logical byte observation. It is always a lower bound and never a reclaimable or allocated-byte claim.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/byte_claim"
+        },
+        {
+          "type": "object",
+          "required": [
+            "status",
+            "bytes",
+            "basis",
+            "bound"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "measured",
+                "partial"
+              ]
+            },
+            "bound": {
+              "type": "string",
+              "const": "lower"
+            }
+          }
+        }
+      ]
+    },
+    "coverage_gap": {
+      "type": "object",
+      "required": [
+        "code",
+        "scope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "permission_denied",
+            "command_missing",
+            "command_failed",
+            "parse_failed",
+            "timeout",
+            "truncated"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "detail": {
+          "type": "string",
+          "description": "Curated diagnostic text only; never raw lsof/tool stderr."
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Default empty; must not smuggle path disclosure past held-open policy.",
+          "default": []
+        },
+        "omitted_objects": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "omitted_holders": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "gaps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "gaps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/coverage_gap"
+          }
+        }
+      }
+    },
+    "collection_status_standard": {
+      "type": "string",
+      "enum": [
+        "measured",
+        "partial",
+        "unsupported",
+        "unavailable"
+      ]
+    },
+    "capture": {
+      "type": "object",
+      "required": [
+        "captured_at",
+        "tool",
+        "os"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "captured_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "tool": {
+          "type": "object",
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "const": "spanwit"
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "commit": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "os": {
+          "type": "object",
+          "required": [
+            "goos",
+            "goarch"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "goos": {
+              "type": "string",
+              "minLength": 1
+            },
+            "goarch": {
+              "type": "string",
+              "minLength": 1
+            },
+            "platform_version": {
+              "type": "string"
+            }
+          }
+        },
+        "boot_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "boot_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "session_boundary": {
+          "type": "string",
+          "enum": [
+            "before-running",
+            "before-quiesced",
+            "after-reboot",
+            "after-update"
+          ]
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "path",
+        "platform"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resolved_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mount": {
+          "type": "string"
+        },
+        "fs_type": {
+          "type": "string"
+        },
+        "volume_id": {
+          "type": "string"
+        },
+        "container_id": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical platform id (e.g. darwin, linux)."
+        }
+      }
+    },
+    "filesystem_plane": {
+      "type": "object",
+      "required": [
+        "collection_status",
+        "coverage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "collection_status": {
+          "$ref": "#/$defs/collection_status_standard"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable source token when collection was attempted."
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        },
+        "pressure_relation": {
+          "type": "string",
+          "const": "same_observation",
+          "description": "When set, Go must enforce path/mount/volume_id and total/used/available match carrier pressure."
+        },
+        "total": {
+          "$ref": "#/$defs/byte_claim"
+        },
+        "used": {
+          "$ref": "#/$defs/byte_claim"
+        },
+        "available": {
+          "$ref": "#/$defs/byte_claim"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "collection_status": {
+                "enum": [
+                  "measured",
+                  "partial",
+                  "unavailable"
+                ]
+              }
+            },
+            "required": [
+              "collection_status"
+            ]
+          },
+          "then": {
+            "required": [
+              "source"
+            ]
+          }
+        }
+      ]
+    },
+    "container_plane": {
+      "type": "object",
+      "required": [
+        "collection_status",
+        "coverage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "collection_status": {
+          "$ref": "#/$defs/collection_status_standard"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable source token when collection was attempted."
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capacity": {
+          "$ref": "#/$defs/byte_claim"
+        },
+        "free": {
+          "$ref": "#/$defs/byte_claim"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "collection_status": {
+                "enum": [
+                  "measured",
+                  "partial",
+                  "unavailable"
+                ]
+              }
+            },
+            "required": [
+              "collection_status"
+            ]
+          },
+          "then": {
+            "required": [
+              "source"
+            ]
+          }
+        }
+      ]
+    },
+    "volume_entry": {
+      "type": "object",
+      "required": [
+        "id",
+        "is_target"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mount": {
+          "type": "string"
+        },
+        "capacity_in_use": {
+          "$ref": "#/$defs/byte_claim"
+        },
+        "is_target": {
+          "type": "boolean"
+        }
+      }
+    },
+    "volumes_plane": {
+      "type": "object",
+      "required": [
+        "collection_status",
+        "coverage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "collection_status": {
+          "$ref": "#/$defs/collection_status_standard"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable source token when collection was attempted."
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/volume_entry"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "collection_status": {
+                "enum": [
+                  "measured",
+                  "partial",
+                  "unavailable"
+                ]
+              }
+            },
+            "required": [
+              "collection_status"
+            ]
+          },
+          "then": {
+            "required": [
+              "source"
+            ]
+          }
+        }
+      ]
+    },
+    "snapshot_entry": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "purgeable": {
+          "type": "boolean"
+        },
+        "limits_container_shrink": {
+          "type": "boolean"
+        },
+        "bytes": {
+          "$ref": "#/$defs/byte_claim"
+        }
+      }
+    },
+    "snapshots_plane": {
+      "type": "object",
+      "required": [
+        "collection_status",
+        "coverage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "collection_status": {
+          "$ref": "#/$defs/collection_status_standard"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable source token when collection was attempted."
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bytes": {
+          "$ref": "#/$defs/byte_claim"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/snapshot_entry"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "collection_status": {
+                "enum": [
+                  "measured",
+                  "partial",
+                  "unavailable"
+                ]
+              }
+            },
+            "required": [
+              "collection_status"
+            ]
+          },
+          "then": {
+            "required": [
+              "source"
+            ]
+          }
+        }
+      ]
+    },
+    "system_managed_entry": {
+      "type": "object",
+      "required": [
+        "id",
+        "path",
+        "trust_state",
+        "remediation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Catalog-constrained known OS root only."
+        },
+        "trust_state": {
+          "type": "string",
+          "const": "diagnostic-only"
+        },
+        "allocated": {
+          "$ref": "#/$defs/byte_claim"
+        },
+        "remediation": {
+          "type": "string",
+          "enum": [
+            "os_or_update_mechanism",
+            "unknown",
+            "none_supported"
+          ]
+        }
+      }
+    },
+    "system_managed_plane": {
+      "type": "object",
+      "required": [
+        "collection_status",
+        "coverage",
+        "policy"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "collection_status": {
+          "$ref": "#/$defs/collection_status_standard"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable source token when collection was attempted."
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        },
+        "policy": {
+          "type": "string",
+          "const": "diagnostic_only_never_prune_handoff"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/system_managed_entry"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "collection_status": {
+                "enum": [
+                  "measured",
+                  "partial",
+                  "unavailable"
+                ]
+              }
+            },
+            "required": [
+              "collection_status"
+            ]
+          },
+          "then": {
+            "required": [
+              "source"
+            ]
+          }
+        }
+      ]
+    },
+    "held_open_holder": {
+      "type": "object",
+      "required": [
+        "pid",
+        "executable"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "executable": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/\\\\]+$",
+          "description": "Basename only."
+        },
+        "interface_guess": {
+          "type": "string"
+        }
+      }
+    },
+    "held_open_object": {
+      "type": "object",
+      "required": [
+        "device",
+        "inode",
+        "path_present",
+        "root_class",
+        "logical_bytes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "type": [
+            "string",
+            "integer"
+          ]
+        },
+        "inode": {
+          "type": [
+            "string",
+            "integer"
+          ]
+        },
+        "path_present": {
+          "type": "boolean"
+        },
+        "root_class": {
+          "type": "string",
+          "enum": [
+            "user_home",
+            "system_temp",
+            "target_tree",
+            "system",
+            "other"
+          ]
+        },
+        "logical_bytes": {
+          "$ref": "#/$defs/held_open_byte_claim"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Only when plane disclosure is full."
+        },
+        "holders": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/held_open_holder"
+          }
+        }
+      }
+    },
+    "held_open_group": {
+      "type": "object",
+      "required": [
+        "key",
+        "unique_objects"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unique_objects": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "logical_bytes": {
+          "$ref": "#/$defs/held_open_byte_claim"
+        }
+      }
+    },
+    "held_open_plane": {
+      "type": "object",
+      "required": [
+        "collection_status",
+        "coverage"
+      ],
+      "additionalProperties": false,
+      "description": "Opt-in plane. collection_status not_requested when --held-open was not set. Default disclosure emits no path component.",
+      "properties": {
+        "collection_status": {
+          "type": "string",
+          "enum": [
+            "measured",
+            "partial",
+            "unsupported",
+            "unavailable",
+            "not_requested"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        },
+        "disclosure": {
+          "type": "string",
+          "enum": [
+            "none",
+            "full"
+          ],
+          "description": "Self-describing path disclosure level for shared report files."
+        },
+        "privilege": {
+          "type": "string",
+          "enum": [
+            "unprivileged",
+            "elevated"
+          ],
+          "description": "Spanwit never self-escalates to close a coverage gap."
+        },
+        "processes_examined": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "processes_denied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unique_objects": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "holder_processes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "relationships": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "logical_bytes": {
+          "$ref": "#/$defs/held_open_byte_claim"
+        },
+        "entries": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/held_open_object"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/held_open_group"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "collection_status": {
+                "enum": [
+                  "measured",
+                  "partial",
+                  "unavailable"
+                ]
+              }
+            },
+            "required": [
+              "collection_status"
+            ]
+          },
+          "then": {
+            "required": [
+              "source",
+              "disclosure",
+              "privilege"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "collection_status": {
+                "enum": [
+                  "measured",
+                  "partial"
+                ]
+              }
+            },
+            "required": [
+              "collection_status"
+            ]
+          },
+          "then": {
+            "required": [
+              "processes_examined",
+              "unique_objects",
+              "holder_processes",
+              "logical_bytes"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "collection_status": {
+                "const": "measured"
+              }
+            },
+            "required": [
+              "collection_status"
+            ]
+          },
+          "then": {
+            "required": [
+              "processes_denied"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "collection_status": {
+                "const": "not_requested"
+              }
+            },
+            "required": [
+              "collection_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "coverage": {
+                "type": "object",
+                "properties": {
+                  "gaps": {
+                    "type": "array",
+                    "maxItems": 0
+                  }
+                }
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "entries"
+                  ]
+                },
+                {
+                  "required": [
+                    "groups"
+                  ]
+                },
+                {
+                  "required": [
+                    "unique_objects"
+                  ]
+                },
+                {
+                  "required": [
+                    "logical_bytes"
+                  ]
+                },
+                {
+                  "required": [
+                    "disclosure"
+                  ]
+                },
+                {
+                  "required": [
+                    "source"
+                  ]
+                },
+                {
+                  "required": [
+                    "privilege"
+                  ]
+                },
+                {
+                  "required": [
+                    "processes_examined"
+                  ]
+                },
+                {
+                  "required": [
+                    "processes_denied"
+                  ]
+                },
+                {
+                  "required": [
+                    "holder_processes"
+                  ]
+                },
+                {
+                  "required": [
+                    "relationships"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "collection_status": {
+                "enum": [
+                  "unsupported",
+                  "unavailable"
+                ]
+              }
+            },
+            "required": [
+              "collection_status"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "entries"
+                  ]
+                },
+                {
+                  "required": [
+                    "groups"
+                  ]
+                },
+                {
+                  "required": [
+                    "unique_objects"
+                  ]
+                },
+                {
+                  "required": [
+                    "holder_processes"
+                  ]
+                },
+                {
+                  "required": [
+                    "relationships"
+                  ]
+                },
+                {
+                  "required": [
+                    "logical_bytes"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "disclosure": {
+                "const": "none"
+              }
+            },
+            "required": [
+              "disclosure"
+            ]
+          },
+          "then": {
+            "properties": {
+              "entries": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "not": {
+                    "required": [
+                      "path"
+                    ]
+                  }
+                }
+              },
+              "coverage": {
+                "type": "object",
+                "properties": {
+                  "gaps": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "paths": {
+                          "type": "array",
+                          "maxItems": 0
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "capacity_narrative": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "known": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unavailable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unexplained_hints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "capacity_planes": {
+      "type": "object",
+      "required": [
+        "filesystem",
+        "container",
+        "volumes",
+        "snapshots",
+        "system_managed",
+        "held_open"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "filesystem": {
+          "$ref": "#/$defs/filesystem_plane"
+        },
+        "container": {
+          "$ref": "#/$defs/container_plane"
+        },
+        "volumes": {
+          "$ref": "#/$defs/volumes_plane"
+        },
+        "snapshots": {
+          "$ref": "#/$defs/snapshots_plane"
+        },
+        "system_managed": {
+          "$ref": "#/$defs/system_managed_plane"
+        },
+        "held_open": {
+          "$ref": "#/$defs/held_open_plane"
+        }
+      }
+    },
+    "capacity_accounting": {
+      "type": "object",
+      "required": [
+        "capture",
+        "target",
+        "planes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "capture": {
+          "$ref": "#/$defs/capture"
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "planes": {
+          "$ref": "#/$defs/capacity_planes"
+        },
+        "narrative": {
+          "$ref": "#/$defs/capacity_narrative"
+        }
+      }
+    },
+    "temp_plane_coverage": {
+      "type": "object",
+      "description": "OS temp roots this run did not walk, present only under warn/critical primary pressure. Observation only: carries no prune authority and never names children.",
+      "required": [
+        "trigger",
+        "planes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "warn",
+            "critical"
+          ]
+        },
+        "planes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/temp_plane"
+          }
+        }
+      }
+    },
+    "temp_plane": {
+      "type": "object",
+      "required": [
+        "root",
+        "kind",
+        "size_status",
+        "size_basis",
+        "follow_up"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical temp root (no children)."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "shared-temp",
+            "user-temp"
+          ]
+        },
+        "size_status": {
+          "type": "string",
+          "enum": [
+            "measured",
+            "partial",
+            "unavailable"
+          ]
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Exact when measured; lower bound when partial; absent when unavailable."
+        },
+        "size_basis": {
+          "type": "string",
+          "enum": [
+            "apparent"
+          ]
+        },
+        "follow_up": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Root-level space command for the operator to run explicitly."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "size_status": {
+                "const": "unavailable"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "size_bytes"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "size_bytes"
+            ]
+          }
+        }
+      ]
+    },
+    "completion": {
+      "type": "object",
+      "description": "Whether the requested observation finished without coverage warnings. Mirrors the CLI exit contract (complete=0, partial=1). Never deletion authority.",
+      "required": [
+        "lifecycle",
+        "warning_count"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "lifecycle": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial"
+          ]
+        },
+        "warning_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "lifecycle": {
+                "const": "complete"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "warning_count": {
+                "const": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "warning_count": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

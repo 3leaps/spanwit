@@ -1,0 +1,7 @@
+# Invalid deployment configuration - missing required fields and invalid enum
+version: 1.0.0 # Invalid: should match pattern with 'v' prefix
+environment: local # Invalid: not in enum [development, staging, production]
+logLevel: verbose # Invalid: not in enum
+deployment:
+  mode: rolling # Invalid: not in enum [direct, blue-green, canary]
+  # Missing required fields for the selected mode

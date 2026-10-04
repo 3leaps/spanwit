@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/observe-health/v1.json",
+  "title": "Spanwit Observe Health v1",
+  "type": "object",
+  "required": [
+    "$schema",
+    "version",
+    "generated_at",
+    "volumes",
+    "mutation_contract",
+    "foreground_active",
+    "backlog_reconciles"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.3leaps.dev/spanwit/observe-health/v1.json"
+    },
+    "version": {
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "volumes": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/volume_health"
+      }
+    },
+    "proposals": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/proposal"
+      }
+    },
+    "known": {
+      "$ref": "#/$defs/messages"
+    },
+    "unavailable": {
+      "$ref": "#/$defs/messages"
+    },
+    "unexplained": {
+      "$ref": "#/$defs/messages"
+    },
+    "mutation_contract": {
+      "enum": [
+        "open",
+        "read_only"
+      ]
+    },
+    "foreground_active": {
+      "type": "boolean"
+    },
+    "backlog_reconciles": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 64
+    }
+  },
+  "$defs": {
+    "level": {
+      "enum": [
+        "ok",
+        "warn",
+        "critical"
+      ]
+    },
+    "coverage": {
+      "enum": [
+        "complete",
+        "partial",
+        "degraded",
+        "incomparable",
+        "unavailable",
+        "indeterminate"
+      ]
+    },
+    "messages": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "maxLength": 512
+      }
+    },
+    "growth": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "measured",
+            "unavailable",
+            "indeterminate"
+          ]
+        },
+        "rate_bps": {
+          "type": "number"
+        },
+        "runway_sec": {
+          "type": "number"
+        },
+        "delta_bytes": {
+          "type": "integer"
+        },
+        "elapsed_sec": {
+          "type": "number"
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "from_seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "to_seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "volume_id": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    },
+    "volume_health": {
+      "type": "object",
+      "required": [
+        "volume_id",
+        "level",
+        "coverage",
+        "reconcile_needed",
+        "foreground"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "volume_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        },
+        "last_success_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_attempt_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "loss_reason": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "reconcile_needed": {
+          "type": "boolean"
+        },
+        "last_notified_level": {
+          "$ref": "#/$defs/level"
+        },
+        "growth": {
+          "$ref": "#/$defs/growth"
+        },
+        "foreground": {
+          "type": "boolean"
+        }
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "kind": {
+          "enum": [
+            "recipe",
+            "note"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "recipe_id": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    }
+  }
+}

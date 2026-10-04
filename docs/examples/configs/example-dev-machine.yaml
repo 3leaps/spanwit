@@ -1,0 +1,38 @@
+# Example multi-root maintenance profile.
+# Posture: MAINTENANCE — min_age floors. Crisis path: crisis-dev.yaml.
+version: 1
+defaults:
+  min_size: 500M
+  min_age: 60d  # older-than floor
+paths:
+  - path: ~/dev
+    enabled: true
+    max_depth: 12
+    targets:
+      - signature: development.rust.cargo-target
+      - pattern: "**/node_modules"
+      - pattern: "**/dist"
+      - pattern: "**/build"
+      - pattern: "**/.cache"
+    ignores:
+      - "**/.git/**"
+  - path: ~/Parallels
+    enabled: true
+    max_depth: 3
+    targets:
+      - pattern: "**/Snapshots/**"
+  - path: ~/Library
+    enabled: true
+    max_depth: 6
+    targets:
+      - pattern: "**/Containers/**"
+    ignores:
+      - "**/.git/**"
+  - path: ~/go
+    enabled: true
+    max_depth: 6
+    ignores:
+      - "**/pkg/mod/**"
+  - path: ~/Downloads
+    enabled: true
+    max_depth: 4

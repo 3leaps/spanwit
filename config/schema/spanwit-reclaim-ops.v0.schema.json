@@ -1,0 +1,861 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/reclaim-ops/v0.json",
+  "title": "Spanwit Reclaim-Ops Record v0 (draft)",
+  "description": "One record from the NDJSON stream emitted by a reclaim-ops script with --format json. Each line of the stream validates against this schema independently. STABILITY: draft. This is an in-repo shape used to validate the scripts' own output; it is deliberately NOT published as a portable contract, and its field set may change while the reclaim binding is still settling. A portable contract is minted only when a second product consumes these records across a tool boundary. Records are discriminated by kind: each kind declares its own closed field set, so a field belonging to another kind is refused just as an unknown field is.",
+  "type": "object",
+  "$defs": {
+    "header": {
+      "properties": {
+        "contract": {
+          "description": "The reclaim-ops binding this record conforms to.",
+          "type": "string",
+          "const": "spanwit.reclaim-ops/v0"
+        },
+        "record": {
+          "const": "header"
+        },
+        "profile": {
+          "description": "Profile identifier, three dotted segments.",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(\\.[a-z0-9-]+){2}$"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "plan",
+            "preflight",
+            "execute"
+          ]
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "text",
+            "json"
+          ]
+        },
+        "phase": {
+          "type": "string"
+        },
+        "root_requested": {
+          "description": "What the operator asked for, before admission. Not yet canonical.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract",
+        "record",
+        "profile",
+        "mode",
+        "format",
+        "root_requested"
+      ],
+      "additionalProperties": false
+    },
+    "admission": {
+      "properties": {
+        "contract": {
+          "description": "The reclaim-ops binding this record conforms to.",
+          "type": "string",
+          "const": "spanwit.reclaim-ops/v0"
+        },
+        "record": {
+          "const": "admission"
+        },
+        "status": {
+          "description": "Lifecycle status (ADR-0005 vocabulary). Profiles must not invent values outside this set.",
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "complete",
+            "failed",
+            "blocked",
+            "skipped"
+          ]
+        },
+        "root": {
+          "description": "The canonical admitted root. Present only after admission succeeded.",
+          "type": "string"
+        },
+        "auth_path": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract",
+        "record",
+        "status",
+        "root"
+      ],
+      "additionalProperties": false
+    },
+    "inventory": {
+      "properties": {
+        "contract": {
+          "description": "The reclaim-ops binding this record conforms to.",
+          "type": "string",
+          "const": "spanwit.reclaim-ops/v0"
+        },
+        "record": {
+          "const": "inventory"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "older_than": {
+          "type": "string",
+          "pattern": "^[0-9]+[dwmy]$"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "basis": {
+          "description": "How the claim was established. A required check permits mutation only when outcome is pass AND basis is confirmed, so uncertainty fails closed.",
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "inferred"
+          ]
+        },
+        "volume_unit": {
+          "description": "What observed and expected are counted in.",
+          "type": "string"
+        },
+        "volume_observed": {
+          "description": "Paths this run was able to evaluate.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "volume_expected": {
+          "description": "Paths this run considered. Equal to observed when coverage is complete.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "volume_unevaluable": {
+          "description": "Paths that could not be evaluated at all, typically an unreadable subtree. Non-zero forces basis to inferred: a run over a partly unreadable tree cannot describe itself as confirmed.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "bytes": {
+          "description": "Apparent size. Not reclaimable space: hard links are counted per directory entry and sparse files report more than they allocate.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "human": {
+          "type": "string"
+        },
+        "bytes_reclaimed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "method": {
+          "description": "How the population was arrived at. 'enumerated' means every member was listed and the traversal completed; 'declared' means it did not, so the population is a floor.",
+          "type": "string",
+          "enum": [
+            "enumerated",
+            "declared",
+            "reconciled",
+            "derived"
+          ]
+        },
+        "volume_is_lower_bound": {
+          "description": "True when enumeration did not complete, so expected is a floor rather than a total.",
+          "type": "boolean"
+        },
+        "bytes_unmeasured": {
+          "description": "Candidates whose size could not be read. Non-zero makes the byte total a lower bound; a size failure is never recorded as a zero.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_freshened": {
+          "description": "Written to after the plan was taken.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_type_changed": {
+          "description": "Type or link shape changed under us.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_containment": {
+          "description": "Refused on containment or device boundary.",
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "contract",
+        "record",
+        "phase"
+      ],
+      "additionalProperties": false
+    },
+    "preflight": {
+      "properties": {
+        "contract": {
+          "description": "The reclaim-ops binding this record conforms to.",
+          "type": "string",
+          "const": "spanwit.reclaim-ops/v0"
+        },
+        "record": {
+          "const": "preflight"
+        },
+        "check": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "outcome": {
+          "description": "Did the check clear? Deliberately separate from basis: one axis is the answer, the other is how sure we are.",
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "unknown"
+          ]
+        },
+        "basis": {
+          "description": "How the claim was established. A required check permits mutation only when outcome is pass AND basis is confirmed, so uncertainty fails closed.",
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "inferred"
+          ]
+        },
+        "status": {
+          "description": "Lifecycle status (ADR-0005 vocabulary). Profiles must not invent values outside this set.",
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "complete",
+            "failed",
+            "blocked",
+            "skipped"
+          ]
+        },
+        "detail": {
+          "type": "string"
+        },
+        "resolve": {
+          "type": "string"
+        },
+        "error_class": {
+          "description": "Canonical error class, present only on failure. Successful records carry no error fields.",
+          "type": "string",
+          "enum": [
+            "transient",
+            "throttled",
+            "auth",
+            "integrity",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        "error_kind": {
+          "description": "Local precision alongside the canonical class.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract",
+        "record",
+        "check",
+        "required",
+        "outcome",
+        "basis",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "exclusion": {
+      "properties": {
+        "contract": {
+          "description": "The reclaim-ops binding this record conforms to.",
+          "type": "string",
+          "const": "spanwit.reclaim-ops/v0"
+        },
+        "record": {
+          "const": "exclusion"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "auto_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "auto_tokens": {
+          "type": "string"
+        },
+        "explicit_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "explicit_tokens": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract",
+        "record",
+        "phase"
+      ],
+      "additionalProperties": false
+    },
+    "item": {
+      "properties": {
+        "contract": {
+          "description": "The reclaim-ops binding this record conforms to.",
+          "type": "string",
+          "const": "spanwit.reclaim-ops/v0"
+        },
+        "record": {
+          "const": "item"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "description": "Lifecycle status (ADR-0005 vocabulary). Profiles must not invent values outside this set.",
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "complete",
+            "failed",
+            "blocked",
+            "skipped"
+          ]
+        },
+        "error_class": {
+          "description": "Canonical error class, present only on failure. Successful records carry no error fields.",
+          "type": "string",
+          "enum": [
+            "transient",
+            "throttled",
+            "auth",
+            "integrity",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        "error_kind": {
+          "description": "Local precision alongside the canonical class.",
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "disclosure": {
+          "description": "Sensitivity of the paths in this record. source_structure means they encode home layout and project names, so the record is not a shareable artifact without redaction.",
+          "type": "string",
+          "enum": [
+            "source_structure"
+          ]
+        }
+      },
+      "required": [
+        "contract",
+        "record",
+        "phase",
+        "path",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "phase": {
+      "properties": {
+        "contract": {
+          "description": "The reclaim-ops binding this record conforms to.",
+          "type": "string",
+          "const": "spanwit.reclaim-ops/v0"
+        },
+        "record": {
+          "const": "phase"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "status": {
+          "description": "Lifecycle status (ADR-0005 vocabulary). Profiles must not invent values outside this set.",
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "complete",
+            "failed",
+            "blocked",
+            "skipped"
+          ]
+        },
+        "older_than": {
+          "type": "string",
+          "pattern": "^[0-9]+[dwmy]$"
+        },
+        "note": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "membership": {
+          "description": "Digest over the sorted candidate set. Binds an acknowledgement to the reviewed set rather than to its size; a same-count substitution changes it.",
+          "type": "string"
+        },
+        "caution_names": {
+          "description": "Count of credential-shaped basenames observed. An annotation only: no file is opened to decide it, and nothing is withheld on the strength of it.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "disclosure": {
+          "description": "Sensitivity of the paths in this record. source_structure means they encode home layout and project names, so the record is not a shareable artifact without redaction.",
+          "type": "string",
+          "enum": [
+            "source_structure"
+          ]
+        },
+        "next_required_operation": {
+          "description": "What a caller must do next, or 'none'. Empty string means nothing further is required.",
+          "type": "string"
+        },
+        "basis": {
+          "description": "How the claim was established. A required check permits mutation only when outcome is pass AND basis is confirmed, so uncertainty fails closed.",
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "inferred"
+          ]
+        },
+        "volume_unit": {
+          "description": "What observed and expected are counted in.",
+          "type": "string"
+        },
+        "volume_observed": {
+          "description": "Paths this run was able to evaluate.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "volume_expected": {
+          "description": "Paths this run considered. Equal to observed when coverage is complete.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "volume_unevaluable": {
+          "description": "Paths that could not be evaluated at all, typically an unreadable subtree. Non-zero forces basis to inferred: a run over a partly unreadable tree cannot describe itself as confirmed.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "bytes": {
+          "description": "Apparent size. Not reclaimable space: hard links are counted per directory entry and sparse files report more than they allocate.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "human": {
+          "type": "string"
+        },
+        "bytes_reclaimed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deleted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "delete_failed": {
+          "description": "Removals the filesystem refused. Never counted as reclaimed and never retried.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "description": "Candidates not acted on. Equals the sum of the skipped_* breakdown.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_excluded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_live_hold": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_unknown": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_not_owned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_vanished": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "method": {
+          "description": "How the population was arrived at. 'enumerated' means every member was listed and the traversal completed; 'declared' means it did not, so the population is a floor.",
+          "type": "string",
+          "enum": [
+            "enumerated",
+            "declared",
+            "reconciled",
+            "derived"
+          ]
+        },
+        "volume_is_lower_bound": {
+          "description": "True when enumeration did not complete, so expected is a floor rather than a total.",
+          "type": "boolean"
+        },
+        "bytes_unmeasured": {
+          "description": "Candidates whose size could not be read. Non-zero makes the byte total a lower bound; a size failure is never recorded as a zero.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_freshened": {
+          "description": "Written to after the plan was taken.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_type_changed": {
+          "description": "Type or link shape changed under us.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_containment": {
+          "description": "Refused on containment or device boundary.",
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "contract",
+        "record",
+        "phase",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "terminal": {
+      "properties": {
+        "contract": {
+          "description": "The reclaim-ops binding this record conforms to.",
+          "type": "string",
+          "const": "spanwit.reclaim-ops/v0"
+        },
+        "record": {
+          "const": "terminal"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "plan",
+            "preflight",
+            "execute"
+          ]
+        },
+        "phase": {
+          "type": "string"
+        },
+        "status": {
+          "description": "Lifecycle status (ADR-0005 vocabulary). Profiles must not invent values outside this set.",
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "complete",
+            "failed",
+            "blocked",
+            "skipped"
+          ]
+        },
+        "exit_code": {
+          "description": "Process exit status. Callers should branch on this, not on record text.",
+          "type": "integer",
+          "enum": [
+            0,
+            64,
+            65,
+            70,
+            75
+          ]
+        },
+        "error_class": {
+          "description": "Canonical error class, present only on failure. Successful records carry no error fields.",
+          "type": "string",
+          "enum": [
+            "transient",
+            "throttled",
+            "auth",
+            "integrity",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        "error_kind": {
+          "description": "Local precision alongside the canonical class.",
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "blockers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "next_required_operation": {
+          "description": "What a caller must do next, or 'none'. Empty string means nothing further is required.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract",
+        "record",
+        "mode",
+        "status",
+        "exit_code"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/header"
+    },
+    {
+      "$ref": "#/$defs/admission"
+    },
+    {
+      "$ref": "#/$defs/inventory"
+    },
+    {
+      "$ref": "#/$defs/preflight"
+    },
+    {
+      "$ref": "#/$defs/exclusion"
+    },
+    {
+      "$ref": "#/$defs/item"
+    },
+    {
+      "$ref": "#/$defs/phase"
+    },
+    {
+      "$ref": "#/$defs/terminal"
+    }
+  ],
+  "allOf": [
+    {
+      "$comment": "A coverage claim is reported whole: basis, method, unit and denominator travel with the observation, or none of them do.",
+      "if": {
+        "required": [
+          "volume_observed"
+        ]
+      },
+      "then": {
+        "required": [
+          "basis",
+          "method",
+          "volume_unit",
+          "volume_expected",
+          "volume_unevaluable"
+        ]
+      }
+    },
+    {
+      "$comment": "A coverage claim is reported whole: basis, method, unit and denominator travel with the observation, or none of them do.",
+      "if": {
+        "required": [
+          "volume_expected"
+        ]
+      },
+      "then": {
+        "required": [
+          "volume_observed"
+        ]
+      }
+    },
+    {
+      "$comment": "confirmed means nothing was unevaluable and the enumeration completed.",
+      "if": {
+        "properties": {
+          "basis": {
+            "const": "confirmed"
+          }
+        },
+        "required": [
+          "basis",
+          "volume_unevaluable"
+        ]
+      },
+      "then": {
+        "properties": {
+          "volume_unevaluable": {
+            "const": 0
+          },
+          "volume_is_lower_bound": {
+            "const": false
+          },
+          "method": {
+            "const": "enumerated"
+          }
+        }
+      }
+    },
+    {
+      "$comment": "An incomplete enumeration cannot be confirmed.",
+      "if": {
+        "properties": {
+          "volume_is_lower_bound": {
+            "const": true
+          }
+        },
+        "required": [
+          "volume_is_lower_bound"
+        ]
+      },
+      "then": {
+        "properties": {
+          "basis": {
+            "const": "inferred"
+          }
+        }
+      }
+    },
+    {
+      "$comment": "Removal accounting is reported together, so a partial view cannot pass as a complete one.",
+      "if": {
+        "required": [
+          "deleted"
+        ]
+      },
+      "then": {
+        "required": [
+          "candidates",
+          "delete_failed",
+          "skipped"
+        ]
+      }
+    },
+    {
+      "$comment": "Removal accounting is reported together, so a partial view cannot pass as a complete one.",
+      "if": {
+        "required": [
+          "delete_failed"
+        ]
+      },
+      "then": {
+        "required": [
+          "candidates",
+          "deleted",
+          "skipped"
+        ]
+      }
+    },
+    {
+      "$comment": "Removal accounting is reported together, so a partial view cannot pass as a complete one.",
+      "if": {
+        "required": [
+          "skipped"
+        ]
+      },
+      "then": {
+        "required": [
+          "candidates",
+          "deleted",
+          "delete_failed"
+        ]
+      }
+    },
+    {
+      "$comment": "Successful records carry no error fields; there is no 'none' class. skipped is deliberately excluded: a candidate saved by a mutation-time guard is not a success, and its reason is the evidence a caller needs.",
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "complete",
+              "pending"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "error_class"
+              ]
+            },
+            {
+              "required": [
+                "error_kind"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "$comment": "A zero exit cannot accompany a failed or blocked outcome.",
+      "if": {
+        "properties": {
+          "exit_code": {
+            "const": 0
+          }
+        },
+        "required": [
+          "exit_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "not": {
+              "enum": [
+                "failed",
+                "blocked"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

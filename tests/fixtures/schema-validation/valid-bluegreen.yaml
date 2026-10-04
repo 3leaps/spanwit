@@ -1,0 +1,13 @@
+# Valid deployment configuration - blue-green mode
+version: v2.1.3
+environment: production
+logLevel: warn
+deployment:
+  mode: blue-green
+  blueTarget: https://blue.prod.example.com
+  greenTarget: https://green.prod.example.com
+  switchDelay: 120
+notifications:
+  enabled: true
+  channels:
+    - webhook

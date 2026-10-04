@@ -1,0 +1,52 @@
+# Domain catalog + use-domain policy example
+#
+# Demonstrates enabling use domains and adding a user catalog overlay. The
+# domains block is policy (authorize-narrow), distinct from the `space --domain`
+# view filter (which only projects visibility and never authorizes anything).
+#
+# Discover-broad / authorize-narrow: `space` always reveals known mass across all
+# domains (honest inventory). Policy governs recipes and signature-reclaim
+# eligibility, and the two surfaces treat an *omitted* enable set differently:
+#
+#   domains.enabled OMITTED:
+#     - signature reclaim (prune / handoff / --execute): NO domain gate — every
+#       declared signature stays eligible under existing rules (prior behavior)
+#     - domain-driven recipes: default to {development}
+#
+#   domains.enabled EXPLICIT (including []):
+#     - signature reclaim: gated to the configured set; a disabled-domain
+#       candidate is withheld (withheld_reason=domain_disabled) and excluded from
+#       the prune handoff / execute set
+#     - recipes: respect the configured set ([] => no domain-driven recipes)
+#
+# Writing domains.enabled is the consent moment for reclaim policy; omitting it is
+# not consent to restrict existing signatures.
+#
+# Fail-closed: a user catalog overlay can add diagnostic inventory but can never
+# set class_ceiling: prunable. Only a code-registered signature can ever produce
+# a delete path — catalog membership is classification metadata, not authority.
+version: 1
+defaults:
+  min_size: 50M
+domains:
+  enabled:
+    - development
+  catalog:
+    # Add a diagnostic-only location the built-ins don't cover. This makes the
+    # path show up in inventory taxonomy; it never becomes deletable.
+    - id: development.node.pnpm-store
+      label: pnpm content-addressable store
+      class_ceiling: diagnostic-only
+      rebuild_expectation: medium
+      locations:
+        default:
+          rel_home: .local/share/pnpm/store
+      description: pnpm global store; refills from the network on install.
+paths:
+  - path: ~/dev
+    enabled: true
+    max_depth: 12
+    targets:
+      - signature: development.rust.cargo-target
+    ignores:
+      - "**/.git/**"
