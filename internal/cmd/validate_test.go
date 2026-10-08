@@ -4,13 +4,27 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/fulmenhq/gofulmen/appidentity"
 	"github.com/fulmenhq/gofulmen/logging"
-
-	"github.com/3leaps/spanwit/internal/config"
 )
+
+// testProjectRoot resolves the repository root from this test file's location,
+// so fixtures are found wherever the checkout lives (including outside $HOME).
+func testProjectRoot(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot resolve test file location")
+	}
+	root := filepath.Join(filepath.Dir(file), "..", "..")
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		t.Fatalf("resolved repository root %q has no go.mod (built with -trimpath?): %v", root, err)
+	}
+	return root
+}
 
 // setupTestLogger initializes the global logger for testing
 func setupTestLogger(t *testing.T) {
@@ -26,10 +40,7 @@ func setupTestLogger(t *testing.T) {
 func TestValidateCommand_MetaValidation(t *testing.T) {
 	setupTestLogger(t)
 
-	projectRoot, err := config.FindProjectRoot()
-	if err != nil {
-		t.Fatalf("Failed to get project root: %v", err)
-	}
+	projectRoot := testProjectRoot(t)
 
 	schemaPath := filepath.Join(projectRoot, "tests/fixtures/schema-validation/config.schema.json")
 
@@ -49,7 +60,7 @@ func TestValidateCommand_MetaValidation(t *testing.T) {
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 
-	err = cmd.Execute()
+	err := cmd.Execute()
 	if err != nil {
 		t.Errorf("Meta-validation failed: %v\nStderr: %s", err, stderr.String())
 	}
@@ -62,10 +73,7 @@ func TestValidateCommand_MetaValidation(t *testing.T) {
 func TestValidateCommand_ValidYAML(t *testing.T) {
 	setupTestLogger(t)
 
-	projectRoot, err := config.FindProjectRoot()
-	if err != nil {
-		t.Fatalf("Failed to get project root: %v", err)
-	}
+	projectRoot := testProjectRoot(t)
 
 	schemaPath := filepath.Join(projectRoot, "tests/fixtures/schema-validation/config.schema.json")
 	dataPath := filepath.Join(projectRoot, "tests/fixtures/schema-validation/valid-config.yaml")
@@ -88,7 +96,7 @@ func TestValidateCommand_ValidYAML(t *testing.T) {
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 
-	err = cmd.Execute()
+	err := cmd.Execute()
 	if err != nil {
 		t.Errorf("Validation of valid YAML failed: %v\nStderr: %s", err, stderr.String())
 	}
@@ -100,10 +108,7 @@ func TestValidateCommand_ValidYAML(t *testing.T) {
 func TestValidateCommand_ValidJSON(t *testing.T) {
 	setupTestLogger(t)
 
-	projectRoot, err := config.FindProjectRoot()
-	if err != nil {
-		t.Fatalf("Failed to get project root: %v", err)
-	}
+	projectRoot := testProjectRoot(t)
 
 	schemaPath := filepath.Join(projectRoot, "tests/fixtures/schema-validation/config.schema.json")
 	dataPath := filepath.Join(projectRoot, "tests/fixtures/schema-validation/valid-config.json")
@@ -125,7 +130,7 @@ func TestValidateCommand_ValidJSON(t *testing.T) {
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 
-	err = cmd.Execute()
+	err := cmd.Execute()
 	if err != nil {
 		t.Errorf("Validation of valid JSON failed: %v\nStderr: %s", err, stderr.String())
 	}
@@ -137,10 +142,7 @@ func TestValidateCommand_ValidJSON(t *testing.T) {
 func TestValidateCommand_ValidBlueGreen(t *testing.T) {
 	setupTestLogger(t)
 
-	projectRoot, err := config.FindProjectRoot()
-	if err != nil {
-		t.Fatalf("Failed to get project root: %v", err)
-	}
+	projectRoot := testProjectRoot(t)
 
 	schemaPath := filepath.Join(projectRoot, "tests/fixtures/schema-validation/config.schema.json")
 	dataPath := filepath.Join(projectRoot, "tests/fixtures/schema-validation/valid-bluegreen.yaml")
@@ -162,7 +164,7 @@ func TestValidateCommand_ValidBlueGreen(t *testing.T) {
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 
-	err = cmd.Execute()
+	err := cmd.Execute()
 	if err != nil {
 		t.Errorf("Validation of blue-green config failed: %v\nStderr: %s", err, stderr.String())
 	}
@@ -172,10 +174,7 @@ func TestValidateCommand_ValidBlueGreen(t *testing.T) {
 func TestValidateCommand_InvalidData(t *testing.T) {
 	setupTestLogger(t)
 
-	projectRoot, err := config.FindProjectRoot()
-	if err != nil {
-		t.Fatalf("Failed to get project root: %v", err)
-	}
+	projectRoot := testProjectRoot(t)
 
 	schemaPath := filepath.Join(projectRoot, "tests/fixtures/schema-validation/config.schema.json")
 	dataPath := filepath.Join(projectRoot, "tests/fixtures/schema-validation/invalid-config.yaml")

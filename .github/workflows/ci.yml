@@ -14,17 +14,17 @@ jobs:
   # Single quality job on the goneat-tools runner image, which bundles the full
   # toolchain (Go, goneat, golangci-lint, gofmt, yamlfmt, prettier, …).
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
       image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.6
-      # actions/checkout@v4 needs write access to /__w/_temp/_runner_file_commands/.
+      # actions/checkout needs write access to /__w/_temp/_runner_file_commands/.
       options: --user root
     env:
       # CI-only boundary hint for gofulmen/pathfinder repo-root discovery
       FULMEN_WORKSPACE_ROOT: ${{ github.workspace }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -68,12 +68,12 @@ jobs:
   # Signed-tag ceremony regression tests run on the host runner, which provides
   # gpg; they use throwaway keys only and need no secrets.
   release-tag-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0

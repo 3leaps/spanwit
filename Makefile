@@ -370,6 +370,7 @@ release-tag-tests:  ## Signed-tag tooling tests (throwaway keys only; needs gpg,
 	@./scripts/verify-pinned-tag.test.sh
 	@./scripts/release-verify-published-tag.test.sh
 	@./scripts/release-workflow-permissions.test.sh
+	@./scripts/workflow-pins.test.sh
 	@./scripts/release-ci-artifact-draft.test.sh
 	@./scripts/release-pin-precursors.test.sh
 	@./scripts/sign-release-manifests.test.sh
