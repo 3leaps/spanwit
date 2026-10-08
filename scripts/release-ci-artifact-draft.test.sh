@@ -11,6 +11,9 @@ git -C "$repo" config user.name 'Fixture'
 git -C "$repo" config user.email fixture@example.invalid
 printf 'x\n' > "$repo/file"
 git -C "$repo" add file
+mkdir -p "$repo/docs/releases"
+printf '# fixture v1.2.3\n\nCurated notes.\n' > "$repo/docs/releases/v1.2.3.md"
+git -C "$repo" add docs/releases/v1.2.3.md
 git -C "$repo" commit -qm fixture
 git -C "$repo" tag -am 'Fixture release' v1.2.3
 commit="$(git -C "$repo" rev-parse HEAD)"
@@ -189,6 +192,16 @@ stage "$d"
 printf 'tag=v1.2.3\nobject=zz\ncommit=zz\n' > "$d.anchor"
 draft_fail 'malformed'
 
+# The draft body must come from the committed per-version notes.
+stage "$d"
+mv "$repo/docs/releases/v1.2.3.md" "$scratch/notes.hold"
+draft_fail 'missing release notes'
+mv "$scratch/notes.hold" "$repo/docs/releases/v1.2.3.md"
+stage "$d"
+printf 'edited after tagging\n' >> "$repo/docs/releases/v1.2.3.md"
+draft_fail 'differs from the tagged commit'
+git -C "$repo" checkout -q -- docs/releases/v1.2.3.md
+
 # Valid creation: exactly the five archives plus both manifests, re-verified
 # immediately before the create call.
 stage "$d"
@@ -196,6 +209,8 @@ stage "$d"
 (cd "$repo" && ./scripts/release-create-draft.sh v1.2.3 "$d") > /dev/null
 create="$(grep '^release create' "$FIXTURE_LOG")"
 [[ "$create" == *' --verify-tag --draft '* ]]
+[[ "$create" == *"--notes-file $repo/docs/releases/v1.2.3.md"* || "$create" == *'--notes-file '*'/docs/releases/v1.2.3.md'* ]]
+[[ "$create" != *'--generate-notes'* ]]
 [[ "$(grep -o 'spanwit_1\.2\.3_[a-z0-9_]*\.\(tar\.gz\|zip\)' <<< "$create" | sort -u | wc -l | tr -d ' ')" == 5 ]]
 [[ "$create" == *'SHA256SUMS'* && "$create" == *'SHA512SUMS'* && "$create" != *'0.1.0'* ]]
 [[ "$(grep -n '' "$FIXTURE_LOG" | grep -E 'reverify|release create' | cut -d: -f2 | head -1)" == reverify* ]]

@@ -4,7 +4,7 @@ This document explains the CI/CD setup for this repository.
 
 ## Container-Based CI Pattern
 
-This repository uses the **goneat-tools-runner** container (`ghcr.io/fulmenhq/goneat-tools-runner:v0.2.2`) for CI jobs. This is the recommended "low friction" approach from goneat v0.3.14+.
+This repository uses the **goneat-tools-runner** container (`ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.6`) for CI jobs. This is the recommended "low friction" approach from goneat v0.3.14+.
 
 ### Why Containers?
 
@@ -20,12 +20,12 @@ This eliminates tool installation friction in CI - no package manager setup, no 
 
 ### Container Permissions (`--user root`)
 
-We run container jobs as `root` and fix temp directory permissions after checkout to avoid `actions/checkout@v4` failures in containerized jobs.
+We run container jobs as `root` and fix temp directory permissions after checkout to avoid `actions/checkout` failures in containerized jobs.
 
 ```yaml
 container:
-  image: ghcr.io/fulmenhq/goneat-tools-runner:v0.2.2
-  # actions/checkout@v4 writes to /__w/_temp/_runner_file_commands/ in containers.
+  image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.6
+  # actions/checkout writes to /__w/_temp/_runner_file_commands/ in containers.
   options: --user root
 
 - name: Fix temp permissions
@@ -58,7 +58,7 @@ For local development, you have two options:
 
    ```bash
    docker run --rm -v "$(pwd)":/work -w /work --entrypoint "" \
-     ghcr.io/fulmenhq/goneat-tools-runner:v0.2.2 yamlfmt -lint .
+     ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.6 yamlfmt -lint .
    ```
 
 2. **Install tools locally (sfetch → goneat)**:
@@ -70,6 +70,20 @@ For local development, you have two options:
    # Install goneat + required tools
    make bootstrap
    ```
+
+## Action and Runner Pins
+
+Every `uses:` is pinned by full commit SHA with a version comment, and hosted
+jobs run on an explicit image (`ubuntu-24.04`), not a moving `-latest` label.
+`scripts/workflow-pins.test.sh` (part of `make release-tag-tests`) enforces this
+and refuses pins known to target Node 20.
+
+## Release Workflow and Repository Visibility
+
+The tag-triggered release workflow restores the annotated tag with an
+anonymous `git ls-remote` (checkout runs with `persist-credentials: false`), so
+it requires the repository to be public. On a private repository or fork the
+verify job fails with `remote release tag is absent`.
 
 ## References
 

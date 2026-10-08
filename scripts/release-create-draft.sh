@@ -93,10 +93,20 @@ anchor_commit="$(awk -F= '$1=="commit" {print $2}' "$anchor")"
 SPANWIT_RELEASE_TAG="$tag" SPANWIT_EXPECTED_TAG_OBJECT="$anchor_object" SPANWIT_EXPECTED_COMMIT="$anchor_commit" \
     "$root/scripts/release-verify-published-tag.sh" > /dev/null ||
     die 'published tag no longer matches the verified anchor the packages were staged against'
+# The draft body is the curated per-version notes committed in the repository,
+# never generated from pull-request history.
+notes="$root/docs/releases/$tag.md"
+[[ -f "$notes" && ! -L "$notes" && -s "$notes" ]] || die "missing release notes: docs/releases/$tag.md"
+# The notes must be byte-identical to the file at the anchored tag commit, so an
+# edit made after tagging (or after preflight) cannot reach the release body.
+tagged_notes="$(git -C "$root" rev-parse --verify --quiet "$anchor_commit:docs/releases/$tag.md")" ||
+    die "docs/releases/$tag.md is absent at the tagged commit"
+[[ "$(git -C "$root" hash-object -- "$notes")" == "$tagged_notes" ]] ||
+    die "docs/releases/$tag.md differs from the tagged commit"
 files=()
 for want in "${expected[@]}" "${manifests[@]}"; do
     files+=("$src/$want")
 done
 gh release create "$tag" --repo 3leaps/spanwit --verify-tag --draft \
-    --title "$tag" --generate-notes "${files[@]}"
+    --title "$tag" --notes-file "$notes" "${files[@]}"
 echo "[ok] draft release $tag created from ${#expected[@]} verified package(s)"
