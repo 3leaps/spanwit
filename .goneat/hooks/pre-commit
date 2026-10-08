@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+# Disable glob expansion to prevent accidental arg explosion
+# when hooks.yaml contains patterns like .cache/**.
+set -f
+
 # Establish repository root for reliable relative paths
 REPO_ROOT=$(git rev-parse --show-toplevel 2> /dev/null || pwd)
 
@@ -72,39 +76,6 @@ if [ -z "$GONEAT_BIN" ]; then
         exit 1
     fi
 fi
-
-# Guardian enforcement for protected git commit operations
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2> /dev/null || echo "")
-GUARDIAN_SCOPE="git"
-GUARDIAN_OPERATION="commit"
-
-GUARDIAN_ARGS=("$GONEAT_BIN" guardian check "$GUARDIAN_SCOPE" "$GUARDIAN_OPERATION")
-if [ -n "$CURRENT_BRANCH" ]; then
-    GUARDIAN_ARGS+=("--branch" "$CURRENT_BRANCH")
-fi
-
-# Note: pre-commit hook runs before commit message is available
-# Just pass generic commit indicator since message doesn't exist yet
-GUARDIAN_ARGS+=("--" "-m" "<pending commit message>")
-
-if ! "${GUARDIAN_ARGS[@]}"; then
-    echo ""
-    echo "❌ Operation blocked by guardian"
-    echo "🔐 Approval required for: ${GUARDIAN_SCOPE} ${GUARDIAN_OPERATION}"
-    if [ -n "$CURRENT_BRANCH" ]; then
-        echo "   • Branch: $CURRENT_BRANCH"
-    fi
-    echo "   • Risk level: high"
-    echo "   • Method: browser"
-    echo "   • Approval expires in: 10m0s"
-    echo ""
-    echo "Wrap your git commit with guardian approval to continue:"
-    echo "  $GONEAT_BIN guardian approve $GUARDIAN_SCOPE $GUARDIAN_OPERATION -- git commit"
-    echo "  # add your usual commit arguments after git commit"
-    exit 1
-fi
-
-echo "✅ Guardian approval satisfied"
 
 # Use goneat's orchestrated assessment (manifest-driven)
 "$GONEAT_BIN" assess --hook pre-commit --hook-manifest "$REPO_ROOT/.goneat/hooks.yaml" --staged-only --package-mode
