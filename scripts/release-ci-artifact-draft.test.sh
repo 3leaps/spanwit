@@ -34,20 +34,27 @@ fi
 SH
 chmod +x "$repo/scripts/release-verify-published-tag.sh"
 
-# Stub gh. FIXTURE_RUNS is the JSON the run list returns before jq filtering;
+# Stub gh. FIXTURE_ATTEMPT is the run-attempt JSON the API returns and
+# FIXTURE_LATEST is the latest attempt number of that run;
 # FIXTURE_RELEASE_EXISTS controls `gh release view`. Every call is logged.
 mkdir -p "$scratch/bin"
 cat > "$scratch/bin/gh" << 'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FIXTURE_LOG"
 case "$1 $2" in
-"run list")
+"api "*)
+    path="$2"
     jq_filter=""
     while [[ $# -gt 0 ]]; do
         [[ "$1" == --jq ]] && jq_filter="$2"
         shift
     done
-    jq -c "$jq_filter" <<< "$FIXTURE_RUNS"
+    case "$path" in
+    */attempts/*) body="${FIXTURE_ATTEMPT:-}" ;;
+    *) body="{\"run_attempt\":${FIXTURE_LATEST:-1}}" ;;
+    esac
+    [[ -n "$body" ]] || exit 1
+    jq -c "$jq_filter" <<< "$body"
     ;;
 "run download")
     dir=""
@@ -81,33 +88,44 @@ fail() {
         exit 1
     }
 }
-run_json() { printf '[%s]' "$1"; }
-good="{\"databaseId\":11,\"headSha\":\"$commit\",\"conclusion\":\"success\",\"event\":\"push\"}"
-other="{\"databaseId\":12,\"headSha\":\"$(printf '%040d' 0)\",\"conclusion\":\"success\",\"event\":\"push\"}"
-failed="{\"databaseId\":13,\"headSha\":\"$commit\",\"conclusion\":\"failure\",\"event\":\"push\"}"
-dispatch="{\"databaseId\":14,\"headSha\":\"$commit\",\"conclusion\":\"success\",\"event\":\"workflow_dispatch\"}"
+attempt_json() { # conclusion event head_sha attempt [path] [branch]
+    printf '{"path":"%s","event":"%s","head_branch":"%s","head_sha":"%s","status":"completed","conclusion":"%s","run_attempt":%s}' \
+        "${5:-.github/workflows/release.yml}" "$2" "${6:-v1.2.3}" "$3" "$1" "$4"
+}
+good="$(attempt_json success push "$commit" 2)"
+export RELEASE_RUN_ID=11 RELEASE_RUN_ATTEMPT=2 FIXTURE_LATEST=2
 
-# Fetch: refuses a non-canonical tag, a missing local tag, zero or multiple
-# matching runs, runs on another commit, failed runs and non-push events.
+# Fetch: refuses a non-canonical tag, a missing local tag, a missing run id or
+# attempt, and any named attempt that is not a successful push-triggered
+# release run for this tag on the tagged commit or is not the latest attempt.
 fail 'usage' ./scripts/release-fetch-ci-artifacts.sh 1.2.3 "$scratch/d0"
 fail 'published tag v9.9.9 failed verification' ./scripts/release-fetch-ci-artifacts.sh v9.9.9 "$scratch/d0"
-for runs in "$(run_json "$other")" "$(run_json "$failed")" "$(run_json "$dispatch")" '[]'; do
-    FIXTURE_RUNS="$runs" fail 'expected exactly one successful release run' \
+RELEASE_RUN_ID='' FIXTURE_ATTEMPT="$good" fail 'RELEASE_RUN_ID required' \
+    ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/d1"
+RELEASE_RUN_ATTEMPT='' FIXTURE_ATTEMPT="$good" fail 'RELEASE_RUN_ATTEMPT required' \
+    ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/d1"
+for bad in \
+    "$(attempt_json failure push "$commit" 2)" \
+    "$(attempt_json success workflow_dispatch "$commit" 2)" \
+    "$(attempt_json success push "$(printf '%040d' 0)" 2)" \
+    "$(attempt_json success push "$commit" 1)" \
+    "$(attempt_json success push "$commit" 2 .github/workflows/ci.yml)" \
+    "$(attempt_json success push "$commit" 2 .github/workflows/release.yml v1.2.4)" \
+    "$(attempt_json success push "$commit" 2 | sed 's/"completed"/"in_progress"/')"; do
+    FIXTURE_ATTEMPT="$bad" fail 'is not a successful release run' \
         ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/d1"
 done
-FIXTURE_RUNS="$(run_json "$good,${good/11/15}")" fail 'found 2' \
+FIXTURE_ATTEMPT="$good" FIXTURE_LATEST=3 fail 'has a later attempt' \
     ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/d1"
 # Refuses a non-empty destination.
 mkdir -p "$scratch/full"
 printf 'stale\n' > "$scratch/full/stale"
-FIXTURE_RUNS="$(run_json "$good,$other,$failed")" fail 'is not empty' \
-    ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/full"
-# Downloads only the named artifact from the one run on the tagged commit.
+FIXTURE_ATTEMPT="$good" fail 'is not empty' ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/full"
+# Downloads only the named artifact from the named, verified attempt.
 : > "$FIXTURE_LOG"
-(cd "$repo" && FIXTURE_RUNS="$(run_json "$good,$other,$failed,$dispatch")" \
-    ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/d2") > /dev/null
+(cd "$repo" && FIXTURE_ATTEMPT="$good" ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/d2") > /dev/null
 grep -q '^run download 11 --repo 3leaps/spanwit --name release-packages-v1.2.3 ' "$FIXTURE_LOG"
-[[ "$(cat "$scratch/d2.anchor")" == "$(printf 'tag=v1.2.3\nobject=%s\ncommit=%s\nrun=11' "$object" "$commit")" ]]
+[[ "$(cat "$scratch/d2.anchor")" == "$(printf 'tag=v1.2.3\nobject=%s\ncommit=%s\nrun=11\nattempt=2' "$object" "$commit")" ]]
 [[ -f "$scratch/d2/spanwit_1.2.3_linux_amd64.tar.gz" ]]
 
 # Draft. Packages are staged against the anchor that fetch recorded.
@@ -121,7 +139,7 @@ stage() {
     done
     (cd "$dir" && shasum -a 256 ./*.tar.gz ./*.zip | sed 's| \./| |' > SHA256SUMS &&
         shasum -a 512 ./*.tar.gz ./*.zip | sed 's| \./| |' > SHA512SUMS)
-    printf 'tag=v1.2.3\nobject=%s\ncommit=%s\nrun=11\n' "$object" "$commit" > "$dir.anchor"
+    printf 'tag=v1.2.3\nobject=%s\ncommit=%s\nrun=11\nattempt=2\n' "$object" "$commit" > "$dir.anchor"
 }
 no_create() {
     if grep -q '^release create' "$FIXTURE_LOG"; then
