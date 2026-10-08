@@ -9,6 +9,12 @@ cleanup() {
     rm -rf "$scratch"
 }
 trap cleanup EXIT
+for tool in minisign gpg jq git; do
+    command -v "$tool" > /dev/null 2>&1 || {
+        echo "error: $tool is required for the publish controls" >&2
+        exit 1
+    }
+done
 repo="$scratch/repo"
 mkdir -p "$repo/scripts" "$repo/keys" "$repo/docs/security" "$scratch/bin" "$scratch/gpg"
 chmod 700 "$scratch/gpg"
