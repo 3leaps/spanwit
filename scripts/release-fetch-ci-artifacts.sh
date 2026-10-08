@@ -24,16 +24,27 @@ SPANWIT_RELEASE_TAG="$tag" SPANWIT_ANCHOR_OUT="$anchor" "$root/scripts/release-v
 commit="$(awk -F= '$1=="commit" {print $2}' "$anchor")"
 object="$(awk -F= '$1=="object" {print $2}' "$anchor")"
 [[ "$commit" =~ ^[0-9a-f]{40}$ && "$object" =~ ^[0-9a-f]{40}$ ]] || die 'verification did not return an anchor'
-# Exactly one successful Release run for this tag on the tagged commit.
-runs="$(gh run list --repo 3leaps/spanwit --workflow release.yml --branch "$tag" \
-    --json databaseId,headSha,conclusion,event \
-    --jq "[.[] | select(.headSha == \"$commit\" and .conclusion == \"success\" and .event == \"push\") | .databaseId]")" ||
-    die 'could not list release workflow runs'
-count="$(jq 'length' <<< "$runs")"
-[[ "$count" == 1 ]] || die "expected exactly one successful release run for $tag at $commit, found $count"
-run_id="$(jq -r '.[0]' <<< "$runs")"
+# The maintainer names the exact run and attempt (re-runs share a run id). The
+# named attempt must be a successful push-triggered release.yml run for this tag
+# on the tagged commit.
+run_id="${RELEASE_RUN_ID:-}"
+run_attempt="${RELEASE_RUN_ATTEMPT:-}"
+[[ "$run_id" =~ ^[1-9][0-9]*$ ]] || die 'RELEASE_RUN_ID required (the Release workflow run for this tag)'
+[[ "$run_attempt" =~ ^[1-9][0-9]*$ ]] || die 'RELEASE_RUN_ATTEMPT required (the successful attempt of that run)'
+run="$(gh api "repos/3leaps/spanwit/actions/runs/$run_id/attempts/$run_attempt" \
+    --jq '{path, event, head_branch, head_sha, status, conclusion, run_attempt}')" ||
+    die "could not read run $run_id attempt $run_attempt"
+jq -e --arg tag "$tag" --arg commit "$commit" --argjson attempt "$run_attempt" '
+    .path == ".github/workflows/release.yml" and .event == "push" and .head_branch == $tag and
+    .head_sha == $commit and .status == "completed" and .conclusion == "success" and
+    .run_attempt == $attempt' <<< "$run" > /dev/null ||
+    die "run $run_id attempt $run_attempt is not a successful release run for $tag at $commit"
+latest="$(gh api "repos/3leaps/spanwit/actions/runs/$run_id" --jq '.run_attempt')" ||
+    die "could not read run $run_id"
+[[ "$latest" == "$run_attempt" ]] ||
+    die "run $run_id has a later attempt ($latest); artifacts belong to the latest attempt, name it"
 gh run download "$run_id" --repo 3leaps/spanwit --name "release-packages-$tag" --dir "$dest" ||
     die "could not download release-packages-$tag from run $run_id"
 # The anchor lives outside the staged directory so it is never uploaded.
-printf 'tag=%s\nobject=%s\ncommit=%s\nrun=%s\n' "$tag" "$object" "$commit" "$run_id" > "$dest.anchor"
-echo "[ok] downloaded release packages for $tag (object $object, commit $commit) from run $run_id into $dest"
+printf 'tag=%s\nobject=%s\ncommit=%s\nrun=%s\nattempt=%s\n' "$tag" "$object" "$commit" "$run_id" "$run_attempt" > "$dest.anchor"
+echo "[ok] downloaded release packages for $tag (object $object, commit $commit) from run $run_id attempt $run_attempt into $dest"

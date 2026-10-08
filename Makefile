@@ -1,7 +1,7 @@
 .PHONY: all help bootstrap bootstrap-force hooks-ensure tools sync dependencies verify-dependencies version version-set version-bump-major version-bump-minor version-bump-patch
 .PHONY: lint fmt-check test build install build-all package clean fmt validate-schemas check-all precommit prepush pr-final license-audit
 .PHONY: release-check release-prepare release-build
-.PHONY: release-clean release-create-draft release-guard-tag-name release-guard-tag-version release-checksums release-verify-checksums release-download release-sign release-export-keys release-verify-keys release-verify-signatures release-notes release-upload-provenance release-upload release-upload-all release-publish
+.PHONY: release-preflight release-clean release-create-draft release-guard-tag-name release-guard-tag-version release-checksums release-verify-checksums release-download release-sign release-export-keys release-verify-keys release-verify-signatures release-notes release-upload-provenance release-upload release-upload-all release-publish
 .PHONY: sync-embedded-identity verify-embedded-identity test-standalone-binary
 .PHONY: release-tag-tests release-prepare-tag-message release-tag release-push-tag release-verify-tag release-verify-remote-tag
 .PHONY: release-export-pin release-validate-pin release-insert-anchors release-verify-published-tag
@@ -307,6 +307,9 @@ pr-final: verify-embedded-identity fmt-check lint validate-schemas test license-
 RELEASE_TAG ?= $(SPANWIT_RELEASE_TAG)
 DIST_RELEASE ?= dist/release
 
+release-preflight:  ## Pre-tag gate: clean synced main, public repo, notes, pins, dates, outside-$$HOME tests, pr-final
+	@./scripts/release-preflight.sh
+
 release-clean:  ## Reset dist/release staging to avoid stale artifacts
 	@rm -rf "$(DIST_RELEASE)" "$(DIST_RELEASE).anchor"
 	@mkdir -p "$(DIST_RELEASE)"
@@ -372,6 +375,7 @@ release-tag-tests:  ## Signed-tag tooling tests (throwaway keys only; needs gpg,
 	@./scripts/release-workflow-permissions.test.sh
 	@./scripts/workflow-pins.test.sh
 	@./scripts/release-ci-artifact-draft.test.sh
+	@./scripts/release-publish.test.sh
 	@./scripts/release-pin-precursors.test.sh
 	@./scripts/sign-release-manifests.test.sh
 	@echo "✅ Signed-tag tooling tests passed"
@@ -388,7 +392,7 @@ release-download: release-guard-tag-name release-verify-published-tag  ## Downlo
 release-create-draft: release-guard-tag-name release-verify-published-tag release-verify-checksums  ## Create the draft GitHub release from verified local packages (maintainer only)
 	@./scripts/release-create-draft.sh "$(RELEASE_TAG)" "$(DIST_RELEASE)"
 
-release-sign: release-guard-tag-name release-verify-published-tag  ## Sign checksum manifests (minisign required; PGP optional)
+release-sign: release-guard-tag-name release-verify-published-tag  ## Sign checksum manifests with minisign and PGP (both required by publish)
 	@./scripts/sign-release-manifests.sh "$(RELEASE_TAG)" "$(DIST_RELEASE)"
 
 release-export-keys:  ## Export public signing keys into dist/release
@@ -429,20 +433,17 @@ release-notes: release-guard-tag-version  ## Stage docs/releases/<tag>.md into d
 	cp "$$notes_src" "$$notes_dst"; \
 	echo "✅ Copied $$notes_src → $$notes_dst"
 
-release-upload-provenance: release-guard-tag-name release-verify-published-tag release-verify-checksums release-verify-keys  ## Upload manifests + sigs + keys + notes (no binaries)
+release-upload-provenance: release-guard-tag-name release-verify-published-tag release-verify-checksums release-verify-keys release-verify-signatures  ## Upload manifests + sigs + keys + notes (no binaries)
 	@./scripts/release-upload-provenance.sh "$(RELEASE_TAG)" "$(DIST_RELEASE)"
 
 release-upload: release-upload-provenance  ## Upload provenance assets to the GitHub release
 	@:
 
-release-upload-all: release-guard-tag-name release-verify-published-tag release-verify-checksums release-verify-keys  ## Upload binaries + provenance (manual override; release-create-draft already attaches packages)
+release-upload-all: release-guard-tag-name release-verify-published-tag release-verify-checksums release-verify-keys release-verify-signatures  ## Upload binaries + provenance (manual override; release-create-draft already attaches packages)
 	@./scripts/release-upload.sh "$(RELEASE_TAG)" "$(DIST_RELEASE)"
 
-release-publish: release-guard-tag-name release-verify-published-tag  ## Promote the draft release → published (final ceremony step)
-	@if ! command -v gh > /dev/null 2>&1; then echo "❌ gh (GitHub CLI) not found in PATH" >&2; exit 1; fi
-	@echo "→ Promoting $(RELEASE_TAG) from draft → published..."
-	@gh release edit "$(RELEASE_TAG)" --draft=false
-	@echo "✅ $(RELEASE_TAG) is now publicly visible"
+release-publish: release-guard-tag-name  ## Promote the draft → published after byte-verifying it against the local signed set (final ceremony step)
+	@./scripts/release-publish.sh "$(RELEASE_TAG)" "$(DIST_RELEASE)"
 	@echo "   View: https://github.com/3leaps/$(BINARY_NAME)/releases/tag/$(RELEASE_TAG)"
 
 clean:  ## Clean build artifacts and reports

@@ -102,6 +102,7 @@ artifact signing ceremony below; `gpg` honors the `!` form there too.
       [One-time: public pin and fingerprints](#one-time-public-pin-and-fingerprints))
 - [ ] The release commit is merged and `main` is the exact tree that passed `make pr-final`
 - [ ] Check out `main` at fetched `origin/main` with a clean tree (the targets refuse anything else)
+- [ ] Run the pre-tag gate: `make release-preflight`. It refuses a dirty or unsynced tree, a private repository (the release workflow reads the tag anonymously), missing changelog or release notes, unpinned or Node 20 actions, a failing dates check, tests that fail from a clone outside the home directory, and a failing `pr-final`
 - [ ] Prepare the public tag message outside the repo, then review it (no-clobber; edit the file if you want custom public text): `make release-prepare-tag-message`
 - [ ] Create the signed tag locally (does not push): `make release-tag`
 - [ ] Re-verify against the committed pin: `make release-verify-tag`
@@ -124,7 +125,7 @@ patch version.
 ### Signing Ceremony (operator: devlead, manual)
 
 Follow the Fulmen "manifest-only" provenance pattern: sign the checksum manifests
-(not every binary) with minisign (primary) and optionally PGP, and ship the
+(not every binary) with both minisign and PGP, and ship the
 public keys as trust anchors. CI never creates a release: the ceremony creates
 the **draft** from verified CI packages and promotes it only after signing, so
 consumers never see an unsigned release window.
@@ -145,20 +146,21 @@ consumers never see an unsigned release window.
 
   ```bash
   make release-clean
-  make release-download        # verifies the tag, records its object+commit anchor, fetches the run's artifact
+  export RELEASE_RUN_ID=<release run id> RELEASE_RUN_ATTEMPT=<successful attempt>
+  make release-download        # verifies the tag and the named run attempt, records the anchor, fetches the artifact
   make release-checksums
   make release-verify-checksums
   make release-create-draft    # re-verifies against that anchor; exact manifest-verified packages only
   ```
 
-- [ ] Sign manifests (minisign required; PGP optional): `make release-sign`
+- [ ] Sign manifests with minisign and PGP (publish refuses either missing): `make release-sign`
 - [ ] Export public keys: `make release-export-keys`
 - [ ] Verify exported keys are public-only: `make release-verify-keys`
 - [ ] Verify signatures: `make release-verify-signatures`
 - [ ] Copy release notes: `make release-notes`
 - [ ] Upload provenance assets (manifests + sigs + keys + notes): `make release-upload`
 - [ ] **Review the draft** (devlead): binaries present, notes accurate, signatures + keys attached
-- [ ] **Promote draft → public** (final step, the authorization step): `make release-publish` re-verifies the published tag with trusted local code first
+- [ ] **Promote draft → public** (final step, the authorization step): `make release-publish` re-verifies the published tag, the manifests, both signatures against the committed pins, and downloads the draft to confirm every asset is byte-identical to the verified local set before promoting
 
 For one-off invocations without sourcing the env file, pass `RELEASE_TAG=v<version>`
 to each `make` invocation. The guard target `release-guard-tag-version` (wired as a dep
@@ -226,6 +228,21 @@ On the maintainer machine, with `SPANWIT_GPG_HOMEDIR`, `SPANWIT_PGP_KEY_ID`
 - [ ] Bug fixes documented with issue references
 - [ ] Regression tests added for fixed bugs
 - [ ] No new features or breaking changes
+
+## Recovery
+
+- **The Release workflow failed, and the tag and source are correct** (for example a
+  transient runner failure, or the repository was private): re-run the failed
+  workflow on the unchanged tag, then pass the new attempt as `RELEASE_RUN_ATTEMPT`.
+  Do not delete or re-sign the tag.
+- **The tag points at a commit that needs a source fix:** fix forward. Merge the fix
+  and cut the next patch version. A pushed release tag is never moved, re-signed or
+  recreated.
+- **The draft is wrong** (assets, notes or signatures): delete the draft release only
+  (the tag stays), restage from `make release-clean` and re-run the ceremony from
+  `make release-download`.
+- **`make release-publish` refused:** treat the draft as untrusted. Do not promote it by
+  hand; find which check failed, then restage.
 
 ## Emergency Hotfix Process
 
