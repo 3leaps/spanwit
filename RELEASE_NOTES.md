@@ -6,7 +6,7 @@ This document tracks release notes for Spanwit.
 > authoritative per-version notes live in [`docs/releases/v<semver>.md`](docs/releases/)
 > and are what `make release-notes` stages into the GitHub release.
 
-## [0.2.0] - 2026-10-02
+## [0.2.0] - 2026-10-08
 
 ### Overview
 
@@ -24,7 +24,7 @@ observe. Deletion remains dry-run by default.
 - **Signed release tags** — tags verify against the public key committed in the repository; release builds are read-only.
 - **Breaking (alpha)** — config `min_age`/`max_age` rename and flip; `spanwit-prune-plan/v1` gained required fields.
 
-## 0.1.0 - 2026-05-30
+## 0.1.0
 
 ### Overview
 

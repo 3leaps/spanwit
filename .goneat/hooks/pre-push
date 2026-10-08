@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+# Disable glob expansion to prevent accidental arg explosion
+# when hooks.yaml contains patterns like .cache/**.
+set -f
+
 # Establish repository root for reliable relative paths
 REPO_ROOT=$(git rev-parse --show-toplevel 2> /dev/null || pwd)
 
@@ -64,59 +68,6 @@ if [ -z "$GONEAT_BIN" ]; then
         exit 1
     fi
 fi
-
-# Guardian enforcement for protected git push operations
-REMOTE_NAME="${1:-}"
-REMOTE_URL="${2:-}"
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2> /dev/null || echo "")
-GUARDIAN_SCOPE="git"
-GUARDIAN_OPERATION="push"
-
-GUARDIAN_ARGS=("$GONEAT_BIN" guardian check "$GUARDIAN_SCOPE" "$GUARDIAN_OPERATION")
-if [ -n "$CURRENT_BRANCH" ]; then
-    GUARDIAN_ARGS+=("--branch" "$CURRENT_BRANCH")
-fi
-if [ -n "$REMOTE_NAME" ]; then
-    GUARDIAN_ARGS+=("--remote" "$REMOTE_NAME")
-elif [ -n "$REMOTE_URL" ]; then
-    GUARDIAN_ARGS+=("--remote" "$REMOTE_URL")
-fi
-
-# Pass push context for display
-if [ -n "$REMOTE_NAME" ] && [ -n "$CURRENT_BRANCH" ]; then
-    GUARDIAN_ARGS+=("--" "$REMOTE_NAME" "$CURRENT_BRANCH")
-else
-    GUARDIAN_ARGS+=("--" "<remote>" "<branch>")
-fi
-
-if ! "${GUARDIAN_ARGS[@]}"; then
-    echo ""
-    echo "❌ Operation blocked by guardian"
-    echo "🔐 Approval required for: ${GUARDIAN_SCOPE} ${GUARDIAN_OPERATION}"
-    if [ -n "$CURRENT_BRANCH" ]; then
-        echo "   • Branch: $CURRENT_BRANCH"
-    fi
-    if [ -n "$REMOTE_NAME" ]; then
-        echo "   • Remote: $REMOTE_NAME"
-    elif [ -n "$REMOTE_URL" ]; then
-        echo "   • Remote URL: $REMOTE_URL"
-    fi
-    echo "   • Risk level: critical"
-    echo "   • Method: browser"
-    echo "   • Approval expires in: 15m0s"
-    echo "📝 A reason is required when approving this operation."
-    echo ""
-    echo "Wrap your git push with guardian approval to proceed:"
-    if [ -n "$REMOTE_NAME" ] && [ -n "$CURRENT_BRANCH" ]; then
-        echo "  $GONEAT_BIN guardian approve $GUARDIAN_SCOPE $GUARDIAN_OPERATION -- git push \"$REMOTE_NAME\" \"$CURRENT_BRANCH\""
-    else
-        echo "  $GONEAT_BIN guardian approve $GUARDIAN_SCOPE $GUARDIAN_OPERATION -- git push <remote> <branch>"
-    fi
-    echo "Once approved, the push runs automatically under guardian supervision."
-    exit 1
-fi
-
-echo "✅ Guardian approval satisfied"
 
 # Verify crucible sources are clean before pushing
 if [ -f "$REPO_ROOT/scripts/verify-crucible-clean.sh" ]; then

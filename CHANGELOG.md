@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-10-02
+## [0.2.0] - 2026-10-08
 
 ### Added
 
@@ -211,7 +211,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   dropped so nested profiles stay honest for crisis operators.
 - Temp-plane text output is sanitized for terminal display.
 
-## 0.1.0 - 2026-05-30
+## 0.1.0
 
 Initial release of Spanwit — a context-aware, signature-driven disk-reclamation
 CLI. Dry-run by default; recognizes regenerable build output in context rather
