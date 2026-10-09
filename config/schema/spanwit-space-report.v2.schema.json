@@ -2725,6 +2725,9 @@
           "items": {
             "$ref": "#/$defs/temp_plane"
           }
+        },
+        "residue": {
+          "$ref": "#/$defs/temp_residue_summary"
         }
       }
     },
@@ -2846,6 +2849,69 @@
           }
         }
       ]
+    },
+    "temp_residue_summary": {
+      "type": "object",
+      "description": "Aggregate of the direct children of the listed temp roots, keyed by fixed product labels. Never names children: a family label is fixed vocabulary, never derived from an entry name, and any entry outside the table is counted under 'other'. Hidden (dot-prefixed) entries are included in every total.",
+      "required": [
+        "entries_total",
+        "hidden_entries",
+        "families"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "entries_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hidden_entries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "families": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "family",
+              "entries",
+              "bytes",
+              "oldest",
+              "newest"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "family": {
+                "type": "string",
+                "enum": [
+                  "codex",
+                  "opencode",
+                  "bunx",
+                  "tsx",
+                  "other"
+                ]
+              },
+              "entries": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Sum of each entry's own lstat size (a directory record, not its contents). Entry counts are the signal; the temp plane probe owns content sizing."
+              },
+              "oldest": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "newest": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

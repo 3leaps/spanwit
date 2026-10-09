@@ -71,10 +71,12 @@ func recipeBuilders() map[string]recipeBuilder {
 			}
 			return rustupRecipe(ctx, opts)
 		},
-		catalog.RecipeGoBuildCache: goBuildCacheRecipe,
-		catalog.RecipeCargoCache:   cargoCacheRecipe,
-		catalog.RecipeBrewCleanup:  brewCleanupRecipe,
-		catalog.RecipeUVCachePrune: uvCachePruneRecipe,
+		catalog.RecipeGoBuildCache:   goBuildCacheRecipe,
+		catalog.RecipeCargoCache:     cargoCacheRecipe,
+		catalog.RecipeBrewCleanup:    brewCleanupRecipe,
+		catalog.RecipeUVCachePrune:   uvCachePruneRecipe,
+		catalog.RecipeGrypeDBResidue: grypeDBResidueRecipe,
+		catalog.RecipeVMDiskTrim:     vmDiskTrimRecipe,
 	}
 }
 

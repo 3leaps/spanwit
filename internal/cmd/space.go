@@ -954,6 +954,14 @@ func writeTempPlanesText(w io.Writer, cov *space.TempPlaneCoverage) {
 			size, sanitizeTerminalText(p.SizeStatus), sanitizeTerminalText(p.Kind),
 			sanitizeTerminalText(p.Root), sanitizeTerminalText(p.FollowUp))
 	}
+	if r := cov.Residue; r != nil && r.EntriesTotal > 0 {
+		// Family labels are fixed vocabulary; no child name is ever printed.
+		_, _ = fmt.Fprintf(w, "  Entries: %d (%d hidden), by family:\n", r.EntriesTotal, r.HiddenEntries)
+		for _, f := range r.Families {
+			_, _ = fmt.Fprintf(w, "    %-9s %6d  oldest %s  newest %s\n",
+				f.Family, f.Entries, f.Oldest.Format("2006-01-02"), f.Newest.Format("2006-01-02"))
+		}
+	}
 	_, _ = fmt.Fprintln(w)
 }
 
