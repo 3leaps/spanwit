@@ -52,6 +52,8 @@ const (
 	RecipeCargoCache       = "cargo-cache"
 	RecipeBrewCleanup      = "brew-cleanup"
 	RecipeUVCachePrune     = "uv-cache-prune"
+	RecipeGrypeDBResidue   = "grype-db-residue"
+	RecipeVMDiskTrim       = "vm-disk-trim"
 	// RecipeCargoTargetPlacement is a structural journey id (016A). It is
 	// evidence-driven from space verified rows, not a home-cache argv recipe, so
 	// it is intentionally absent from RegisteredRecipeIDs (catalog links stay
@@ -68,6 +70,8 @@ func RegisteredRecipeIDs() map[string]bool {
 		RecipeGoBuildCache:     true,
 		RecipeCargoCache:       true,
 		RecipeBrewCleanup:      true,
+		RecipeGrypeDBResidue:   true,
+		RecipeVMDiskTrim:       true,
 		RecipeUVCachePrune:     true,
 	}
 }

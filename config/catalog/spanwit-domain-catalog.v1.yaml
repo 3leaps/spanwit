@@ -156,6 +156,8 @@ entries:
     label: grype DB cache
     class_ceiling: diagnostic-only
     rebuild_expectation: low
+    recipes:
+      - grype-db-residue
     locations:
       darwin:
         rel_home: Library/Caches/grype
@@ -165,7 +167,8 @@ entries:
         rel_home: AppData/Local/grype
       default:
         rel_home: .cache/grype
-    description: grype vulnerability database cache.
+    description: >-
+      grype vulnerability database cache. The live database is db/<schema>; interrupted or superseded downloads accumulate as db/grype-db-download* siblings that grype never removes.
   - id: development.security.trivy
     label: trivy DB cache
     class_ceiling: diagnostic-only
@@ -244,6 +247,20 @@ entries:
         rel_home: .lima
     description: >-
       Lima VM instances (macOS). These are machines, not caches — removing one destroys it. Listed for visibility only; low refill, high cost.
+  - id: development.virtualization.colima
+    label: colima virtual machine disks
+    class_ceiling: diagnostic-only
+    rebuild_expectation: low
+    recipes:
+      - vm-disk-trim
+    platforms:
+      - darwin
+      - linux
+    locations:
+      default:
+        rel_home: .colima/_lima/_disks
+    description: >-
+      colima VM data disks (sparse). Container images, volumes and build cache live inside; freed space reaches the host only after a trim in the guest. The disks themselves are never targets.
   # --- media.audio ---
   - id: media.audio.spotify
     label: Spotify cache

@@ -36,10 +36,15 @@ type TempPlaneCoverage struct {
 	// Trigger is the primary pressure level that caused the probe.
 	Trigger string      `json:"trigger"`
 	Planes  []TempPlane `json:"planes"`
+	// Residue aggregates the planes' direct children by fixed family label.
+	// It carries counts and bytes only, never a child name (see tempfamilies.go).
+	Residue *TempResidueSummary `json:"residue,omitempty"`
 }
 
 // TempPlane discloses one canonical temp root and a bounded size. It never
-// names children: no entries, session ids, or snapshot names.
+// names children: no entries, session ids, or snapshot names. Per-family
+// aggregates of the children live in TempPlaneCoverage.Residue, under the
+// fixed-vocabulary invariant in tempfamilies.go.
 type TempPlane struct {
 	Root string `json:"root"`
 	Kind string `json:"kind"`
@@ -159,6 +164,11 @@ func collectTempPlaneCoverage(ctx context.Context, analysisRoot, trigger string,
 		}(i, p)
 	}
 	wg.Wait()
+	roots := make([]string, len(planes))
+	for i, p := range planes {
+		roots[i] = p.path
+	}
+	out.Residue = summarizeTempPlanes(roots)
 	return out
 }
 
