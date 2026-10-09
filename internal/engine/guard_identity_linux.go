@@ -19,6 +19,10 @@ import (
 // not move when the directory's own entries change, so ordinary activity
 // between authorization and deletion does not cause a spurious refusal.
 //
+// btime comes from the coarse kernel clock, so a replacement created within the
+// same clock tick on a reused inode can match; that window is part of the
+// residual.
+//
 // A kernel or filesystem that does not report btime yields ok=false rather than
 // an error; the caller then falls back to the device+inode comparison and the
 // documented residual applies.

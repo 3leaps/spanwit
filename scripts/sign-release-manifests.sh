@@ -2,15 +2,15 @@
 
 set -euo pipefail
 
-# Dual-format release signing: minisign (primary) + optional PGP.
+# Dual-format release signing: minisign and PGP, both required.
 # Signs checksum manifests only (SHA256SUMS, SHA512SUMS).
 #
 # Usage: sign-release-manifests.sh <tag> [dir]
 #
 # Env:
-#   SPANWIT_MINISIGN_KEY - path to minisign secret key (required for minisign signing)
-#   SPANWIT_PGP_KEY_ID   - gpg key/email/fingerprint for PGP signing (optional)
-#   SPANWIT_GPG_HOMEDIR  - isolated gpg homedir for signing (required if PGP_KEY_ID set)
+#   SPANWIT_MINISIGN_KEY - path to minisign secret key (required)
+#   SPANWIT_PGP_KEY_ID   - exact signing-subkey selector <40-hex>! (required)
+#   SPANWIT_GPG_HOMEDIR  - isolated gpg homedir for signing (required)
 #   CI                   - if "true", signing is refused (safety guard)
 
 TAG=${1:?'usage: sign-release-manifests.sh <tag> [dir]'}
@@ -30,8 +30,10 @@ MINISIGN_KEY="${SPANWIT_MINISIGN_KEY:-}"
 PGP_KEY_ID="${SPANWIT_PGP_KEY_ID:-}"
 GPG_HOME="${SPANWIT_GPG_HOMEDIR:-}"
 
-has_minisign=false
-has_pgp=false
+if [ -z "${MINISIGN_KEY}" ] || [ -z "${PGP_KEY_ID}" ]; then
+    echo "error: both SPANWIT_MINISIGN_KEY and SPANWIT_PGP_KEY_ID are required (publish refuses a release missing either signature)" >&2
+    exit 1
+fi
 
 if [ -n "${MINISIGN_KEY}" ]; then
     if [ ! -f "${MINISIGN_KEY}" ]; then
@@ -43,7 +45,6 @@ if [ -n "${MINISIGN_KEY}" ]; then
         echo "  install: brew install minisign (macOS) or see https://jedisct1.github.io/minisign/" >&2
         exit 1
     fi
-    has_minisign=true
     echo "minisign signing enabled (key: ${MINISIGN_KEY})"
 fi
 
@@ -60,18 +61,10 @@ if [ -n "${PGP_KEY_ID}" ]; then
         echo "error: secret key ${PGP_KEY_ID} not found in SPANWIT_GPG_HOMEDIR=${GPG_HOME}" >&2
         exit 1
     fi
-    has_pgp=true
     echo "PGP signing enabled (key: ${PGP_KEY_ID}, homedir: ${GPG_HOME})"
 fi
 
 echo ""
-
-if [ "${has_minisign}" = false ] && [ "${has_pgp}" = false ]; then
-    echo "error: no signing method available" >&2
-    echo "  set SPANWIT_MINISIGN_KEY for minisign signing" >&2
-    echo "  optionally set SPANWIT_PGP_KEY_ID for PGP signing" >&2
-    exit 1
-fi
 
 if [ ! -f "${DIR}/SHA256SUMS" ]; then
     echo "error: ${DIR}/SHA256SUMS not found (run 'make release-checksums' or 'make release-build' first)" >&2
@@ -106,21 +99,12 @@ sign_pgp() {
     gpg --batch --yes --armor --homedir "${GPG_HOME}" --local-user "${PGP_KEY_ID}" --detach-sign -o "${base}.asc" "${base}"
 }
 
-if [ "${has_minisign}" = true ]; then
-    sign_minisign "SHA256SUMS"
-    sign_minisign "SHA512SUMS"
-fi
-
-if [ "${has_pgp}" = true ]; then
-    sign_pgp "SHA256SUMS"
-    sign_pgp "SHA512SUMS"
-fi
+sign_minisign "SHA256SUMS"
+sign_minisign "SHA512SUMS"
+sign_pgp "SHA256SUMS"
+sign_pgp "SHA512SUMS"
 
 echo ""
 echo "✅ Signing complete for ${TAG}"
-if [ "${has_minisign}" = true ]; then
-    echo "   minisign: SHA256SUMS.minisig$([ -f "${DIR}/SHA512SUMS" ] && echo ", SHA512SUMS.minisig")"
-fi
-if [ "${has_pgp}" = true ]; then
-    echo "   PGP: SHA256SUMS.asc$([ -f "${DIR}/SHA512SUMS" ] && echo ", SHA512SUMS.asc")"
-fi
+echo "   minisign: SHA256SUMS.minisig$([ -f "${DIR}/SHA512SUMS" ] && echo ", SHA512SUMS.minisig")"
+echo "   PGP: SHA256SUMS.asc$([ -f "${DIR}/SHA512SUMS" ] && echo ", SHA512SUMS.asc")"

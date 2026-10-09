@@ -163,7 +163,9 @@ func (e *Engine) ObserveOnce(ctx context.Context, opts ObserveOpts) (out CycleRe
 }
 
 func (e *Engine) observeOnceUnlocked(ctx context.Context, opts ObserveOpts) (CycleResult, error) {
-	doc, stateReset := e.loadBaselineWithSignal()
+	// Only the reset signal matters here; the document is reloaded below, after
+	// any ad-hoc registrations have been saved.
+	_, stateReset := e.loadBaselineWithSignal()
 
 	// Optional ad-hoc register paths for this cycle (serial; lease already held).
 	for _, p := range opts.RegisterPaths {
@@ -171,8 +173,7 @@ func (e *Engine) observeOnceUnlocked(ctx context.Context, opts ObserveOpts) (Cyc
 			return CycleResult{}, err
 		}
 	}
-	doc2, reset2 := e.loadBaselineWithSignal()
-	doc = doc2
+	doc, reset2 := e.loadBaselineWithSignal()
 	if reset2 {
 		stateReset = true
 	}

@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func mkdir(t *testing.T, path string) string {
@@ -215,6 +216,9 @@ func TestRemoveGuarded_IdentityReplacementRejected(t *testing.T) {
 	// a different inode identity.
 	guardPreDeleteHook = func(path string) {
 		_ = os.RemoveAll(path)
+		// Past the coarse clock tick, as in the witness test below; a same-tick
+		// replacement on a reused inode is the documented residual.
+		time.Sleep(20 * time.Millisecond)
 		mkdir(t, filepath.Join(path, "sentinel"))
 	}
 	defer func() { guardPreDeleteHook = nil }()
@@ -250,6 +254,10 @@ func TestBirthWitness_DistinguishesRecreatedDirectory(t *testing.T) {
 	if err := os.RemoveAll(target); err != nil {
 		t.Fatal(err)
 	}
+	// Linux stamps inodes from the coarse kernel clock, so a directory recreated
+	// within the same tick can carry an identical btime (see birthWitness). This
+	// test covers the discriminator once the clock has moved.
+	time.Sleep(20 * time.Millisecond)
 	mkdir(t, target)
 
 	after, err := birthWitness(target)
