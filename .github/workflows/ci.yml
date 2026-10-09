@@ -45,8 +45,8 @@ jobs:
           echo "golangci-lint: $(golangci-lint version 2>/dev/null | head -n1 || echo 'not found')"
           echo "yamlfmt:      $(yamlfmt --version 2>/dev/null || echo 'not found')"
           echo "prettier:     $(prettier --version 2>/dev/null || echo 'not found')"
-          actual=$(GOTOOLCHAIN=local go env GOVERSION | sed 's/^go//')
-          minimum=1.26.6
+          actual=$(go env GOVERSION | sed 's/^go//')
+          minimum=1.26.9
           if [ "$(printf '%s\n' "$minimum" "$actual" | sort -V | head -n1)" != "$minimum" ]; then
             echo "ERROR: Go $actual is below required $minimum"
             exit 1

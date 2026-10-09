@@ -82,8 +82,8 @@ jobs:
         run: |
           set -euo pipefail
           echo "Go: $(go version)"
-          actual=$(GOTOOLCHAIN=local go env GOVERSION | sed 's/^go//')
-          minimum=1.26.6
+          actual=$(go env GOVERSION | sed 's/^go//')
+          minimum=1.26.9
           if [ "$(printf '%s\n' "$minimum" "$actual" | sort -V | head -n1)" != "$minimum" ]; then
             echo "ERROR: Go $actual is below required $minimum"
             exit 1
