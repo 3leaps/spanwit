@@ -195,7 +195,7 @@ On the maintainer machine, with `SPANWIT_GPG_HOMEDIR`, `SPANWIT_PGP_KEY_ID`
 ### Distribution
 
 - [ ] Verify `go install github.com/3leaps/spanwit/cmd/spanwit@v<version>` works
-- [ ] (After taps are live) Homebrew + scoop formula/manifest updated
+- [ ] Update the Homebrew formula and the Scoop manifest. These run in their own repositories, not here: `3leaps/homebrew-tap` (target `update-spanwit`, with `TAG=v<version>`) and `3leaps/scoop-bucket` (target `update-spanwit`, with `VERSION=<version>`). The formula takes each archive's GitHub asset digest and the manifest takes hashes from the published `SHA256SUMS`; confirm both against the signature-verified `SHA256SUMS` before merging
 
 ## Post-Release
 

@@ -182,12 +182,30 @@ maintenance) and the full crisis recipe live in
 
 ## Install
 
+Prebuilt, signed binaries are published for macOS (Apple Silicon), Linux
+(amd64, arm64) and Windows (amd64, arm64).
+
+```bash
+# Homebrew (macOS Apple Silicon, Linux)
+brew install 3leaps/tap/spanwit
+```
+
+```powershell
+# Scoop (Windows)
+scoop bucket add 3leaps https://github.com/3leaps/scoop-bucket
+scoop install spanwit
+```
+
+Or download an archive from
+[GitHub Releases](https://github.com/3leaps/spanwit/releases) and verify
+`SHA256SUMS` with the published minisign or PGP key. From source:
+
 ```bash
 go install github.com/3leaps/spanwit/cmd/spanwit@latest
 ```
 
-Release binaries with signed SHA256/SHA512 manifests are attached to each
-[GitHub release](https://github.com/3leaps/spanwit/releases).
+`go install` builds without release version metadata, so `spanwit version`
+reports `dev`.
 
 ## Building
 
