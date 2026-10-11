@@ -294,9 +294,8 @@ pr-final: verify-embedded-identity fmt-check lint validate-schemas test license-
 # Signing keys are set on the operator machine, NEVER in CI:
 #   SPANWIT_MINISIGN_KEY  - path to minisign secret key (required to sign)
 #   SPANWIT_MINISIGN_PUB  - path to minisign public key (optional; auto-derived)
-#   SPANWIT_PGP_KEY_ID    - gpg key selector for PGP signing (optional; the signed
-#                           tag requires the exact signing-subkey form <40-hex>!)
-#   SPANWIT_GPG_HOMEDIR   - isolated gpg homedir (required if PGP_KEY_ID is set)
+#   SPANWIT_PGP_KEY_ID    - exact signing-subkey selector <40-hex>! (required to sign)
+#   SPANWIT_GPG_HOMEDIR   - isolated gpg homedir (required to sign)
 #
 # Flow: signed tag -> read-only CI builds packages as a workflow artifact ->
 # operator re-verifies the tag, downloads the packages, checksums, creates the

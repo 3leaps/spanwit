@@ -26,15 +26,33 @@ mkdir -p "$dist"
 printf 'artifact\n' > "$dist/spanwit-fixture.tar.gz"
 (cd "$dist" && shasum -a 256 spanwit-fixture.tar.gz > SHA256SUMS && shasum -a 512 spanwit-fixture.tar.gz > SHA512SUMS)
 
+minisign -G -W -p "$scratch/minisign.pub" -s "$scratch/minisign.key" > /dev/null
+
 run() {
-    env -u SPANWIT_MINISIGN_KEY -u SPANWIT_MINISIGN_PUB CI="${FIXTURE_CI:-}" \
-        SPANWIT_PGP_KEY_ID="$subkey!" SPANWIT_GPG_HOMEDIR="$home" "$@"
+    env -u SPANWIT_MINISIGN_PUB CI="${FIXTURE_CI:-}" \
+        SPANWIT_MINISIGN_KEY="${FIXTURE_MINISIGN_KEY-$scratch/minisign.key}" \
+        SPANWIT_PGP_KEY_ID="${FIXTURE_PGP_KEY_ID-$subkey!}" SPANWIT_GPG_HOMEDIR="$home" "$@"
 }
-if FIXTURE_CI=true run "$root/scripts/sign-release-manifests.sh" v1.2.3 "$dist" > /dev/null 2>&1; then
-    echo 'error: signing must be refused in CI' >&2
+refused() {
+    if run "$root/scripts/sign-release-manifests.sh" v1.2.3 "$dist" > /dev/null 2>&1; then
+        echo "error: signing must be refused $1" >&2
+        exit 1
+    fi
+}
+FIXTURE_CI=true refused 'in CI'
+FIXTURE_MINISIGN_KEY='' refused 'without a minisign key'
+FIXTURE_PGP_KEY_ID='' refused 'without a PGP key'
+[[ ! -e "$dist/SHA256SUMS.minisig" && ! -e "$dist/SHA256SUMS.asc" ]] || {
+    echo 'error: a refused run must not leave a signature behind' >&2
     exit 1
-fi
+}
 run "$root/scripts/sign-release-manifests.sh" v1.2.3 "$dist" > /dev/null
+for manifest in SHA256SUMS SHA512SUMS; do
+    minisign -V -q -p "$scratch/minisign.pub" -m "$dist/$manifest" || {
+        echo "error: $manifest minisign signature does not verify" >&2
+        exit 1
+    }
+done
 for manifest in SHA256SUMS SHA512SUMS; do
     signer="$(gpg --homedir "$home" --batch --status-fd 1 --verify "$dist/$manifest.asc" "$dist/$manifest" 2> /dev/null |
         awk '$2=="VALIDSIG" {print $3, $NF}')"
@@ -51,4 +69,4 @@ shown="$(gpg --homedir "$scratch/show" --batch --with-colons --show-keys "$expor
 [[ "$(awk -F: '$1=="fpr" {print $10;exit}' <<< "$shown")" == "$primary" ]]
 grep -q "^fpr:::::::::$subkey:" <<< "$shown"
 "$root/scripts/verify-public-key.sh" "$exported" > /dev/null
-echo '[ok] artifact signing and key export accept the exact subkey selector'
+echo '[ok] artifact signing requires both keys and accepts the exact subkey selector'
