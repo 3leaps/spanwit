@@ -103,7 +103,8 @@ spanwit space ~/dev --min-size 500M --class prunable --format json > /tmp/space-
 spanwit prune --from-space-report /tmp/space-report.json
 spanwit prune --from-space-report /tmp/space-report.json --execute
 
-# 4. Optional: guided recipes in space text output (e.g. rustup). Never auto-run.
+# 4. Optional: guided recipes in space text output (e.g. rustup, VM disk trim,
+#    grype download residue). Never auto-run.
 ```
 
 Bare `--allowlist` is a dry-run convenience against built-in signatures only and
@@ -229,7 +230,7 @@ farms.
 
 ## Status
 
-v0.2.0 — alpha. Dry-run by default. `space`, `inventory` and `diagnose` are
+v0.2.1 — alpha. Dry-run by default. `space`, `inventory` and `diagnose` are
 read-only (`--coverage-attest` additionally writes a separate attestation
 file). `observe` keeps local state and is propose-only: it never deletes, but
 it writes, so `--read-only` rejects it.

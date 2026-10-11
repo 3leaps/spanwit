@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-11
+
+### Added
+
+- **VM disk diagnostics**: `space` recognizes colima/lima VM data disks as a
+  diagnostic-only hotspot with a propose-only recipe (`docker system df`, image
+  and build-cache prunes, then `fstrim` in the guest). The recipe reports the
+  disks' total logical size and the bytes actually allocated on the host; VM and
+  disk file names are never printed.
+- **grype download residue**: the grype cache recipe lists only leftover
+  `grype-db-download<N>` directories beside the live database, one exact
+  `rm -rf --` suggestion each, and names the live database to keep.
+- **Temp residue summary**: temp plane coverage gains a `residue` summary of the
+  direct children of each temp root (entry count, hidden count, and per-family
+  count, bytes, oldest and newest) keyed by a fixed family table. Entry names
+  are never reported; anything outside the table counts as `other`.
+- **Homebrew and Scoop**: `brew install 3leaps/tap/spanwit` (macOS Apple
+  Silicon, Linux) and `scoop install spanwit` (Windows amd64, arm64).
+- **`make release-preflight`**: pre-tag gate for a clean tree at `origin/main`,
+  a public repository, changelog and notes, workflow pins, and tests from a
+  clean clone.
+
+### Changed
+
+- Go 1.26.9 is the minimum toolchain, and CI and release builds run on
+  `goneat-tools-runner-glibc` v0.5.8 pinned by index digest.
+- GitHub Actions are pinned by commit SHA to their Node 24 releases, and runners
+  to `ubuntu-24.04`; a check refuses unpinned, Node 20 and `-latest` references.
+- Release artifacts are fetched from an explicitly named workflow run and
+  attempt, which must be the latest successful attempt for the tag.
+- `make release-publish` promotes a draft only after checking the tag, notes,
+  asset set, manifests, minisign and PGP signatures against the pinned keys, and
+  that every draft asset is byte-identical to the signed local copy.
+- Manifest signing requires both the minisign and PGP keys.
+
+### Fixed
+
+- The recreated-directory witness tests no longer fail when Linux assigns the
+  same creation time within one clock tick.
+- Validation tests locate the project root from the source tree instead of the
+  home directory.
+
 ## [0.2.0] - 2026-10-08
 
 ### Added
@@ -228,5 +270,6 @@ than by pattern alone.
 - App identity via `.fulmen/app.yaml` (binary `spanwit`, env prefix `SPANWIT_`).
 - goneat-based quality gates (`make pr-final`, `make prepush`), GitHub Actions CI, and a tag-triggered release workflow.
 
-[Unreleased]: https://github.com/3leaps/spanwit/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/3leaps/spanwit/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/3leaps/spanwit/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/3leaps/spanwit/releases/tag/v0.2.0

@@ -117,7 +117,10 @@ pressure. Each plane carries a canonical root, `size_status`
 (`measured` | `partial` lower bound | `unavailable`), and a root-level
 follow-up command. The size probe lists directories and reads metadata only,
 never follows symlinks or crosses devices, and stops at a 2 s deadline so it
-cannot stall triage. It never names what is inside a plane. Listing a plane
+cannot stall triage. It never names what is inside a plane: the optional
+`residue` summary counts the direct children of the temp roots by a fixed
+family table (entries, hidden entries, and per-family count, bytes, oldest and
+newest), and any entry outside the table is counted as `other`. Listing a plane
 grants no prune authority: `space --config` imports signatures and targets but
 never activates a config's `paths:`, and the shipped crisis profile enables no
 temp path. Its temp entry is a commented template that keeps an age gate,
