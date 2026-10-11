@@ -60,6 +60,7 @@ func deviceClass(path string) (DeviceClass, bool) {
 	if !ok {
 		return "", false
 	}
+	// #nosec G115 -- Stat_t.Dev is already uint64 on Linux, so the conversion is a no-op before Major/Minor.
 	dev := uint64(st.Dev)
 	major, minor := unix.Major(dev), unix.Minor(dev)
 

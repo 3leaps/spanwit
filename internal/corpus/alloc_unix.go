@@ -31,5 +31,6 @@ func inodeIdentity(info fs.FileInfo) (dev uint64, ino uint64, ok bool) {
 	if !sysOK {
 		return 0, 0, false
 	}
+	// #nosec G115 -- device and inode numbers are identities compared only for equality; the conversion keeps the bit pattern.
 	return uint64(st.Dev), uint64(st.Ino), true
 }
