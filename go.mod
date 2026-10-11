@@ -1,6 +1,6 @@
 module github.com/3leaps/spanwit
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.1

@@ -4,7 +4,7 @@ This document explains the CI/CD setup for this repository.
 
 ## Container-Based CI Pattern
 
-This repository uses the **goneat-tools-runner** container (`ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.6`) for CI jobs. This is the recommended "low friction" approach from goneat v0.3.14+.
+This repository uses the **goneat-tools-runner** container (`ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.8`) for CI jobs. This is the recommended "low friction" approach from goneat v0.3.14+. The workflows pin it by index digest (`v0.5.8@sha256:…`) so a retag cannot change the toolchain under a release.
 
 ### Why Containers?
 
@@ -24,7 +24,7 @@ We run container jobs as `root` and fix temp directory permissions after checkou
 
 ```yaml
 container:
-  image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.6
+  image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.8
   # actions/checkout writes to /__w/_temp/_runner_file_commands/ in containers.
   options: --user root
 
@@ -58,7 +58,7 @@ For local development, you have two options:
 
    ```bash
    docker run --rm -v "$(pwd)":/work -w /work --entrypoint "" \
-     ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.6 yamlfmt -lint .
+     ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.8 yamlfmt -lint .
    ```
 
 2. **Install tools locally (sfetch → goneat)**:
