@@ -3,7 +3,7 @@ title: "Spanwit Overview"
 description: "Architecture and command overview for the Spanwit disk-reclamation CLI"
 author: "infoarch"
 date: "2026-05-29"
-last_updated: "2026-10-02"
+last_updated: "2026-10-11"
 status: "active"
 tags: ["overview", "spanwit", "cli", "go", "fulmen"]
 ---
@@ -60,7 +60,10 @@ spanwit prune --format json | jq .                  # machine-readable plan
 - filter provenance for prunable-only paths). Revalidate with
   `prune --from-space-report <space.json>` (dry-run by default; `--execute` only
   after match). Bare `--allowlist` is dry-run-only convenience. Optional **guided
-  recipes** (e.g. rustup) print argv-safe external commands — never auto-run.
+  recipes** (e.g. rustup, colima/lima VM disk trim, grype download residue) print
+  argv-safe external commands — never auto-run. Under warn/critical pressure,
+  `temp_plane_coverage` lists the temp roots it did not walk, with a name-free
+  `residue` summary by fixed family.
 
 Hotspot, unverified, and unknown observation use the bounded inventory walker
 with depth-limited discovery/sizing and `--workers`, `--backend`,
@@ -179,9 +182,14 @@ critical); pre-push runs the thorough assess (fail-on high).
 
 ## CI/CD
 
-- `.github/workflows/ci.yml` — format, lint, test, build on every push.
-- `.github/workflows/release.yml` — tag-triggered; packages multi-platform
-  binaries with SHA256 checksums.
+- `.github/workflows/ci.yml` — format, lint, test, build on every push, in the
+  `goneat-tools-runner-glibc` container pinned by digest, plus the signed-tag
+  tooling tests.
+- `.github/workflows/release.yml` — tag-triggered and read-only: verifies the
+  signed tag and builds the multi-platform packages as a workflow artifact. The
+  maintainer signs the checksum manifests (minisign and PGP) and publishes the
+  release locally. See [ADR-0005](decisions/ADR-0005-release-publication-gate.md)
+  and [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md).
 
 ```bash
 make build         # current platform → bin/spanwit
@@ -225,4 +233,4 @@ See [MAINTAINERS.md](../MAINTAINERS.md).
 ---
 
 **Document Status**: Active
-**Last Updated**: 2026-10-02
+**Last Updated**: 2026-10-11
