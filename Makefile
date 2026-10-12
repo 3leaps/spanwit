@@ -48,7 +48,7 @@ EMBEDDED_IDENTITY_SRC := .fulmen/app.yaml
 EMBEDDED_IDENTITY_DST := internal/assets/appidentity/app.yaml
 
 # Tool versions
-GONEAT_VERSION ?= v0.6.0
+GONEAT_VERSION ?= v0.6.3
 SFETCH_BIN := $(shell command -v sfetch 2>/dev/null)
 GONEAT_BIN = $(firstword $(wildcard $(BINDIR)/goneat$(BINARY_EXT)) $(shell command -v goneat 2>/dev/null))
 
