@@ -147,6 +147,26 @@ claims; Spanwit does not stop processes or elevate privileges. Paths are absent
 by default, including basenames. `--disclose paths` is an explicit report-file
 disclosure choice.
 
+`space --containers` adds container engine storage headroom: how full the
+engine's data disk is and what fills it. It reads the Docker Engine API on the
+local socket (read-only; no docker CLI needed) and works with full and
+`--capacity-only` captures:
+
+```bash
+spanwit space --capacity-only --containers --probe-vm
+```
+
+The section reports the engine (colima, Docker Desktop, OrbStack, podman,
+native Linux), storage by kind (images with unique and shared bytes, build
+cache, dangling images, images for a foreign platform, superseded semver tags,
+unreferenced volumes) and a relief list ordered by cost: rebuild, re-pull, then
+data-loss risk, followed by a guest trim. Spanwit never runs these steps.
+`--probe-vm` measures the VM's data disk from inside (`colima ssh -- df`);
+without it the guest figure is `not_probed`. Image refs, volume names, VM
+profiles and socket paths are not reported; `--image-refs` lists refs for local
+review only, since refs can carry private registry names. Two captures with the
+section feed `space --compare` for a typed before-and-after.
+
 `space --compare LEFT RIGHT` reads exactly two explicit SpaceReport v2 captures
 (one may be `-` for stdin), validates them as untrusted bounded input, and emits
 only claim-compatible right-minus-left deltas. Capture-mode and boot changes are

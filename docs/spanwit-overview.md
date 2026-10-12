@@ -96,6 +96,24 @@ no held-open path component; full paths require `--disclose paths`. Holder
 detail is capped, coverage gaps quantify omissions, and Spanwit never stops a
 process or self-elevates.
 
+`space --containers` adds an optional `container_runtime` section, defined
+identically in SpaceReport v1 and v2. Engine detection follows the docker CLI
+endpoint precedence (`DOCKER_HOST`, `DOCKER_CONTEXT`, current context, default
+socket) by reading the CLI's own config, classifies the socket path, and
+corroborates it against engine info: colima must report its own profile's name
+and a native daemon this host's name, so a forwarded socket is `unknown` and is
+never measured as local. Storage figures come from read-only Engine API GETs
+with exact integer bytes; per-platform manifests need API 1.47, and an older
+engine reports that bucket `unavailable`. Absent or negative figures make the
+bucket `unavailable`, never zero, and a section that fails its own contract is
+replaced by an `unknown` stub so the disk report survives. `--probe-vm` runs a
+bounded `colima ssh -p <profile> -- df -P -B1 <data root>`, with the data root
+taken from engine info. Recipe steps carry a `cost_class` (`none`, `rebuild`,
+`re_pull`, `data_loss_risk`) and an upper-bound estimate, and their commands
+use placeholders, never names. `space --compare` diffs the section's claims
+under plane `container_runtime` when both captures name the same identified
+engine on the same platform.
+
 `space --compare LEFT RIGHT` validates exactly two explicit SpaceReport v2
 captures, with one optional stdin input. The loader applies byte, JSON-depth,
 and per-array ceilings before schema and application-invariant validation.

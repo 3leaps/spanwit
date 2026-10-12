@@ -97,6 +97,9 @@
     "temp_plane_coverage": {
       "$ref": "#/$defs/temp_plane_coverage"
     },
+    "container_runtime": {
+      "$ref": "#/$defs/container_runtime"
+    },
     "verified_reclaimable": {
       "type": "object",
       "required": [
@@ -2910,6 +2913,596 @@
               }
             }
           }
+        }
+      }
+    },
+    "container_runtime": {
+      "type": "object",
+      "description": "Container engine storage headroom. Diagnostic-only and propose-only: adds no prune candidates. Aggregates by kind; image refs appear only under ref_disclosure=local.",
+      "required": [
+        "engine",
+        "detection",
+        "ref_disclosure",
+        "guest_filesystem",
+        "buckets",
+        "recipe"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "type": "string",
+          "enum": [
+            "colima",
+            "docker-desktop",
+            "orbstack",
+            "podman",
+            "native",
+            "unknown",
+            "none"
+          ]
+        },
+        "detection": {
+          "type": "object",
+          "required": [
+            "status",
+            "basis"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "identified",
+                "unidentified",
+                "unavailable"
+              ]
+            },
+            "basis": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "endpoint_path",
+                  "engine_info"
+                ]
+              }
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "endpoint_unresolved",
+                "engine_unreachable",
+                "engine_disagreement",
+                "probe_failed",
+                "timeout",
+                "parse_failed",
+                "unsupported_engine",
+                "probe_not_requested"
+              ]
+            }
+          }
+        },
+        "engine_arch": {
+          "type": "string",
+          "enum": [
+            "amd64",
+            "arm64",
+            "other"
+          ]
+        },
+        "api_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        },
+        "ref_disclosure": {
+          "type": "string",
+          "enum": [
+            "aggregate",
+            "local"
+          ]
+        },
+        "guest_filesystem": {
+          "type": "object",
+          "description": "Statfs of the engine data root as seen by the engine (inside the VM for VM-backed engines).",
+          "required": [
+            "status",
+            "basis"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "measured",
+                "unavailable",
+                "not_probed"
+              ]
+            },
+            "basis": {
+              "type": "string",
+              "enum": [
+                "guest_statfs",
+                "host_statfs",
+                "none"
+              ]
+            },
+            "total_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "used_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "avail_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "level": {
+              "type": "string",
+              "enum": [
+                "ok",
+                "warn",
+                "critical"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "endpoint_unresolved",
+                "engine_unreachable",
+                "engine_disagreement",
+                "probe_failed",
+                "timeout",
+                "parse_failed",
+                "unsupported_engine",
+                "probe_not_requested"
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "measured"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "total_bytes",
+                  "used_bytes",
+                  "avail_bytes",
+                  "level"
+                ],
+                "properties": {
+                  "basis": {
+                    "enum": [
+                      "guest_statfs",
+                      "host_statfs"
+                    ]
+                  }
+                },
+                "not": {
+                  "required": [
+                    "reason"
+                  ]
+                }
+              },
+              "else": {
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "basis": {
+                    "const": "none"
+                  }
+                },
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "total_bytes"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "used_bytes"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "avail_bytes"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "level"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "buckets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/container_runtime_bucket"
+          },
+          "description": "At most one bucket per kind."
+        },
+        "recipe": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/container_runtime_recipe_step"
+          },
+          "description": "Ordered by cost_class: none, rebuild, re_pull, data_loss_risk; guest_trim and disk_grow last."
+        },
+        "image_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/container_runtime_image_ref"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "ref_disclosure": {
+                "const": "aggregate"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "image_refs"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "engine": {
+                "enum": [
+                  "none",
+                  "unknown"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "guest_filesystem": {
+                "properties": {
+                  "status": {
+                    "not": {
+                      "const": "measured"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "engine": {
+                "const": "native"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "guest_filesystem": {
+                "properties": {
+                  "basis": {
+                    "enum": [
+                      "host_statfs",
+                      "none"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "guest_filesystem": {
+                "properties": {
+                  "basis": {
+                    "enum": [
+                      "guest_statfs",
+                      "none"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "container_runtime_bucket": {
+      "type": "object",
+      "description": "One bucket of engine storage, aggregated by kind. Never names images, volumes or containers.",
+      "required": [
+        "kind",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "images",
+            "build_cache",
+            "dangling_images",
+            "foreign_platform",
+            "superseded_tags",
+            "volumes_unreferenced"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "measured",
+            "unavailable"
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total bytes attributed to the bucket. For images this is the engine-reported deduplicated layer total; unique_bytes is the reclaim estimate."
+        },
+        "unique_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Bytes held only by members of this bucket; the honest upper bound on what removing them alone frees."
+        },
+        "shared_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reclaimable_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Engine-reported reclaimable bytes (build cache not in use)."
+        },
+        "in_use": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Members referenced by a container."
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "endpoint_unresolved",
+            "engine_unreachable",
+            "engine_disagreement",
+            "probe_failed",
+            "timeout",
+            "parse_failed",
+            "unsupported_engine",
+            "probe_not_requested"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "unavailable"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "count"
+                  ]
+                },
+                {
+                  "required": [
+                    "bytes"
+                  ]
+                },
+                {
+                  "required": [
+                    "unique_bytes"
+                  ]
+                },
+                {
+                  "required": [
+                    "shared_bytes"
+                  ]
+                },
+                {
+                  "required": [
+                    "reclaimable_bytes"
+                  ]
+                },
+                {
+                  "required": [
+                    "in_use"
+                  ]
+                }
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "count",
+              "bytes"
+            ],
+            "not": {
+              "required": [
+                "reason"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "container_runtime_recipe_step": {
+      "type": "object",
+      "description": "One cost-ordered relief step. Steps are suggestions only; spanwit never runs them.",
+      "required": [
+        "step",
+        "cost_class",
+        "estimate"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "step": {
+          "type": "string",
+          "enum": [
+            "build_cache_prune",
+            "dangling_image_prune",
+            "foreign_platform_remove",
+            "superseded_tag_remove",
+            "volume_prune",
+            "image_prune_all",
+            "guest_trim",
+            "disk_grow"
+          ]
+        },
+        "cost_class": {
+          "type": "string",
+          "enum": [
+            "none",
+            "rebuild",
+            "re_pull",
+            "data_loss_risk"
+          ]
+        },
+        "estimate": {
+          "type": "object",
+          "description": "Estimated bytes this step frees inside the engine. Upper bound; shared content and trim behavior can make the host delta smaller.",
+          "required": [
+            "status"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "measured",
+                "unavailable",
+                "not_probed"
+              ]
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "endpoint_unresolved",
+                "engine_unreachable",
+                "engine_disagreement",
+                "probe_failed",
+                "timeout",
+                "parse_failed",
+                "unsupported_engine",
+                "probe_not_requested"
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "measured"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "bytes"
+                ],
+                "not": {
+                  "required": [
+                    "reason"
+                  ]
+                }
+              },
+              "else": {
+                "required": [
+                  "reason"
+                ],
+                "not": {
+                  "required": [
+                    "bytes"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Generic argv for the step. Never contains an image ref, volume name, profile or host path."
+        },
+        "warning": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "container_runtime_image_ref": {
+      "type": "object",
+      "description": "One image reference. Present only under ref_disclosure=local; local operator view, never for publish or commit surfaces.",
+      "required": [
+        "ref",
+        "bucket",
+        "unique_bytes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bucket": {
+          "type": "string",
+          "enum": [
+            "foreign_platform",
+            "superseded_tags",
+            "dangling_images"
+          ]
+        },
+        "platform": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unique_bytes": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     }

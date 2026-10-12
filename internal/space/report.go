@@ -89,8 +89,11 @@ type Report struct {
 	// TempPlaneCoverage names OS temp roots not walked by this run, present
 	// only under warn/critical primary pressure. Observation only.
 	TempPlaneCoverage *TempPlaneCoverage `json:"temp_plane_coverage,omitempty"`
-	Warnings          []string           `json:"warnings,omitempty"`
-	Notes             []string           `json:"notes,omitempty"`
+	// ContainerRuntime reports container-engine storage headroom. Diagnostic
+	// only: it adds no prune candidates. See containerruntime.go.
+	ContainerRuntime *ContainerRuntime `json:"container_runtime,omitempty"`
+	Warnings         []string          `json:"warnings,omitempty"`
+	Notes            []string          `json:"notes,omitempty"`
 }
 
 // Pressure describes filesystem capacity for one measured path/volume.

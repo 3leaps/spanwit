@@ -829,3 +829,215 @@ func TestRunSpace_CompletionMirrorsExitContract(t *testing.T) {
 		}
 	}
 }
+
+func linuxCapacityCollector() *capacity.Collector {
+	return &capacity.Collector{
+		Platform: "linux", Architecture: "amd64",
+		Now: func() time.Time { return time.Date(2026, 10, 12, 18, 0, 0, 0, time.UTC) },
+		FilesystemSampler: func(_ context.Context, path string) (capacity.FilesystemSample, error) {
+			return capacity.FilesystemSample{Path: path, Mount: "/", VolumeID: "fs:1", FSType: "ext4",
+				Total: 1000, Used: 600, Available: 400}, nil
+		},
+	}
+}
+
+func TestRunSpaceContainerFlagsRequireContainers(t *testing.T) {
+	for _, opts := range []spaceRunOpts{{probeVM: true}, {imageRefs: true}} {
+		opts.path, opts.format, opts.capacityOnly = ".", "json", true
+		var stdout, stderr bytes.Buffer
+		code := runSpace(&appidentity.Identity{BinaryName: "spanwit"}, &stdout, &stderr, opts)
+		if code != 3 || !strings.Contains(stderr.String(), "require --containers") {
+			t.Fatalf("code=%d stderr=%q", code, stderr.String())
+		}
+	}
+}
+
+func TestRunSpaceContainersOffByDefaultAndPassesOptions(t *testing.T) {
+	home := t.TempDir()
+	run := func(opts spaceRunOpts) (map[string]any, *space.ContainerRuntimeOptions) {
+		t.Helper()
+		var got *space.ContainerRuntimeOptions
+		opts.path, opts.format, opts.capacityOnly, opts.capacityCollector = home, "json", true, linuxCapacityCollector()
+		opts.containerCollect = func(_ context.Context, o space.ContainerRuntimeOptions) *space.ContainerRuntime {
+			got = &o
+			return &space.ContainerRuntime{Engine: space.EngineNone, RefDisclosure: o.RefDisclosure,
+				Detection:       space.EngineDetection{Status: space.DetectionUnavailable, Basis: []string{}, Reason: space.ReasonEndpointUnresolved},
+				GuestFilesystem: space.GuestFilesystem{Status: space.ProbeUnavailable, Basis: space.GuestBasisNone, Reason: space.ReasonEndpointUnresolved},
+				Buckets:         []space.RuntimeBucket{}, Recipe: []space.RuntimeRecipeStep{}}
+		}
+		var stdout, stderr bytes.Buffer
+		if code := runSpace(&appidentity.Identity{BinaryName: "spanwit"}, &stdout, &stderr, opts); code != 0 {
+			t.Fatalf("code=%d stderr=%s", code, stderr.String())
+		}
+		if err := contract.ValidateJSON(spanwitschema.SpanwitSpaceReportV2, stdout.Bytes()); err != nil {
+			t.Fatalf("schema: %v", err)
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+			t.Fatal(err)
+		}
+		return doc, got
+	}
+
+	doc, got := run(spaceRunOpts{})
+	if got != nil || doc["container_runtime"] != nil {
+		t.Fatalf("collection must be opt-in: called=%v section=%v", got != nil, doc["container_runtime"])
+	}
+	doc, got = run(spaceRunOpts{containers: true})
+	if got == nil || got.ProbeVM || got.RefDisclosure != space.RefDisclosureAggregate || doc["container_runtime"] == nil {
+		t.Fatalf("--containers defaults: %+v", got)
+	}
+	_, got = run(spaceRunOpts{containers: true, probeVM: true, imageRefs: true})
+	if !got.ProbeVM || got.RefDisclosure != space.RefDisclosureLocal {
+		t.Fatalf("--probe-vm/--image-refs not passed: %+v", got)
+	}
+}
+
+func TestRunSpaceContainersInvalidSectionFallsBackKeepsReport(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	neg := int64(-1)
+	code := runSpace(&appidentity.Identity{BinaryName: "spanwit"}, &stdout, &stderr, spaceRunOpts{
+		path: t.TempDir(), format: "json", capacityOnly: true, capacityCollector: linuxCapacityCollector(),
+		containers: true,
+		containerCollect: func(context.Context, space.ContainerRuntimeOptions) *space.ContainerRuntime {
+			// A defective collector: measured bucket with a negative byte count.
+			return &space.ContainerRuntime{Engine: space.EngineColima, RefDisclosure: space.RefDisclosureAggregate,
+				Detection:       space.EngineDetection{Status: space.DetectionIdentified, Basis: []string{"endpoint_path"}},
+				GuestFilesystem: space.GuestFilesystem{Status: space.ProbeNotProbed, Basis: space.GuestBasisNone, Reason: space.ReasonProbeNotRequested},
+				Buckets:         []space.RuntimeBucket{{Kind: space.BucketImages, Status: space.ProbeMeasured, Count: &neg, Bytes: &neg}},
+				Recipe:          []space.RuntimeRecipeStep{}}
+		},
+	})
+	if code != 0 {
+		t.Fatalf("a container defect must not fail the report: code=%d stderr=%s", code, stderr.String())
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	rt := doc["container_runtime"].(map[string]any)
+	if rt["engine"] != "unknown" || rt["detection"].(map[string]any)["reason"] != "parse_failed" {
+		t.Fatalf("want fallback stub, got %v", rt)
+	}
+	if doc["capacity_accounting"] == nil {
+		t.Fatal("disk report must survive")
+	}
+}
+
+// captureWithRuntime runs a capacity-only capture whose container section is
+// supplied by the caller, and returns the report path.
+func captureWithRuntime(t *testing.T, rt *space.ContainerRuntime) string {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	code := runSpace(&appidentity.Identity{BinaryName: "spanwit"}, &out, &errOut, spaceRunOpts{
+		path: t.TempDir(), format: "json", capacityOnly: true, capacityCollector: linuxCapacityCollector(),
+		containers: true,
+		containerCollect: func(context.Context, space.ContainerRuntimeOptions) *space.ContainerRuntime {
+			return rt
+		},
+	})
+	if code != 0 {
+		t.Fatalf("capture code=%d stderr=%s", code, errOut.String())
+	}
+	p := filepath.Join(t.TempDir(), "capture.json")
+	if err := os.WriteFile(p, out.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func runtimeCapture(engine string, used, cache int64) *space.ContainerRuntime {
+	total := int64(100 << 30)
+	avail := total - used
+	count := int64(3)
+	return &space.ContainerRuntime{
+		Engine: engine, RefDisclosure: space.RefDisclosureAggregate,
+		Detection: space.EngineDetection{Status: space.DetectionIdentified,
+			Basis: []string{space.DetectionBasisEndpointPath, space.DetectionBasisEngineInfo}},
+		GuestFilesystem: space.GuestFilesystem{Status: space.ProbeMeasured, Basis: space.GuestBasisGuestStatfs,
+			TotalBytes: &total, UsedBytes: &used, AvailBytes: &avail, Level: space.PressureOK},
+		Buckets: []space.RuntimeBucket{{Kind: space.BucketBuildCache, Status: space.ProbeMeasured,
+			Count: &count, Bytes: &cache, ReclaimableBytes: &cache}},
+		Recipe: []space.RuntimeRecipeStep{},
+	}
+}
+
+func compareCaptures(t *testing.T, left, right string) capacity.CompareReport {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	code := runSpace(&appidentity.Identity{BinaryName: "spanwit"}, &stdout, &stderr, spaceRunOpts{
+		format: "json", comparePaths: []string{left, right},
+		compareNow: func() time.Time { return time.Date(2026, 10, 12, 19, 0, 0, 0, time.UTC) },
+	})
+	if code != 0 {
+		t.Fatalf("compare code=%d stderr=%s", code, stderr.String())
+	}
+	if err := contract.ValidateJSON(spanwitschema.SpanwitSpaceCompareV1, stdout.Bytes()); err != nil {
+		t.Fatalf("compare schema: %v\n%s", err, stdout.String())
+	}
+	var report capacity.CompareReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	return report
+}
+
+func runtimeDelta(t *testing.T, r capacity.CompareReport, field string) capacity.PlaneDelta {
+	t.Helper()
+	for _, d := range r.PlaneDeltas {
+		if d.Plane == "container_runtime" && d.Field == field {
+			return d
+		}
+	}
+	t.Fatalf("no container_runtime delta %q", field)
+	return capacity.PlaneDelta{}
+}
+
+func TestRunSpaceCompareContainerRuntimeRelief(t *testing.T) {
+	before := captureWithRuntime(t, runtimeCapture(space.EngineColima, 84<<30, 26<<30))
+	after := captureWithRuntime(t, runtimeCapture(space.EngineColima, 60<<30, 2<<30))
+	r := compareCaptures(t, before, after)
+
+	used := runtimeDelta(t, r, "guest.used")
+	if used.DeltaStatus != "exact" || *used.DeltaBytes != -(24<<30) {
+		t.Fatalf("guest.used delta: %+v", used)
+	}
+	cache := runtimeDelta(t, r, "build_cache.bytes")
+	if cache.DeltaStatus != "exact" || *cache.DeltaBytes != -(24<<30) {
+		t.Fatalf("build_cache.bytes delta: %+v", cache)
+	}
+
+	t.Run("different engines are incomparable", func(t *testing.T) {
+		other := captureWithRuntime(t, runtimeCapture(space.EngineOrbStack, 60<<30, 2<<30))
+		r := compareCaptures(t, before, other)
+		if d := runtimeDelta(t, r, "guest.used"); d.DeltaStatus != "incomparable" || d.DeltaBytes != nil {
+			t.Fatalf("cross-engine delta must be incomparable: %+v", d)
+		}
+	})
+	t.Run("unprobed side is indeterminate, never zero", func(t *testing.T) {
+		rt := runtimeCapture(space.EngineColima, 60<<30, 2<<30)
+		rt.GuestFilesystem = space.GuestFilesystem{Status: space.ProbeNotProbed, Basis: space.GuestBasisNone,
+			Reason: space.ReasonProbeNotRequested}
+		r := compareCaptures(t, before, captureWithRuntime(t, rt))
+		if d := runtimeDelta(t, r, "guest.used"); d.DeltaStatus != "indeterminate" || d.DeltaBytes != nil {
+			t.Fatalf("unprobed delta: %+v", d)
+		}
+	})
+	t.Run("captures without the section add no runtime deltas", func(t *testing.T) {
+		var out, errOut bytes.Buffer
+		if code := runSpace(&appidentity.Identity{BinaryName: "spanwit"}, &out, &errOut, spaceRunOpts{
+			path: t.TempDir(), format: "json", capacityOnly: true, capacityCollector: linuxCapacityCollector(),
+		}); code != 0 {
+			t.Fatal(errOut.String())
+		}
+		plain := filepath.Join(t.TempDir(), "plain.json")
+		if err := os.WriteFile(plain, out.Bytes(), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range compareCaptures(t, plain, plain).PlaneDeltas {
+			if d.Plane == "container_runtime" {
+				t.Fatalf("unexpected runtime delta %+v", d)
+			}
+		}
+	})
+}
