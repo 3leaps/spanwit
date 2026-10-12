@@ -3,6 +3,7 @@ package space
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -124,7 +125,7 @@ func guestUnavailable(status, reason string) GuestFilesystem {
 }
 
 func probeGuest(ctx context.Context, engine string, ep EngineEndpoint, dataRoot string, opts ContainerRuntimeOptions) GuestFilesystem {
-	if dataRoot == "" || !strings.HasPrefix(dataRoot, "/") {
+	if !safeDataRoot(dataRoot) {
 		return guestUnavailable(ProbeUnavailable, ReasonParseFailed)
 	}
 	switch engine {
@@ -166,6 +167,23 @@ func probeGuest(ctx context.Context, engine string, ep EngineEndpoint, dataRoot 
 	default:
 		return guestUnavailable(ProbeNotProbed, ReasonUnsupportedEngine)
 	}
+}
+
+// safeDataRootPattern admits a plain absolute path. colima joins the remote
+// command for the guest shell, so the engine-reported data root must carry no
+// shell metacharacters, whitespace or option-looking segments.
+var safeDataRootPattern = regexp.MustCompile(`^(/[A-Za-z0-9._-]+)+/?$`)
+
+func safeDataRoot(p string) bool {
+	if len(p) > 256 || !safeDataRootPattern.MatchString(p) {
+		return false
+	}
+	for _, seg := range strings.Split(strings.Trim(p, "/"), "/") {
+		if seg == "." || seg == ".." || strings.HasPrefix(seg, "-") {
+			return false
+		}
+	}
+	return true
 }
 
 func measuredGuest(basis string, total, used, avail int64) GuestFilesystem {

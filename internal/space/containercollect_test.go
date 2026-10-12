@@ -452,3 +452,30 @@ func TestRepoTagsWithDigestReferences(t *testing.T) {
 		t.Fatal("firstTag must skip digest references")
 	}
 }
+
+// colima joins the remote command for the guest shell; an engine-reported
+// data root with shell syntax must never reach the probe.
+func TestProbeGuest_RejectsUnsafeDataRoot(t *testing.T) {
+	for _, root := range []string{
+		"/var/lib/docker; id", "/var/lib/$(id)", "/var/lib/`id`", "/var/lib/docker data",
+		"/var/lib/docker|cat", "/var/lib/../etc", "/var/-rf", "var/lib/docker", "", "/var/lib/do'cker",
+		"/var/lib/docker\nid", "/" + strings.Repeat("a", 300),
+	} {
+		eng := fakeColimaEngine()
+		eng.responses["/info"] = fmt.Sprintf(`{"Name":"colima","Architecture":"aarch64","DockerRootDir":%q}`, root)
+		ran := false
+		rt := CollectContainerRuntime(context.Background(), ContainerRuntimeOptions{
+			ProbeVM: true, Env: colimaEnv(t), API: func(string) EngineAPI { return eng },
+			Runner: capacity.RunnerFunc(func(context.Context, string, ...string) ([]byte, error) { ran = true; return nil, nil }),
+		})
+		if ran || rt.GuestFilesystem.Status != ProbeUnavailable || rt.GuestFilesystem.Reason != ReasonParseFailed {
+			t.Fatalf("data root %q: ran=%v guest=%+v", root, ran, rt.GuestFilesystem)
+		}
+		requireRuntimeSchemaValid(t, rt)
+	}
+	for _, ok := range []string{"/var/lib/docker", "/var/lib/docker/", "/mnt/lima-colima/docker", "/data/docker_root.v2"} {
+		if !safeDataRoot(ok) {
+			t.Fatalf("plain path %q must be accepted", ok)
+		}
+	}
+}
