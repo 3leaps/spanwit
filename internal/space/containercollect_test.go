@@ -158,8 +158,8 @@ func TestCollectContainerRuntime_ColimaBuckets(t *testing.T) {
 		switch s.Step {
 		case StepImagePruneAll:
 			// unused only: 6700+6600+0+500+100; the in-use v0.5.5 image is excluded
-			if *s.Estimate.Bytes != 13900 {
-				t.Fatalf("prune --all estimate = %d, want unused-only 13900", *s.Estimate.Bytes)
+			if *s.Estimate.Bytes != 13900 || s.Estimate.Bound != BoundLower {
+				t.Fatalf("prune --all with an image in use = %d %s, want unused-only 13900 lower", *s.Estimate.Bytes, s.Estimate.Bound)
 			}
 		case StepGuestTrim:
 			if strings.Join(s.Command, " ") != "colima ssh -p <profile> -- sudo fstrim -v <data-root>" {
@@ -478,4 +478,70 @@ func TestProbeGuest_RejectsUnsafeDataRoot(t *testing.T) {
 			t.Fatalf("plain path %q must be accepted", ok)
 		}
 	}
+}
+
+func recipeStep(t *testing.T, rt *ContainerRuntime, step string) RuntimeRecipeStep {
+	t.Helper()
+	for _, s := range rt.Recipe {
+		if s.Step == step {
+			return s
+		}
+	}
+	t.Fatalf("missing recipe step %s", step)
+	return RuntimeRecipeStep{}
+}
+
+// Two unused images share a 500-byte layer that neither counts as unique.
+// Removing both frees it too, so per-image unique sums are lower bounds.
+func TestRecipeEstimateBounds(t *testing.T) {
+	sharedOnlyAmongUnused := `{
+ "LayersSize": 2500,
+ "Images": [
+  {"Id":"sha256:1111111111111111","RepoTags":["example.test/team/a:v1.0.1"],"Size":1500,"SharedSize":500,"Containers":0},
+  {"Id":"sha256:2222222222222222","RepoTags":["example.test/team/a:v1.0.0"],"Size":1500,"SharedSize":500,"Containers":0}
+ ],
+ "Volumes": [{"UsageData":{"RefCount":0,"Size":40}}],
+ "BuildCache": [{"Size":70,"InUse":false,"Shared":false}]
+}`
+	t.Run("none in use: prune --all is exact from LayersSize", func(t *testing.T) {
+		eng := fakeColimaEngine()
+		eng.responses["/system/df"] = sharedOnlyAmongUnused
+		rt := CollectContainerRuntime(context.Background(), ContainerRuntimeOptions{
+			Env: colimaEnv(t), API: func(string) EngineAPI { return eng }})
+		all := recipeStep(t, rt, StepImagePruneAll)
+		if all.Estimate.Bound != BoundExact || *all.Estimate.Bytes != 2500 {
+			t.Fatalf("prune --all: %+v", all.Estimate)
+		}
+		sup := recipeStep(t, rt, StepSupersededTagRemove)
+		if sup.Estimate.Bound != BoundLower || *sup.Estimate.Bytes != 1000 {
+			t.Fatalf("superseded estimate must be a lower bound: %+v", sup.Estimate)
+		}
+		if b := recipeStep(t, rt, StepBuildCachePrune).Estimate; b.Bound != BoundExact {
+			t.Fatalf("build cache reclaimable is engine-reported: %+v", b)
+		}
+		for _, step := range []string{StepVolumePrune, StepForeignPlatformRemove} {
+			for _, s := range rt.Recipe {
+				if s.Step == step && s.Estimate.Status == ProbeMeasured && s.Estimate.Bound != BoundUpper {
+					t.Fatalf("%s must be an upper bound: %+v", step, s.Estimate)
+				}
+			}
+		}
+		requireRuntimeSchemaValid(t, rt)
+	})
+	t.Run("one in use: prune --all is a lower bound below the true reclaim", func(t *testing.T) {
+		eng := fakeColimaEngine()
+		eng.responses["/system/df"] = strings.Replace(sharedOnlyAmongUnused,
+			`"Size":1500,"SharedSize":500,"Containers":0}
+ ],`, `"Size":1500,"SharedSize":500,"Containers":0},
+  {"Id":"sha256:3333333333333333","RepoTags":["example.test/team/b:1"],"Size":200,"SharedSize":0,"Containers":1}
+ ],`, 1)
+		rt := CollectContainerRuntime(context.Background(), ContainerRuntimeOptions{
+			Env: colimaEnv(t), API: func(string) EngineAPI { return eng }})
+		all := recipeStep(t, rt, StepImagePruneAll)
+		// true reclaim of the two unused images is 2500 (incl. their shared layer)
+		if all.Estimate.Bound != BoundLower || *all.Estimate.Bytes != 2000 || *all.Estimate.Bytes >= 2500 {
+			t.Fatalf("prune --all with an image in use: %+v", all.Estimate)
+		}
+		requireRuntimeSchemaValid(t, rt)
+	})
 }

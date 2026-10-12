@@ -248,7 +248,7 @@ func buildRuntimeRecipe(rt *ContainerRuntime, unusedImageBytes *int64, probedVM 
 	for _, x := range rt.Buckets {
 		b[x.Kind] = x
 	}
-	est := func(kind string, pick func(RuntimeBucket) *int64) RuntimeMeasure {
+	est := func(kind, bound string, pick func(RuntimeBucket) *int64) RuntimeMeasure {
 		x, ok := b[kind]
 		if !ok {
 			return RuntimeMeasure{Status: ProbeUnavailable, Reason: ReasonProbeFailed}
@@ -260,7 +260,7 @@ func buildRuntimeRecipe(rt *ContainerRuntime, unusedImageBytes *int64, probedVM 
 			}
 			return RuntimeMeasure{Status: ProbeUnavailable, Reason: reason}
 		}
-		return RuntimeMeasure{Status: ProbeMeasured, Bytes: pick(x)}
+		return RuntimeMeasure{Status: ProbeMeasured, Bytes: pick(x), Bound: bound}
 	}
 	nonZero := func(m RuntimeMeasure) bool { return m.Status != ProbeMeasured || *m.Bytes > 0 }
 	unique := func(x RuntimeBucket) *int64 { return x.UniqueBytes }
@@ -273,21 +273,28 @@ func buildRuntimeRecipe(rt *ContainerRuntime, unusedImageBytes *int64, probedVM 
 		}
 	}
 	add(RuntimeRecipeStep{Step: StepDanglingImagePrune, CostClass: CostNone,
-		Estimate: est(BucketDanglingImages, unique), Command: []string{"docker", "image", "prune"}})
+		Estimate: est(BucketDanglingImages, BoundLower, unique), Command: []string{"docker", "image", "prune"}})
 	add(RuntimeRecipeStep{Step: StepBuildCachePrune, CostClass: CostRebuild,
-		Estimate: est(BucketBuildCache, func(x RuntimeBucket) *int64 { return x.ReclaimableBytes }),
+		Estimate: est(BucketBuildCache, BoundExact, func(x RuntimeBucket) *int64 { return x.ReclaimableBytes }),
 		Command:  []string{"docker", "builder", "prune"}})
 	add(RuntimeRecipeStep{Step: StepForeignPlatformRemove, CostClass: CostRePull,
-		Estimate: est(BucketForeignPlatform, bytesOf),
+		Estimate: est(BucketForeignPlatform, BoundUpper, bytesOf),
 		Command:  []string{"docker", "image", "rm", "--force", "--platform", "<os/arch>", "<image>"},
 		Warning:  "Removes that platform from every tag sharing the content; --force is required when content is shared."})
 	add(RuntimeRecipeStep{Step: StepSupersededTagRemove, CostClass: CostRePull,
-		Estimate: est(BucketSupersededTags, unique), Command: []string{"docker", "image", "rm", "<image>"}})
-	pruneAll := est(BucketImages, unique)
+		Estimate: est(BucketSupersededTags, BoundLower, unique), Command: []string{"docker", "image", "rm", "<image>"}})
+	// prune --all removes every unused image. With none in use it frees the
+	// whole deduplicated layer total (exact); otherwise the unused images'
+	// unique bytes omit layers shared only among them (lower bound).
+	pruneAll := est(BucketImages, BoundLower, unique)
 	if pruneAll.Status == ProbeMeasured {
-		if unusedImageBytes == nil {
+		img := b[BucketImages]
+		switch {
+		case img.InUse != nil && *img.InUse == 0 && img.Bytes != nil:
+			pruneAll.Bytes, pruneAll.Bound = img.Bytes, BoundExact
+		case unusedImageBytes == nil:
 			pruneAll = RuntimeMeasure{Status: ProbeUnavailable, Reason: ReasonParseFailed}
-		} else {
+		default:
 			pruneAll.Bytes = unusedImageBytes
 		}
 	}
@@ -295,7 +302,7 @@ func buildRuntimeRecipe(rt *ContainerRuntime, unusedImageBytes *int64, probedVM 
 		Estimate: pruneAll, Command: []string{"docker", "image", "prune", "--all"},
 		Warning: "Removes every image not used by a container, including images CI and tests need; expect a full re-pull."})
 	add(RuntimeRecipeStep{Step: StepVolumePrune, CostClass: CostDataLossRisk,
-		Estimate: est(BucketVolumesUnreferenced, bytesOf), Command: []string{"docker", "volume", "prune", "--all"},
+		Estimate: est(BucketVolumesUnreferenced, BoundUpper, bytesOf), Command: []string{"docker", "volume", "prune", "--all"},
 		Warning: "Unreferenced volumes can still hold data (databases, caches); review before pruning."})
 
 	if rt.Engine == EngineColima {

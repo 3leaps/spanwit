@@ -67,6 +67,10 @@ const (
 	ReasonParseFailed        = "parse_failed"
 	ReasonUnsupportedEngine  = "unsupported_engine"
 	ReasonProbeNotRequested  = "probe_not_requested"
+
+	BoundExact = "exact"
+	BoundLower = "lower"
+	BoundUpper = "upper"
 )
 
 // ContainerRuntime is the container_runtime section of the space report.
@@ -127,10 +131,12 @@ type RuntimeRecipeStep struct {
 	Warning   string         `json:"warning,omitempty"`
 }
 
-// RuntimeMeasure is a byte figure present only when measured.
+// RuntimeMeasure is a byte figure present only when measured. Bound states
+// its direction: lower (at least), upper (at most) or exact.
 type RuntimeMeasure struct {
 	Status string `json:"status"`
 	Bytes  *int64 `json:"bytes,omitempty"`
+	Bound  string `json:"bound,omitempty"`
 	Reason string `json:"reason,omitempty"`
 }
 

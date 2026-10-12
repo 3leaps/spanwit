@@ -1020,9 +1020,6 @@ func formatFilterList(vals []string) string {
 	return strings.Join(vals, ",")
 }
 
-// boundAwareSizeHuman renders incomplete measurements as lower bounds (e.g. ≥1.2G)
-// so human output never presents depth-bounded sizes as exact totals. Machine JSON
-// keeps size_human numeric + size_incomplete as the single incompleteness signal.
 // writeContainerRuntimeText renders the container_runtime section. Engine,
 // bucket and step names are fixed vocabulary; image refs (local disclosure
 // only) come from the engine and are sanitized for display.
@@ -1076,11 +1073,12 @@ func writeContainerRuntimeText(w io.Writer, rt *space.ContainerRuntime) {
 		_, _ = fmt.Fprintf(w, "  %-22s  %10s  count %-5d%s\n", b.Kind, measure(b.Bytes), derefInt(b.Count), extra)
 	}
 	if len(rt.Recipe) > 0 {
-		_, _ = fmt.Fprintln(w, "Relief, cheapest first (estimates are upper bounds inside the engine):")
+		_, _ = fmt.Fprintln(w, "Relief, cheapest first (≥ at least, ≤ at most, inside the engine):")
 		for i, s := range rt.Recipe {
 			est := "-"
 			if s.Estimate.Status == space.ProbeMeasured {
-				est = "~" + measure(s.Estimate.Bytes)
+				prefix := map[string]string{space.BoundLower: "≥", space.BoundUpper: "≤"}[s.Estimate.Bound]
+				est = prefix + measure(s.Estimate.Bytes)
 			}
 			_, _ = fmt.Fprintf(w, "  %d. %-24s %-15s %8s  %s\n", i+1, s.Step, s.CostClass, est, strings.Join(s.Command, " "))
 			if s.Warning != "" {
@@ -1138,6 +1136,9 @@ func writeTempPlanesText(w io.Writer, cov *space.TempPlaneCoverage) {
 	_, _ = fmt.Fprintln(w)
 }
 
+// boundAwareSizeHuman renders incomplete measurements as lower bounds (e.g. ≥1.2G)
+// so human output never presents depth-bounded sizes as exact totals. Machine JSON
+// keeps size_human numeric + size_incomplete as the single incompleteness signal.
 func boundAwareSizeHuman(human string, incomplete bool) string {
 	if incomplete {
 		if human == "" {

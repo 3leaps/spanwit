@@ -1803,7 +1803,7 @@
           "items": {
             "$ref": "#/$defs/container_runtime_recipe_step"
           },
-          "description": "Ordered by cost_class: none, rebuild, re_pull, data_loss_risk; guest_trim and disk_grow last."
+          "description": "Ordered by cost_class: none, rebuild, re_pull, data_loss_risk; guest_trim and disk_grow last. Each estimate states its bound."
         },
         "image_refs": {
           "type": "array",
@@ -2058,7 +2058,7 @@
         },
         "estimate": {
           "type": "object",
-          "description": "Estimated bytes this step frees inside the engine. Upper bound; shared content and trim behavior can make the host delta smaller.",
+          "description": "Estimated bytes this step frees inside the engine. bound states the direction: lower means at least, upper means at most. Host reclaim also depends on trim.",
           "required": [
             "status"
           ],
@@ -2088,6 +2088,14 @@
                 "unsupported_engine",
                 "probe_not_requested"
               ]
+            },
+            "bound": {
+              "type": "string",
+              "enum": [
+                "exact",
+                "lower",
+                "upper"
+              ]
             }
           },
           "allOf": [
@@ -2101,7 +2109,8 @@
               },
               "then": {
                 "required": [
-                  "bytes"
+                  "bytes",
+                  "bound"
                 ],
                 "not": {
                   "required": [
@@ -2114,8 +2123,17 @@
                   "reason"
                 ],
                 "not": {
-                  "required": [
-                    "bytes"
+                  "anyOf": [
+                    {
+                      "required": [
+                        "bytes"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "bound"
+                      ]
+                    }
                   ]
                 }
               }

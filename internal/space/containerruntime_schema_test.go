@@ -39,10 +39,10 @@ func colimaRuntime() *ContainerRuntime {
 		},
 		Recipe: []RuntimeRecipeStep{
 			{Step: StepBuildCachePrune, CostClass: CostRebuild,
-				Estimate: RuntimeMeasure{Status: ProbeMeasured, Bytes: i64p(2_698_000_000)},
+				Estimate: RuntimeMeasure{Status: ProbeMeasured, Bytes: i64p(2_698_000_000), Bound: BoundExact},
 				Command:  []string{"docker", "builder", "prune"}},
 			{Step: StepVolumePrune, CostClass: CostDataLossRisk,
-				Estimate: RuntimeMeasure{Status: ProbeMeasured, Bytes: i64p(3_636_000_000)},
+				Estimate: RuntimeMeasure{Status: ProbeMeasured, Bytes: i64p(3_636_000_000), Bound: BoundUpper},
 				Command:  []string{"docker", "volume", "prune"},
 				Warning:  "Unreferenced volumes can still hold data (databases, caches)."},
 			{Step: StepGuestTrim, CostClass: CostNone,
@@ -183,6 +183,15 @@ func TestContainerRuntimeSchema_RejectsContractViolations(t *testing.T) {
 		},
 		"estimate measured without bytes": func(rt map[string]any) {
 			delete(rt["recipe"].([]any)[0].(map[string]any)["estimate"].(map[string]any), "bytes")
+		},
+		"measured estimate without bound": func(rt map[string]any) {
+			delete(rt["recipe"].([]any)[0].(map[string]any)["estimate"].(map[string]any), "bound")
+		},
+		"estimate bound outside the enum": func(rt map[string]any) {
+			rt["recipe"].([]any)[0].(map[string]any)["estimate"].(map[string]any)["bound"] = "approx"
+		},
+		"unmeasured estimate carrying a bound": func(rt map[string]any) {
+			rt["recipe"].([]any)[2].(map[string]any)["estimate"].(map[string]any)["bound"] = "upper"
 		},
 		"x- prefixed reason": func(rt map[string]any) {
 			rt["guest_filesystem"] = map[string]any{"status": "unavailable", "basis": "none", "reason": "x-vm-off"}
