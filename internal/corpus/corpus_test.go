@@ -372,3 +372,60 @@ func TestDeepCorpusRecordsPathLimit(t *testing.T) {
 		t.Errorf("files: walk saw %d, manifest planned %d", got.files, m.Files)
 	}
 }
+
+// The cleanup walk must restore a 0000 directory so the tree can be removed and
+// must never change a directory outside the corpus root, even through a
+// symlink that points there.
+func TestRelaxDirModes_LockedDirsAndSymlinks(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	outside := t.TempDir()
+	root := filepath.Join(t.TempDir(), "corpus")
+	parent := filepath.Join(root, "a")
+	locked := filepath.Join(parent, "locked")
+	if err := os.MkdirAll(locked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(locked, "f"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("..", filepath.Join(parent, "up")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "out")); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{outside, root} {
+		if err := os.Chmod(dir, 0o751); err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer func() { _ = os.Chmod(outside, 0o700) }()
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+
+	relaxDirModes(root)
+
+	mode := func(p string) os.FileMode {
+		t.Helper()
+		info, err := os.Lstat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return info.Mode().Perm()
+	}
+	if got := mode(locked); got != 0o700 {
+		t.Errorf("locked directory mode = %o, want 700", got)
+	}
+	if got := mode(outside); got != 0o751 {
+		t.Errorf("directory outside the corpus was changed through a symlink: %o", got)
+	}
+	if err := Remove(&Manifest{Root: root}); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if _, err := os.Lstat(root); !os.IsNotExist(err) {
+		t.Fatalf("corpus root still present: %v", err)
+	}
+}

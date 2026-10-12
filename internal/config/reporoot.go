@@ -50,6 +50,7 @@ func FindProjectRootFrom(startPath string) (string, error) {
 			if !filepath.IsAbs(boundary) {
 				continue
 			}
+			// #nosec G703 -- an absolute, cleaned CI workspace path, only stat'ed and only accepted when it contains the start path.
 			st, err := os.Stat(boundary)
 			if err != nil || !st.IsDir() {
 				continue

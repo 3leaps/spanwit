@@ -43,7 +43,8 @@ func Build(root string, spec Spec) (*Manifest, error) {
 	}
 
 	b := &builder{
-		spec:     spec,
+		spec: spec,
+		// #nosec G404 -- seeded for reproducible fixture content, never for secrets.
 		rng:      rand.New(rand.NewSource(spec.Seed)), //nolint:gosec // fixture determinism, not security
 		buf:      make([]byte, contentChunk),
 		dirsMade: map[string]bool{},
@@ -356,22 +357,7 @@ func Remove(m *Manifest) error {
 	if m == nil || m.Root == "" {
 		return nil
 	}
-	// Never chmod a symlink: os.Chmod follows it, so a link pointing at its
-	// own parent (which the symlink corpus contains deliberately) would
-	// strip that directory's traverse bit and make the tree unremovable.
-	// Only directories need their mode restored for removal to proceed.
-	_ = filepath.WalkDir(m.Root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			// A directory we could not descend into is exactly what needs
-			// relaxing; WalkDir reports it with its own path.
-			_ = os.Chmod(p, 0o700)
-			return nil
-		}
-		if d.IsDir() && d.Type()&fs.ModeSymlink == 0 {
-			_ = os.Chmod(p, 0o700)
-		}
-		return nil
-	})
+	relaxDirModes(m.Root)
 	if err := os.RemoveAll(m.Root); err != nil {
 		return fmt.Errorf("corpus: remove %s: %w", m.Root, err)
 	}
@@ -403,4 +389,32 @@ func (b *builder) writeFileIfPathFits(rel string, size int64) (bool, error) {
 // parentOf returns the parent of a slash-separated relative path.
 func parentOf(rel string) string {
 	return path.Dir(rel)
+}
+
+// relaxDirModes restores owner access on every real directory under root so a
+// tree containing 0000 directories can be removed. It is best-effort.
+//
+// Changes go through an os.Root, so no operation can leave root even if the
+// tree is modified concurrently, and a symlink is never chmodded: a link
+// pointing at its own parent (which the symlink corpus contains deliberately)
+// would otherwise strip that directory's traverse bit and make the tree
+// unremovable.
+func relaxDirModes(root string) {
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return
+	}
+	defer func() { _ = r.Close() }()
+	_ = fs.WalkDir(r.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			// A directory we could not descend into is exactly what needs
+			// relaxing; WalkDir reports it with its own path.
+			_ = r.Chmod(p, 0o700)
+			return nil
+		}
+		if d.IsDir() && d.Type()&fs.ModeSymlink == 0 {
+			_ = r.Chmod(p, 0o700)
+		}
+		return nil
+	})
 }

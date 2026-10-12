@@ -13,18 +13,16 @@ func metadataOf(info fs.FileInfo) fileMetadata {
 	if !ok {
 		return fileMetadata{}
 	}
-	allocated, ok := blockBytes(int64(st.Blocks))
-	if !ok {
-		return fileMetadata{
-			deviceID: strconv.FormatUint(uint64(st.Dev), 10),
-			fileID:   strconv.FormatUint(uint64(st.Ino), 10),
-		}
+	// #nosec G115 -- device and inode numbers are identities compared only for equality; the conversion keeps the bit pattern.
+	dev, ino := uint64(st.Dev), uint64(st.Ino)
+	meta := fileMetadata{
+		deviceID: strconv.FormatUint(dev, 10),
+		fileID:   strconv.FormatUint(ino, 10),
 	}
-	return fileMetadata{
-		allocated: &allocated,
-		deviceID:  strconv.FormatUint(uint64(st.Dev), 10),
-		fileID:    strconv.FormatUint(uint64(st.Ino), 10),
+	if allocated, ok := blockBytes(int64(st.Blocks)); ok {
+		meta.allocated = &allocated
 	}
+	return meta
 }
 
 // AllocatedSizesSupported reports whether this platform's file metadata can

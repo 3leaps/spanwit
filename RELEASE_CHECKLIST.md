@@ -103,7 +103,14 @@ artifact signing ceremony below; `gpg` honors the `!` form there too.
 - [ ] The release commit is merged and `main` is the exact tree that passed `make pr-final`
 - [ ] Check out `main` at fetched `origin/main` with a clean tree (the targets refuse anything else)
 - [ ] Run the pre-tag gate: `make release-preflight`. It refuses a dirty or unsynced tree, a private repository (the release workflow reads the tag anonymously), missing changelog or release notes, unpinned or Node 20 actions, a failing dates check, tests that fail from a clone outside the home directory, and a failing `pr-final`
-- [ ] Prepare the public tag message outside the repo, then review it (no-clobber; edit the file if you want custom public text): `make release-prepare-tag-message`
+- [ ] Set the tag environment from the table above (or point `SPANWIT_APPROVED_ENV_LOADER` at an operator env file that sets it). `SPANWIT_RELEASE_TAG` and `SPANWIT_TAG_MESSAGE_DIR` are required before the message step. The message directory must be absolute, outside the repository, free of symlinks in its path, and its last component must equal the tag; the step creates it if missing:
+
+  ```bash
+  export SPANWIT_RELEASE_TAG="v$(cat VERSION)"
+  export SPANWIT_TAG_MESSAGE_DIR="/absolute/path/outside/repo/$SPANWIT_RELEASE_TAG"
+  ```
+
+- [ ] Prepare the public tag message outside the repo, then review it (no-clobber; edit the file if you want custom public text): `make release-prepare-tag-message` writes `$SPANWIT_TAG_MESSAGE_DIR/message.txt`
 - [ ] Create the signed tag locally (does not push): `make release-tag`
 - [ ] Re-verify against the committed pin: `make release-verify-tag`
 - [ ] Push only the tag and confirm it is unchanged: `make release-push-tag`

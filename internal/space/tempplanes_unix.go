@@ -23,6 +23,7 @@ func admitTempPlane(path, kind string) (dirIdentity, bool) {
 	if kind == TempPlaneKindUser && int(st.Uid) != os.Getuid() {
 		return dirIdentity{}, false
 	}
+	// #nosec G115 -- device and inode numbers are identities compared only for equality; the conversion keeps the bit pattern.
 	return dirIdentity{dev: uint64(st.Dev), ino: uint64(st.Ino)}, true //nolint:unconvert // Dev width differs by platform
 }
 
@@ -37,6 +38,7 @@ func statDirIdentity(path string) (dirIdentity, bool) {
 	if !ok {
 		return dirIdentity{}, false
 	}
+	// #nosec G115 -- device and inode numbers are identities compared only for equality; the conversion keeps the bit pattern.
 	return dirIdentity{dev: uint64(st.Dev), ino: uint64(st.Ino)}, true //nolint:unconvert // Dev width differs by platform
 }
 
@@ -45,5 +47,6 @@ func deviceOf(info os.FileInfo) (uint64, bool) {
 	if !ok {
 		return 0, false
 	}
+	// #nosec G115 -- device and inode numbers are identities compared only for equality; the conversion keeps the bit pattern.
 	return uint64(st.Dev), true //nolint:unconvert // Dev width differs by platform
 }

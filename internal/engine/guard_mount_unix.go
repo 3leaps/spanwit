@@ -39,5 +39,6 @@ func deviceID(path string) (uint64, bool, error) {
 	if !ok {
 		return 0, false, nil
 	}
+	// #nosec G115 -- device and inode numbers are identities compared only for equality; the conversion keeps the bit pattern.
 	return uint64(st.Dev), true, nil
 }

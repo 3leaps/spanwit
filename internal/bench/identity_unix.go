@@ -14,5 +14,6 @@ func identityOf(info fs.FileInfo) (fileIdentity, bool) {
 	if !ok {
 		return fileIdentity{}, false
 	}
+	// #nosec G115 -- device and inode numbers are identities compared only for equality; the conversion keeps the bit pattern.
 	return fileIdentity{dev: uint64(st.Dev), ino: uint64(st.Ino)}, true
 }

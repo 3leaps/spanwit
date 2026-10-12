@@ -83,12 +83,7 @@ func Probe(dir string) (Capabilities, error) {
 	}
 	defer func() {
 		// Best effort: restore any mode we changed so removal succeeds.
-		_ = filepath.WalkDir(scratch, func(path string, d os.DirEntry, err error) error {
-			if err == nil && d.IsDir() {
-				_ = os.Chmod(path, 0o700)
-			}
-			return nil
-		})
+		relaxDirModes(scratch)
 		_ = os.RemoveAll(scratch)
 	}()
 
