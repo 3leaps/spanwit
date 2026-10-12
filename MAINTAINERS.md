@@ -67,13 +67,12 @@ Role prompts are defined in the Crucible role catalog and referenced locally whe
 
 ## Agent Attribution Guidelines
 
-- Follow the [Agentic Attribution Standard](https://github.com/fulmenhq/crucible/blob/main/docs/standards/agentic-attribution.md)
-- Use assigned roles in commits, PRs, and issues
-- Include `Co-Authored-By` lines with the canonical `noreply@3leaps.net` email for internal agents
-- `Role:` must be the **bare catalog slug** only (for example `devlead`); do not
-  copy runtime/session identity, team-prefixed labels, or bot usernames into trailers
-- Always include a full `Committer-of-Record` line for the human GitHub account
-  owner: `Dave Thompson <dave.thompson@3leaps.net> [@3leapsdave]` (last trailer)
+- Every commit and PR body ends with the three-line footer described in
+  `AGENTS.md` (Commit Attribution): `Role:`, `Co-authored-by:`,
+  `Committer-of-Record: @3leapsdave`.
+- `Role:` is the **bare catalog slug** only (for example `devlead`); do not
+  copy runtime/session identity, team-prefixed labels, or bot usernames into trailers.
+- `Co-authored-by:` names the model, at `noreply@3leaps.net`.
 
 ## Governance Structure
 
