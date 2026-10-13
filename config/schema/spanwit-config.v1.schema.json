@@ -104,6 +104,39 @@
               },
               "safe_to_prune": {
                 "type": "boolean"
+              },
+              "sibling_evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "Patterns relative to the candidate's parent directory. At least one must match a plain regular file under a sibling directory of the live-db shape (^[0-9]+$) that does not match the candidate patterns. Symlinks never satisfy evidence."
+              },
+              "content_marker": {
+                "type": "object",
+                "required": [
+                  "path",
+                  "first_line"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "first_line": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "description": "A plain regular file under the candidate whose first line equals first_line exactly (read capped at 4 KiB, never following a symlink)."
+              },
+              "min_age_floor": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Absolute minimum age (for example 1h). A younger match is withheld for age regardless of configured min_age. For a reused built-in id this can raise, never lower, the built-in floor."
               }
             }
           }

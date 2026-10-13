@@ -5,11 +5,9 @@ package engine
 // before any engine change so the delete-authority work in S4 is judged
 // against a reviewed fixture set.
 //
-// Tests that today's Signature struct can express run now and must keep
-// passing after S4. Tests that need engine features S4 adds (symlink-strict
-// sibling evidence, an absolute age floor, content markers, case-insensitive
-// name handling, temp walk roots) call pendingR4b with the rule they will
-// enforce; S4 removes the skip and must make them pass unchanged.
+// The grype and .gocache rules (sibling evidence, absolute age floor,
+// content marker) are enforced by the engine; temp walk roots are pending in
+// internal/space until S4b.
 
 import (
 	"context"
@@ -26,11 +24,6 @@ const (
 	r4bGrypeSig   = "development.security.grype-db-download"
 	r4bGocacheSig = "development.go.repo-local-gocache"
 )
-
-func pendingR4b(t *testing.T, rule string) {
-	t.Helper()
-	t.Skip("pending R4b S4: " + rule)
-}
 
 // r4bSignatures expresses each planned signature with today's struct. S4 adds
 // the evidence fields it cannot express yet (sibling, age floor, marker).
@@ -240,7 +233,6 @@ func TestR4bGrype_PlantedSymlinkResidueRejected(t *testing.T) {
 // vulnerability.db and import.json are plain files (not symlinks). Without a
 // live sibling, a grype-db-download directory is a name collision.
 func TestR4bGrype_RequiresPlainLiveSibling(t *testing.T) {
-	pendingR4b(t, "symlink-strict sibling evidence: live db/<N>/import.json as a plain file")
 	root := t.TempDir()
 	db := filepath.Join(root, "Library", "Caches", "grype", "db")
 	orphan := filepath.Join(db, "grype-db-download42")
@@ -291,7 +283,6 @@ func TestR4bGrype_RequiresPlainLiveSibling(t *testing.T) {
 // Absolute age floor: a download younger than the floor is never a candidate,
 // even when the user config sets no min_age (an in-flight download).
 func TestR4bGrype_AbsoluteAgeFloor(t *testing.T) {
-	pendingR4b(t, "absolute min_age floor on the signature, independent of user config")
 	root := t.TempDir()
 	_, _, residue := grypeTree(t, root)
 	now := time.Now()
@@ -361,7 +352,6 @@ func TestR4bGocache_SymlinkedGoModRejected(t *testing.T) {
 // Name collision: a user folder named .gocache under a Go repo, without the
 // Go build-cache content marker, is never a candidate.
 func TestR4bGocache_NameCollisionWithoutMarker(t *testing.T) {
-	pendingR4b(t, "content marker: README first line from the Go build cache, or hex shard dirs")
 	root := t.TempDir()
 	repo := filepath.Join(root, "repo")
 	writeRegular(t, filepath.Join(repo, "go.mod"))

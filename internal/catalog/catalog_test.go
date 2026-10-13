@@ -150,7 +150,7 @@ func TestDarwinCapacityEntriesPlatformGating(t *testing.T) {
 
 func TestBuiltInLinksResolve(t *testing.T) {
 	cat, _ := BuiltIn()
-	sigIDs := map[string]bool{"development.rust.cargo-target": true}
+	sigIDs := map[string]bool{"development.rust.cargo-target": true, "development.go.repo-local-gocache": true, "development.security.grype-db-download": true}
 	recipeIDs := map[string]bool{"rustup-toolchains": true, "go-build-cache": true, "cargo-cache": true, "brew-cleanup": true, "uv-cache-prune": true, "grype-db-residue": true, "vm-disk-trim": true}
 	if err := cat.ValidateLinks(sigIDs, recipeIDs); err != nil {
 		t.Fatalf("built-in links should resolve: %v", err)
