@@ -184,7 +184,8 @@
             "volumes",
             "snapshots",
             "system_managed",
-            "held_open"
+            "held_open",
+            "container_runtime"
           ]
         },
         "field": {

@@ -24,6 +24,7 @@ type compareCarrier struct {
 	CaptureMode        string              `json:"capture_mode"`
 	Pressure           Pressure            `json:"pressure"`
 	CapacityAccounting capacity.Accounting `json:"capacity_accounting"`
+	ContainerRuntime   *ContainerRuntime   `json:"container_runtime"`
 }
 
 // LoadCompareInputJSON validates one untrusted SpaceReport v2 capture for the
@@ -78,6 +79,7 @@ func LoadCompareInputJSON(raw []byte, sourcePath string) (capacity.CompareInput,
 		CaptureMode:   carrier.CaptureMode,
 		CapturedAt:    carrier.GeneratedAt,
 		Accounting:    carrier.CapacityAccounting,
+		Runtime:       RuntimeCompareClaims(carrier.ContainerRuntime),
 	}, nil
 }
 

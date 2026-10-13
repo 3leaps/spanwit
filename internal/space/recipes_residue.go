@@ -121,14 +121,14 @@ func vmDiskTrimRecipe(ctx context.Context, opts RecipeOptions, e catalog.Entry) 
 		Path:               path,
 		Keep:               []string{path},
 		SuggestedCommands: []SuggestedCommand{
-			FormatCommand("docker", "system", "df"),
-			FormatCommand("docker", "image", "prune", "-a"),
+			FormatCommand("spanwit", "space", "--capacity-only", "--containers", "--probe-vm"),
 			FormatCommand("docker", "builder", "prune"),
 			FormatCommand("colima", "ssh", "--", "sudo", "fstrim", "-av"),
 		},
 		Rationale: append(vmDiskAllocationNotes(path), []string{
 			"VM disks are diagnostic-only: spanwit never deletes or resizes them.",
-			"Review docker system df first; image and build-cache prunes re-download or rebuild on demand.",
+			"Run spanwit space --containers --probe-vm first: it measures how full the VM disk is and orders relief by cost (rebuild, re-pull, data-loss risk).",
+			"Avoid docker image prune -a as a first step: it removes every image not in use, including ones CI and tests need.",
 			"Volumes can hold data and are not suggested here; review docker volume ls before any volume prune.",
 			"The disk is sparse: space freed inside the VM returns to the host only after fstrim in the guest.",
 		}...),

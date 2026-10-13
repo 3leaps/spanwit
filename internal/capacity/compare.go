@@ -15,6 +15,24 @@ type CompareInput struct {
 	CaptureMode   string
 	CapturedAt    string
 	Accounting    Accounting
+	// Runtime carries container_runtime figures as named byte claims; nil
+	// when the capture had no container_runtime section.
+	Runtime *RuntimeClaims
+}
+
+// RuntimeClaims is the container-engine view of one capture, reduced to the
+// fields compare needs. Engine is the closed engine label; Identified is true
+// only when detection corroborated it.
+type RuntimeClaims struct {
+	Engine     string
+	Identified bool
+	Claims     []NamedClaim
+}
+
+// NamedClaim is one container_runtime figure, e.g. field "images.bytes".
+type NamedClaim struct {
+	Field string
+	Claim ByteClaim
 }
 
 type CompareSide struct {
@@ -173,6 +191,8 @@ func Compare(now time.Time, left, right CompareInput) CompareReport {
 		rightPlanes.HeldOpen,
 		platformGate,
 	))
+	deltas = append(deltas, compareRuntime(left.Runtime, right.Runtime, platformGate)...)
+
 	semanticsOK := true
 	for _, delta := range deltas {
 		if delta.Detail != nil && *delta.Detail == "claim source or basis differs" {
@@ -549,4 +569,42 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// compareRuntime diffs container_runtime claims by field. Both captures must
+// name the same identified engine on the same platform; otherwise every
+// delta is incomparable. A field present on only one side is indeterminate.
+func compareRuntime(left, right *RuntimeClaims, platformGate bool) []PlaneDelta {
+	if left == nil && right == nil {
+		return nil
+	}
+	gate := platformGate && left != nil && right != nil &&
+		left.Identified && right.Identified && left.Engine == right.Engine
+	detail := "requires the same identified container engine on the same platform"
+	fields := map[string][2]*ByteClaim{}
+	var order []string
+	collect := func(rc *RuntimeClaims, side int) {
+		if rc == nil {
+			return
+		}
+		for i := range rc.Claims {
+			nc := &rc.Claims[i]
+			pair, seen := fields[nc.Field]
+			if !seen {
+				order = append(order, nc.Field)
+			}
+			pair[side] = &nc.Claim
+			fields[nc.Field] = pair
+		}
+	}
+	collect(left, 0)
+	collect(right, 1)
+	sort.Strings(order)
+	out := make([]PlaneDelta, 0, len(order))
+	for _, f := range order {
+		pair := fields[f]
+		out = append(out, compareClaim("container_runtime", f,
+			claimRef{claim: pair[0]}, claimRef{claim: pair[1]}, gate, detail))
+	}
+	return out
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 type CommandRunner interface {
@@ -26,6 +27,9 @@ type ExecRunner struct {
 	PermissionWarnings bool
 }
 
+// runnerWaitDelay bounds the wait for inherited pipes after the context ends.
+const runnerWaitDelay = 2 * time.Second
+
 type RunError struct {
 	Code string
 }
@@ -40,6 +44,9 @@ func (r ExecRunner) Run(ctx context.Context, program string, args ...string) ([]
 		limit = DefaultCommandOutput
 	}
 	cmd := exec.CommandContext(ctx, program, args...)
+	// A killed program's children can hold stdout open (colima → limactl →
+	// ssh); WaitDelay bounds how long Run waits for them after cancellation.
+	cmd.WaitDelay = runnerWaitDelay
 	var stdout, stderr bytes.Buffer
 	stdoutWriter := &boundedWriter{Writer: &stdout, Remaining: limit}
 	stderrWriter := &boundedWriter{Writer: &stderr, Remaining: 64 << 10}

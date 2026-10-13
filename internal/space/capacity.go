@@ -26,6 +26,8 @@ type CapacityOnlyReport struct {
 	CapacityAccounting capacity.Accounting `json:"capacity_accounting"`
 	// MutationContract is the effective invocation no-mutation assertion.
 	MutationContract string `json:"mutation_contract,omitempty"`
+	// ContainerRuntime reports container-engine storage headroom (opt-in).
+	ContainerRuntime *ContainerRuntime `json:"container_runtime,omitempty"`
 }
 
 type CapacityOptions struct {

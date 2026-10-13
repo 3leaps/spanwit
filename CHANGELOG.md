@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Container engine headroom**: `space --containers` adds an opt-in
+  `container_runtime` section: the engine (colima, Docker Desktop, OrbStack,
+  podman, native Linux), its data-disk fill, storage by kind (images with
+  unique and shared bytes, build cache, dangling images, foreign-platform
+  images, superseded semver tags, unreferenced volumes), and relief steps
+  ordered by cost (`rebuild`, `re_pull`, `data_loss_risk`). It reads the Docker
+  Engine API on the local socket, read-only. `--probe-vm` measures the VM disk
+  from inside with `colima ssh`; `--image-refs` lists image refs for local
+  review. Refs, volume names, profiles and socket paths are otherwise never
+  reported. The section is defined identically in SpaceReport v1 and v2.
+- **`space --compare`** diffs `container_runtime` figures between two
+  captures of the same identified engine.
+
+### Changed
+
+- The colima/lima VM disk recipe now starts with
+  `spanwit space --capacity-only --containers --probe-vm` and no longer
+  suggests `docker image prune -a` as an early step.
+- CI and release builds run on `goneat-tools-runner-glibc` v0.5.9 pinned by
+  index digest; bootstrap installs goneat v0.6.3.
+
+### Fixed
+
+- statfs block counts convert through a checked helper that refuses values
+  outside int64, instead of wrapping to a wrong size.
+- Command probes stop waiting on child processes that hold output open after
+  their deadline, so a timed-out probe cannot stall `space`.
+
 ## [0.2.1] - 2026-10-11
 
 ### Added

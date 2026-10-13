@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -44,6 +45,9 @@ func newSpaceCmd(identity *appidentity.Identity) *cobra.Command {
 		heldOpen          bool
 		disclose          string
 		sessionBoundary   string
+		containers        bool
+		probeVM           bool
+		imageRefs         bool
 		compare           bool
 		workers           string
 		backend           string
@@ -95,6 +99,10 @@ These controls do not bound verified signature discovery or change prune handoff
 --format json emits a schema-validated SpaceReport (future API body).
 --capacity-only --held-open adds bounded Darwin evidence for unlinked files
 that remain open; no held-open path component is emitted by default.
+--containers adds container engine storage headroom from the read-only Engine
+API on the local socket: storage by kind and cost-ordered relief (never run).
+--probe-vm measures the VM data disk from inside (colima ssh); --image-refs
+lists image refs for local review. Both require --containers.
 --compare LEFT RIGHT validates two explicit SpaceReport v2 captures and reports
 only compatible right-minus-left plane deltas (one input may be - for stdin).
 
@@ -143,12 +151,16 @@ CARGO_TARGET_DIR on a roomier volume (advice only; never auto-relocates).
 				disclose:          disclose,
 				disclosureChanged: cmd.Flags().Changed("disclose"),
 				sessionBoundary:   sessionBoundary,
+				containers:        containers,
+				probeVM:           probeVM,
+				imageRefs:         imageRefs,
 				comparePaths:      comparePaths,
 				compareStdin:      os.Stdin,
 				changedCompareFlags: changedFlags(cmd,
 					"min-size", "config", "top", "max-depth", "include-home-caches",
 					"recipes", "sort", "reclaim-scope", "class", "domain",
 					"capacity-only", "held-open", "disclose", "session-boundary",
+					"containers", "probe-vm", "image-refs",
 					"workers", "backend", "include-remote", "stall-timeout"),
 				changedInventoryFlags: changedFlags(cmd,
 					"min-size", "config", "top", "max-depth", "include-home-caches",
@@ -178,6 +190,9 @@ CARGO_TARGET_DIR on a roomier volume (advice only; never auto-relocates).
 	cmd.Flags().BoolVar(&heldOpen, "held-open", false, "include slower held-open deleted-file evidence (read-only; never stops processes)")
 	cmd.Flags().StringVar(&disclose, "disclose", "none", "held-open path disclosure: none|paths")
 	cmd.Flags().StringVar(&sessionBoundary, "session-boundary", "", "capture label: before-running|before-quiesced|after-reboot|after-update")
+	cmd.Flags().BoolVar(&containers, "containers", false, "include container engine storage headroom (read-only Engine API on the local socket)")
+	cmd.Flags().BoolVar(&probeVM, "probe-vm", false, "with --containers: measure the engine VM's data disk from inside (runs `colima ssh -- df`; read-only)")
+	cmd.Flags().BoolVar(&imageRefs, "image-refs", false, "with --containers: list image refs for local review (refs may carry private registry names; do not publish)")
 	cmd.Flags().BoolVar(&compare, "compare", false, "compare two explicit SpaceReport v2 captures; use - for at most one stdin input")
 
 	return cmd
@@ -205,6 +220,10 @@ type spaceRunOpts struct {
 	disclose              string
 	disclosureChanged     bool
 	sessionBoundary       string
+	containers            bool
+	probeVM               bool
+	imageRefs             bool
+	containerCollect      func(context.Context, space.ContainerRuntimeOptions) *space.ContainerRuntime
 	comparePaths          []string
 	compareStdin          io.Reader
 	compareNow            func() time.Time
@@ -261,6 +280,11 @@ func runSpace(identity *appidentity.Identity, stdout, stderr io.Writer, opts spa
 		return 3
 	}
 
+	if (opts.probeVM || opts.imageRefs) && !opts.containers {
+		_, _ = fmt.Fprintln(stderr, "Error: --probe-vm and --image-refs require --containers")
+		return 3
+	}
+
 	if opts.capacityOnly {
 		if len(opts.changedInventoryFlags) > 0 {
 			_, _ = fmt.Fprintf(stderr, "Error: --capacity-only does not accept inventory flags: %s\n",
@@ -288,6 +312,7 @@ func runSpace(identity *appidentity.Identity, stdout, stderr io.Writer, opts spa
 			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 			return 2
 		}
+		report.ContainerRuntime = collectContainers(ctx, opts)
 		if opts.format == "json" {
 			if err := writeCapacityJSON(stdout, report); err != nil {
 				_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
@@ -431,6 +456,8 @@ func runSpace(identity *appidentity.Identity, stdout, stderr io.Writer, opts spa
 		return 2
 	}
 
+	report.ContainerRuntime = collectContainers(ctx, opts)
+
 	if opts.format == "json" {
 		if err := writeSpaceJSON(stdout, report); err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
@@ -451,6 +478,65 @@ func runSpace(identity *appidentity.Identity, stdout, stderr io.Writer, opts spa
 		return 1
 	}
 	return foundry.ExitSuccess
+}
+
+// collectContainers returns nil unless --containers was given, so default
+// reports are byte-identical to earlier releases.
+func collectContainers(ctx context.Context, opts spaceRunOpts) *space.ContainerRuntime {
+	if !opts.containers {
+		return nil
+	}
+	collect := opts.containerCollect
+	if collect == nil {
+		collect = space.CollectContainerRuntime
+	}
+	home, _ := os.UserHomeDir()
+	hostname, _ := os.Hostname()
+	disclosure := space.RefDisclosureAggregate
+	if opts.imageRefs {
+		disclosure = space.RefDisclosureLocal
+	}
+	rt := collect(ctx, space.ContainerRuntimeOptions{
+		ProbeVM:       opts.probeVM,
+		RefDisclosure: disclosure,
+		Env: space.EngineEnv{
+			Home:          home,
+			DockerHost:    os.Getenv("DOCKER_HOST"),
+			DockerContext: os.Getenv("DOCKER_CONTEXT"),
+			DockerConfig:  os.Getenv("DOCKER_CONFIG"),
+			GOOS:          runtime.GOOS,
+			Hostname:      hostname,
+		},
+	})
+	if err := validateContainerRuntime(rt); err != nil {
+		return space.ContainerRuntimeFallback(disclosure)
+	}
+	return rt
+}
+
+// validateContainerRuntime checks the section alone against the v1 schema
+// (v1 and v2 share the definition) by wrapping it in a minimal document.
+func validateContainerRuntime(rt *space.ContainerRuntime) error {
+	if rt == nil {
+		return nil
+	}
+	section, err := json.Marshal(rt)
+	if err != nil {
+		return err
+	}
+	var schemaDoc map[string]any
+	if err := json.Unmarshal(spanwitschema.SpanwitSpaceReportV1, &schemaDoc); err != nil {
+		return err
+	}
+	probe, err := json.Marshal(map[string]any{
+		"$schema": "https://json-schema.org/draft/2020-12/schema",
+		"$defs":   schemaDoc["$defs"],
+		"$ref":    "#/$defs/container_runtime",
+	})
+	if err != nil {
+		return err
+	}
+	return contract.ValidateJSON(probe, section)
 }
 
 func knownCommit(value string) string {
@@ -531,6 +617,7 @@ func writeCapacityText(w io.Writer, report space.CapacityOnlyReport) {
 		)
 	}
 	writeCapacityNarrative(w, report.CapacityAccounting.Narrative)
+	writeContainerRuntimeText(w, report.ContainerRuntime)
 }
 
 func optionalInt(value *int) int {
@@ -777,6 +864,7 @@ func writeSpaceText(w io.Writer, report space.Report, earlyTriageAlreadyPrinted 
 	} else if report.AnalysisPressure != nil {
 		writePressureBlock(w, "Analysis root volume pressure", *report.AnalysisPressure)
 	}
+	writeContainerRuntimeText(w, report.ContainerRuntime)
 
 	// --- Can free now (prunable) + handoff ---
 	prunable := filterEntriesByState(report.Verified.Candidates, space.StatePrunable)
@@ -932,9 +1020,92 @@ func formatFilterList(vals []string) string {
 	return strings.Join(vals, ",")
 }
 
-// boundAwareSizeHuman renders incomplete measurements as lower bounds (e.g. ≥1.2G)
-// so human output never presents depth-bounded sizes as exact totals. Machine JSON
-// keeps size_human numeric + size_incomplete as the single incompleteness signal.
+// writeContainerRuntimeText renders the container_runtime section. Engine,
+// bucket and step names are fixed vocabulary; image refs (local disclosure
+// only) come from the engine and are sanitized for display.
+func writeContainerRuntimeText(w io.Writer, rt *space.ContainerRuntime) {
+	if rt == nil {
+		return
+	}
+	measure := func(b *int64) string {
+		if b == nil {
+			return "?"
+		}
+		return engine.HumanSize(*b)
+	}
+	_, _ = fmt.Fprintln(w, "Container engine storage (diagnostic only — spanwit never runs these steps):")
+	_, _ = fmt.Fprintln(w, "------------------------------------------------------------")
+	detail := rt.Detection.Status
+	if rt.Detection.Reason != "" {
+		detail += ", " + rt.Detection.Reason
+	}
+	line := fmt.Sprintf("Engine: %s (%s)", rt.Engine, detail)
+	if rt.EngineArch != "" {
+		line += "  arch=" + rt.EngineArch
+	}
+	if rt.APIVersion != "" {
+		line += "  api=" + rt.APIVersion
+	}
+	_, _ = fmt.Fprintln(w, line)
+	g := rt.GuestFilesystem
+	if g.Status == space.ProbeMeasured {
+		_, _ = fmt.Fprintf(w, "Engine data disk: %s used of %s, %s free [%s] (%s)\n",
+			measure(g.UsedBytes), measure(g.TotalBytes), measure(g.AvailBytes), g.Level, g.Basis)
+	} else {
+		hint := ""
+		if g.Reason == space.ReasonProbeNotRequested {
+			hint = " — add --probe-vm to measure inside the VM"
+		}
+		_, _ = fmt.Fprintf(w, "Engine data disk: %s (%s)%s\n", g.Status, g.Reason, hint)
+	}
+	for _, b := range rt.Buckets {
+		if b.Status != space.ProbeMeasured {
+			_, _ = fmt.Fprintf(w, "  %-22s  unavailable (%s)\n", b.Kind, b.Reason)
+			continue
+		}
+		extra := ""
+		switch {
+		case b.UniqueBytes != nil && b.Kind == space.BucketImages:
+			extra = fmt.Sprintf("  unique %s, shared %s, in use %d", measure(b.UniqueBytes), measure(b.SharedBytes), derefInt(b.InUse))
+		case b.ReclaimableBytes != nil:
+			extra = "  reclaimable " + measure(b.ReclaimableBytes)
+		}
+		_, _ = fmt.Fprintf(w, "  %-22s  %10s  count %-5d%s\n", b.Kind, measure(b.Bytes), derefInt(b.Count), extra)
+	}
+	if len(rt.Recipe) > 0 {
+		_, _ = fmt.Fprintln(w, "Relief, cheapest first (≥ at least, ≤ at most, inside the engine):")
+		for i, s := range rt.Recipe {
+			est := "-"
+			if s.Estimate.Status == space.ProbeMeasured {
+				prefix := map[string]string{space.BoundLower: "≥", space.BoundUpper: "≤"}[s.Estimate.Bound]
+				est = prefix + measure(s.Estimate.Bytes)
+			}
+			_, _ = fmt.Fprintf(w, "  %d. %-24s %-15s %8s  %s\n", i+1, s.Step, s.CostClass, est, strings.Join(s.Command, " "))
+			if s.Warning != "" {
+				_, _ = fmt.Fprintf(w, "     ! %s\n", s.Warning)
+			}
+		}
+	}
+	if len(rt.ImageRefs) > 0 {
+		_, _ = fmt.Fprintln(w, "Image refs (local review only — do not paste into public issues or commits):")
+		for _, r := range rt.ImageRefs {
+			plat := ""
+			if r.Platform != "" {
+				plat = " [" + sanitizeTerminalText(r.Platform) + "]"
+			}
+			_, _ = fmt.Fprintf(w, "  %-16s %10s  %s%s\n", r.Bucket, engine.HumanSize(r.UniqueBytes), sanitizeTerminalText(r.Ref), plat)
+		}
+	}
+	_, _ = fmt.Fprintln(w)
+}
+
+func derefInt(n *int64) int64 {
+	if n == nil {
+		return 0
+	}
+	return *n
+}
+
 // writeTempPlanesText names temp roots the run did not walk. Roots and a
 // bounded size only; the follow-up is a root-level command, never a child path.
 func writeTempPlanesText(w io.Writer, cov *space.TempPlaneCoverage) {
@@ -965,6 +1136,9 @@ func writeTempPlanesText(w io.Writer, cov *space.TempPlaneCoverage) {
 	_, _ = fmt.Fprintln(w)
 }
 
+// boundAwareSizeHuman renders incomplete measurements as lower bounds (e.g. ≥1.2G)
+// so human output never presents depth-bounded sizes as exact totals. Machine JSON
+// keeps size_human numeric + size_incomplete as the single incompleteness signal.
 func boundAwareSizeHuman(human string, incomplete bool) string {
 	if incomplete {
 		if human == "" {
