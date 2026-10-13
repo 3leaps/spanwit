@@ -76,6 +76,9 @@ type Options struct {
 	ForcePressureLevel string
 	// DisableTempPlanes skips the warn/critical temp-plane coverage probe.
 	DisableTempPlanes bool
+	// IncludeTemp opts in to walking the admitted per-user temp root as a
+	// verified walk root (space --include-temp). Off by default.
+	IncludeTemp bool
 	// tempPlaneCandidates / tempPlaneDeadline override the platform defaults
 	// in tests (nil / zero = defaults).
 	tempPlaneCandidates []tempPlaneCandidate
@@ -264,6 +267,17 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 	if opts.MinSize != "" {
 		cfg.Defaults.MinSize = opts.MinSize
 	}
+	tempRoots := admitTempRoots(opts, root)
+	for _, tr := range tempRoots {
+		if tr.Admitted {
+			cfg.Paths = append(cfg.Paths, config.PathProfile{
+				Path:     tr.Root,
+				MaxDepth: maxDepth,
+				Targets:  builtInSignatureTargets(),
+				TempRoot: true,
+			})
+		}
+	}
 	if opts.Config != nil {
 		cfg.Signatures = opts.Config.Signatures
 		// Carry the domain policy so the engine applies the same authorize-narrow
@@ -271,7 +285,9 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 		// withheld/domain_disabled here too, so handoff excludes them).
 		cfg.Domains = opts.Config.Domains
 		for _, p := range opts.Config.Paths {
-			cfg.Paths[0].Targets = append(cfg.Paths[0].Targets, p.Targets...)
+			for i := range cfg.Paths {
+				cfg.Paths[i].Targets = append(cfg.Paths[i].Targets, p.Targets...)
+			}
 		}
 	}
 
@@ -472,7 +488,14 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 		// Class filter excludes prunable: never embed executable candidates.
 		handoffVerified = VerifiedSection{Candidates: []Entry{}}
 	}
+	var admittedTemp []string
+	for _, tr := range tempRoots {
+		if tr.Admitted {
+			admittedTemp = append(admittedTemp, tr.Root)
+		}
+	}
 	handoff := BuildPruneHandoff(HandoffInput{
+		TempRoots:      admittedTemp,
 		Verified:       handoffVerified,
 		AnalysisRoot:   root,
 		MinSizeDisplay: minSizeDisplay,
@@ -602,6 +625,8 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 		EnabledDomains:    enabledDomains,
 		MutationContract:  mutationContract,
 		TempPlaneCoverage: tempPlanes,
+		IncludeTemp:       opts.IncludeTemp,
+		TempRoots:         tempRoots,
 		Completion:        NewCompletion(warnings),
 		Warnings:          warnings,
 		Notes:             notes,

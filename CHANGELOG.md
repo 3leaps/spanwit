@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`space --include-temp`** (opt-in) also walks the per-user temp directory
+  as a verified root, so a Cargo build or the new reclaim targets in a temp
+  checkout become candidates.
+  - **Admission:** the directory must be the user's own `os.TempDir()`,
+    owned by the user, mode exactly `0700`, not a symlink, not the shared
+    `/tmp` or `/var/tmp` (or under or above them), under a parent no one else
+    can write, with spanwit not running as root.
+  - **Walk safety:** directories writable by group or other are not
+    descended. Every temp candidate needs an hour of inactivity before it can
+    be pruned.
+  - **Reporting:** the report records the requested scope, and each temp
+    root is listed with a reason when it is not admitted.
+  - **Prune:** each temp root gets its own exact plan, and `prune` checks the
+    root again before revalidating it.
+
 - **New reclaim signatures, on by default**: `space` and `prune` recognize
   grype database download residue and repo-local Go build caches as
   verified, prunable candidates.

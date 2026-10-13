@@ -35,6 +35,11 @@ type ExactPlanInput struct {
 	// non-empty plan missing it fails closed (provenance loss is not authority).
 	AnalysisRoot string
 	Signatures   config.SignatureCatalog // additive overrides (custom signatures)
+	// TempRoot marks a plan whose AnalysisRoot is an admitted temp root. The
+	// caller sets it only after AdmitTempRoot passes at prune time; it adds the
+	// temp age floor and refuses candidates under a group- or other-writable
+	// directory, matching the space walk.
+	TempRoot bool
 }
 
 // PlanFromExact revalidates each entry in isolation. It never walks sibling
@@ -225,6 +230,16 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 		// The signature age floor comes from the catalog, never from the plan
 		// file: a plan carrying effective_min_age "none" cannot lower it.
 		effMinAge := raiseMinAge(e.EffectiveMinAge, ageFloorFor(exactRel(analysisRoot, abs), signatures))
+		floored := ageFloorFor(exactRel(analysisRoot, abs), signatures) != ""
+		if in.TempRoot {
+			if writableComponentBetween(analysisRoot, abs) {
+				plan.Warnings = append(plan.Warnings, fmt.Errorf(
+					"exact-plan path %s: under a group- or other-writable directory in the temp root (not included)", abs))
+				continue
+			}
+			effMinAge = raiseMinAge(effMinAge, tempRootAgeFloor)
+			floored = true
+		}
 		effMaxAge := e.EffectiveMaxAge
 		minSize, err := ParseSize(displayFilterRaw(effMinSize))
 		if err != nil {
@@ -235,7 +250,7 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 		withheldReason := ""
 		now := time.Now()
 		if !meetsAgeWindow(effMinAge, effMaxAge, info.ModTime(), now) ||
-			(ageFloorFor(exactRel(analysisRoot, abs), signatures) != "" && !floorAgeOK(abs, effMinAge, now)) {
+			(floored && !floorAgeOK(abs, effMinAge, now)) {
 			state = CandidateStateWithheld
 			withheldReason = WithheldReasonAge
 		}

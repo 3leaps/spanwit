@@ -52,6 +52,7 @@ func newSpaceCmd(identity *appidentity.Identity) *cobra.Command {
 		workers           string
 		backend           string
 		includeRemote     bool
+		includeTemp       bool
 		stallTimeout      time.Duration
 	)
 
@@ -134,7 +135,7 @@ CARGO_TARGET_DIR on a roomier volume (advice only; never auto-relocates).
 			}
 			os.Exit(runSpace(identity, os.Stdout, os.Stderr, spaceRunOpts{
 				path:    path,
-				workers: workers, backend: backend, includeRemote: includeRemote, stallTimeout: stallTimeout,
+				workers: workers, backend: backend, includeRemote: includeRemote, includeTemp: includeTemp, stallTimeout: stallTimeout,
 				minSize:           minSizeStr,
 				configOverride:    configOverride,
 				format:            format,
@@ -161,11 +162,11 @@ CARGO_TARGET_DIR on a roomier volume (advice only; never auto-relocates).
 					"recipes", "sort", "reclaim-scope", "class", "domain",
 					"capacity-only", "held-open", "disclose", "session-boundary",
 					"containers", "probe-vm", "image-refs",
-					"workers", "backend", "include-remote", "stall-timeout"),
+					"workers", "backend", "include-remote", "include-temp", "stall-timeout"),
 				changedInventoryFlags: changedFlags(cmd,
 					"min-size", "config", "top", "max-depth", "include-home-caches",
 					"recipes", "sort", "reclaim-scope", "class", "domain",
-					"workers", "backend", "include-remote", "stall-timeout"),
+					"workers", "backend", "include-remote", "include-temp", "stall-timeout"),
 			}))
 		},
 	}
@@ -178,6 +179,7 @@ CARGO_TARGET_DIR on a roomier volume (advice only; never auto-relocates).
 	cmd.Flags().StringVar(&workers, "workers", "auto", "observation walker workers: auto (4) or a positive integer")
 	cmd.Flags().StringVar(&backend, "backend", inventory.BackendAuto, "observation walker backend: auto|serial|parallel")
 	cmd.Flags().BoolVar(&includeRemote, "include-remote", false, "include recognized remote/cloud directories in observation walks (detection: macOS/Linux only; may download files or block)")
+	cmd.Flags().BoolVar(&includeTemp, "include-temp", false, "also walk the per-user temp directory as a verified root when it is owned by you, mode 0700 and not shared (opt-in; temp candidates need 1h of inactivity)")
 	cmd.Flags().DurationVar(&stallTimeout, "stall-timeout", inventory.DefaultStallTimeout, "observation directory-open timeout (0 waits forever)")
 	cmd.Flags().BoolVar(&includeHomeCaches, "include-home-caches", true, "include known home cache/toolchain hotspots")
 	cmd.Flags().BoolVar(&includeRecipes, "recipes", true, "include guided recipes (home-cache argv recipes need --include-home-caches; structural journeys e.g. cargo-target-placement need verified evidence)")
@@ -202,6 +204,7 @@ type spaceRunOpts struct {
 	workers               string
 	backend               string
 	includeRemote         bool
+	includeTemp           bool
 	stallTimeout          time.Duration
 	path                  string
 	minSize               string
@@ -360,7 +363,7 @@ func runSpace(identity *appidentity.Identity, stdout, stderr io.Writer, opts spa
 		return inventoryUsage(stderr, "--stall-timeout cannot be negative (use 0 to wait forever)")
 	}
 	analyzeOpts := space.Options{
-		Workers: workerCount, Backend: opts.backend, IncludeRemote: opts.includeRemote,
+		Workers: workerCount, Backend: opts.backend, IncludeRemote: opts.includeRemote, IncludeTemp: opts.includeTemp,
 		StallTimeout: walkStallTimeout(opts.stallTimeout), OnStall: newStallAlerter(stderr),
 		Path:              opts.path,
 		MinSize:           opts.minSize,

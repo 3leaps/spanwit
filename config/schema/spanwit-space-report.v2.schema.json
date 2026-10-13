@@ -97,6 +97,16 @@
     "temp_plane_coverage": {
       "$ref": "#/$defs/temp_plane_coverage"
     },
+    "include_temp": {
+      "type": "boolean",
+      "description": "Whether space --include-temp requested verified temp walk roots. Absent or false: no temp candidates."
+    },
+    "temp_roots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/temp_root"
+      }
+    },
     "container_runtime": {
       "$ref": "#/$defs/container_runtime"
     },
@@ -1124,6 +1134,14 @@
         },
         "exact_plan": {
           "$ref": "#/$defs/exact_plan"
+        },
+        "temp_exact_plans": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/exact_plan"
+          },
+          "description": "One exact plan per admitted temp root (space --include-temp), each with that root as its analysis_root. prune re-admits each root at prune time before revalidating its candidates."
         },
         "suggested_commands": {
           "type": "array",
@@ -3952,6 +3970,62 @@
           "description": "Bound of unique_bytes: exact, as reported by the engine API at capture. Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
         }
       }
+    },
+    "temp_root": {
+      "type": "object",
+      "description": "One candidate temp root for space --include-temp: whether it was admitted as a verified walk root, and if not, why. Roots only; never child names. Admission requires a canonical, non-shared, current-uid-owned, exactly-0700 directory that is not a symlink, under a parent no one else can write, with euid not 0 and no overlap with the analysis root.",
+      "required": [
+        "root",
+        "admitted"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "root": {
+          "type": "string"
+        },
+        "admitted": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "not_owned",
+            "shared_path",
+            "group_or_other_writable",
+            "sticky",
+            "symlink",
+            "not_directory",
+            "overlaps_analysis_root",
+            "unsupported_platform",
+            "not_requested",
+            "mode",
+            "euid_root"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "admitted": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "reason"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "reason"
+            ]
+          }
+        }
+      ]
     }
   }
 }

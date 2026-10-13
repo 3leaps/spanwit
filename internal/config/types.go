@@ -42,6 +42,11 @@ type PathProfile struct {
 	MaxDepth int      `yaml:"max_depth,omitempty"`
 	Targets  []Target `yaml:"targets,omitempty"`
 	Ignores  []string `yaml:"ignores,omitempty"`
+	// TempRoot marks an admitted per-user temp root. It is never read from
+	// config (yaml:"-"); only space sets it, after engine.AdmitTempRoot. A temp
+	// root walk skips group- or other-writable directories and applies the
+	// temp age floor to every candidate.
+	TempRoot bool `yaml:"-"`
 }
 
 func (p PathProfile) IsEnabled() bool {

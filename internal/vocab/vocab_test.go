@@ -211,6 +211,7 @@ func TestGoConstantsMatchRegistry(t *testing.T) {
 		{"observe_sample_source", false, []string{observe.SampleSourceFilesystem, observe.SampleSourceIdentityMismatch, observe.SampleSourceError}},
 		{"proposal_kind", false, []string{observe.ProposalKindNote, observe.ProposalKindRecipe}},
 		{"prune_mode", false, []string{cmd.PruneModeDryRun, cmd.PruneModeExecute}},
+		{"temp_root_reason", false, []string{engine.TempRootNotOwned, engine.TempRootSharedPath, engine.TempRootGroupOtherWritable, engine.TempRootSticky, engine.TempRootSymlink, engine.TempRootNotDirectory, engine.TempRootOverlapsAnalysis, engine.TempRootUnsupported, engine.TempRootNotRequested, engine.TempRootMode, engine.TempRootEuidRoot}},
 	}
 	covered := map[string]bool{}
 	for _, c := range cases {

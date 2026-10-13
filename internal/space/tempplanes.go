@@ -2,6 +2,7 @@ package space
 
 import (
 	"context"
+	"github.com/3leaps/spanwit/internal/engine"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -259,4 +260,38 @@ func probeTempPlane(ctx context.Context, root string, rootDev uint64, maxDepth i
 		return TempPlaneSizePartial, total.Load()
 	}
 	return TempPlaneSizeMeasured, total.Load()
+}
+
+// TempRoot reports one candidate temp root for space --include-temp: whether
+// it was admitted as a verified walk root, and if not, why. Roots only; never
+// child names.
+type TempRoot struct {
+	Root     string `json:"root"`
+	Admitted bool   `json:"admitted"`
+	Reason   string `json:"reason,omitempty"`
+}
+
+// admitTempRoots decides the per-user temp root for an --include-temp run.
+// Only the user temp root (os.TempDir) is ever a candidate; shared temp is
+// never walked. Without --include-temp nothing is admitted.
+func admitTempRoots(opts Options, analysisRoot string) []TempRoot {
+	if !opts.IncludeTemp {
+		return nil
+	}
+	candidates := opts.tempPlaneCandidates
+	if candidates == nil {
+		candidates = defaultTempPlaneCandidates()
+	}
+	var out []TempRoot
+	for _, c := range candidates {
+		if c.Kind != TempPlaneKindUser {
+			continue
+		}
+		adm := engine.AdmitTempRoot(c.Path, analysisRoot)
+		out = append(out, TempRoot{Root: adm.Root, Admitted: adm.Admitted, Reason: adm.Reason})
+	}
+	if len(out) == 0 {
+		out = append(out, TempRoot{Root: "", Admitted: false, Reason: engine.TempRootUnsupported})
+	}
+	return out
 }

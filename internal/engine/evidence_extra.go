@@ -361,3 +361,41 @@ func floorAgeOK(path, effMinAge string, now time.Time) bool {
 	}
 	return now.Sub(newest) >= d
 }
+
+// tempRootAgeFloor is the age floor on every candidate under an admitted temp
+// root, raised by configured min_age and never lowered. Cargo and pattern
+// targets carry no signature floor, so without this an in-flight build in a
+// temp checkout would be deletable.
+const tempRootAgeFloor = "1h"
+
+// groupOrOtherWritable reports whether a directory entry is writable by group
+// or other. Under a temp root such a directory is not descended: another user
+// could have planted its contents.
+func groupOrOtherWritable(d fs.DirEntry) bool {
+	info, err := d.Info()
+	if err != nil {
+		return true
+	}
+	return info.Mode().Perm()&0o022 != 0
+}
+
+// writableComponentBetween reports whether any directory from root down to
+// and including path is group- or other-writable (or a symlink). The temp
+// walk skips such a directory before matching, so revalidation refuses it the
+// same way, including when the candidate itself was made writable later.
+func writableComponentBetween(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return true
+	}
+	cur := root
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	for _, part := range parts {
+		cur = filepath.Join(cur, part)
+		info, err := os.Lstat(cur)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o022 != 0 {
+			return true
+		}
+	}
+	return false
+}
