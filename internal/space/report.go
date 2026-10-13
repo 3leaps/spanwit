@@ -98,16 +98,18 @@ type Report struct {
 
 // Pressure describes filesystem capacity for one measured path/volume.
 type Pressure struct {
-	Path        string  `json:"path"`
-	Mount       string  `json:"mount,omitempty"`
-	VolumeID    string  `json:"volume_id,omitempty"` // opaque filesystem identity for same-volume compare
-	Role        string  `json:"role,omitempty"`
-	TotalBytes  int64   `json:"total_bytes"`
-	TotalHuman  string  `json:"total_human"`
-	UsedBytes   int64   `json:"used_bytes"`
-	UsedHuman   string  `json:"used_human"`
-	AvailBytes  int64   `json:"avail_bytes"`
-	AvailHuman  string  `json:"avail_human"`
+	Path       string `json:"path"`
+	Mount      string `json:"mount,omitempty"`
+	VolumeID   string `json:"volume_id,omitempty"` // opaque filesystem identity for same-volume compare
+	Role       string `json:"role,omitempty"`
+	TotalBytes int64  `json:"total_bytes"`
+	TotalHuman string `json:"total_human"`
+	UsedBytes  int64  `json:"used_bytes"`
+	UsedHuman  string `json:"used_human"`
+	AvailBytes int64  `json:"avail_bytes"`
+	AvailHuman string `json:"avail_human"`
+	// BytesBound is always exact (one statfs sample); set on marshal.
+	BytesBound  string  `json:"bytes_bound,omitempty"`
 	UsedPercent float64 `json:"used_percent"`
 	Level       string  `json:"level"`
 }
@@ -118,9 +120,12 @@ type VerifiedSection struct {
 	PrunableCandidates int     `json:"prunable_candidates"`
 	PrunableBytes      int64   `json:"prunable_bytes"`
 	PrunableHuman      string  `json:"prunable_human"`
-	WithheldCandidates int     `json:"withheld_candidates"`
-	WithheldBytes      int64   `json:"withheld_bytes"`
-	WithheldHuman      string  `json:"withheld_human"`
+	// PrunableBound / WithheldBound are derived on marshal (see bounds.go).
+	PrunableBound      string `json:"prunable_bound,omitempty"`
+	WithheldCandidates int    `json:"withheld_candidates"`
+	WithheldBytes      int64  `json:"withheld_bytes"`
+	WithheldHuman      string `json:"withheld_human"`
+	WithheldBound      string `json:"withheld_bound,omitempty"`
 	// SizeIncomplete is true when any candidate size is a depth-bounded partial
 	// measurement (section-level machine signal; the single incompleteness field).
 	SizeIncomplete bool `json:"size_incomplete"`
@@ -141,6 +146,8 @@ type UnverifiedSection struct {
 	// SizeIncomplete is true when any full-set entry was depth-bounded;
 	// totals are lower bounds even if incomplete rows are top-truncated out.
 	SizeIncomplete bool `json:"size_incomplete"`
+	// SizeBound restates SizeIncomplete as a byte bound; derived on marshal.
+	SizeBound string `json:"size_bound,omitempty"`
 }
 
 // Entry is one reported path with classification state.
@@ -151,7 +158,9 @@ type Entry struct {
 	// SizeIncomplete means SizeBytes is an observed lower bound (depth cutoff or
 	// coverage omission), not an exact full-tree total. Wholly unmeasured
 	// observation candidates have no Entry; they appear in coverage warnings.
-	SizeIncomplete     bool     `json:"size_incomplete,omitempty"`
+	SizeIncomplete bool `json:"size_incomplete,omitempty"`
+	// SizeBound restates SizeIncomplete as a byte bound; derived on marshal.
+	SizeBound          string   `json:"size_bound,omitempty"`
 	State              string   `json:"state"`
 	WithheldReason     string   `json:"withheld_reason,omitempty"`
 	Signature          string   `json:"signature,omitempty"`

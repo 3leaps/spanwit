@@ -127,6 +127,14 @@
         "prunable_human": {
           "type": "string"
         },
+        "prunable_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of prunable_bytes: lower when any prunable candidate size is incomplete, else exact. Never lower when size_incomplete is false. Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
+        },
         "withheld_candidates": {
           "type": "integer",
           "minimum": 0
@@ -138,11 +146,59 @@
         "withheld_human": {
           "type": "string"
         },
+        "withheld_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of withheld_bytes: lower when any withheld candidate size is incomplete, else exact. Never lower when size_incomplete is false. Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
+        },
         "size_incomplete": {
           "type": "boolean",
           "description": "True when any candidate size is a depth-bounded partial measurement; byte totals are lower bounds only."
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "size_incomplete": {
+                "const": true
+              }
+            },
+            "required": [
+              "size_incomplete"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "prunable_bound",
+                "withheld_bound"
+              ],
+              "properties": {
+                "prunable_bound": {
+                  "const": "exact"
+                },
+                "withheld_bound": {
+                  "const": "exact"
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "prunable_bound": {
+                "const": "exact"
+              },
+              "withheld_bound": {
+                "const": "exact"
+              }
+            }
+          }
+        }
+      ]
     },
     "hotspots": {
       "type": "array",
@@ -181,8 +237,44 @@
         "size_incomplete": {
           "type": "boolean",
           "description": "True when any full-set unverified entry was depth-bounded; total_bytes is a lower bound even if incomplete rows are top-truncated out of entries."
+        },
+        "size_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of total_bytes: exact, or lower when size_incomplete is true. Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "size_incomplete": {
+                "const": true
+              }
+            },
+            "required": [
+              "size_incomplete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "size_bound": {
+                "const": "lower"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "size_bound": {
+                "const": "exact"
+              }
+            }
+          }
+        }
+      ]
     },
     "unknown": {
       "type": "array",
@@ -315,6 +407,11 @@
         "avail_human": {
           "type": "string"
         },
+        "bytes_bound": {
+          "type": "string",
+          "const": "exact",
+          "description": "Bound of total_bytes, used_bytes and avail_bytes: exact for the one statfs sample taken at generated_at. Not stable over time; other writers change the volume between samples. Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
+        },
         "used_percent": {
           "type": "number",
           "minimum": 0
@@ -353,6 +450,14 @@
         },
         "size_incomplete": {
           "type": "boolean"
+        },
+        "size_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of the size figure: exact, or lower when size_incomplete is true (the figure is an observed minimum). Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
         },
         "state": {
           "type": "string",
@@ -477,6 +582,32 @@
               ]
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "size_incomplete": {
+                "const": true
+              }
+            },
+            "required": [
+              "size_incomplete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "size_bound": {
+                "const": "lower"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "size_bound": {
+                "const": "exact"
+              }
+            }
+          }
         }
       ]
     },
@@ -503,6 +634,14 @@
         },
         "size_incomplete": {
           "type": "boolean"
+        },
+        "size_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of the size figure: exact, or lower when size_incomplete is true (the figure is an observed minimum). Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
         },
         "state": {
           "type": "string",
@@ -550,7 +689,35 @@
             "type": "string"
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "size_incomplete": {
+                "const": true
+              }
+            },
+            "required": [
+              "size_incomplete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "size_bound": {
+                "const": "lower"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "size_bound": {
+                "const": "exact"
+              }
+            }
+          }
+        }
+      ]
     },
     "unverified_entry": {
       "type": "object",
@@ -575,6 +742,14 @@
         },
         "size_incomplete": {
           "type": "boolean"
+        },
+        "size_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of the size figure: exact, or lower when size_incomplete is true (the figure is an observed minimum). Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
         },
         "state": {
           "type": "string",
@@ -621,7 +796,35 @@
             "type": "string"
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "size_incomplete": {
+                "const": true
+              }
+            },
+            "required": [
+              "size_incomplete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "size_bound": {
+                "const": "lower"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "size_bound": {
+                "const": "exact"
+              }
+            }
+          }
+        }
+      ]
     },
     "unknown_entry": {
       "type": "object",
@@ -646,6 +849,14 @@
         },
         "size_incomplete": {
           "type": "boolean"
+        },
+        "size_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of the size figure: exact, or lower when size_incomplete is true (the figure is an observed minimum). Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
         },
         "state": {
           "type": "string",
@@ -692,7 +903,35 @@
             "type": "string"
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "size_incomplete": {
+                "const": true
+              }
+            },
+            "required": [
+              "size_incomplete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "size_bound": {
+                "const": "lower"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "size_bound": {
+                "const": "exact"
+              }
+            }
+          }
+        }
+      ]
     },
     "prune_handoff": {
       "type": "object",
@@ -733,6 +972,14 @@
         "size_incomplete": {
           "type": "boolean"
         },
+        "size_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of prunable_bytes: exact, or lower when size_incomplete is true (some candidate size is an observed minimum). Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
+        },
         "candidates": {
           "type": "array",
           "items": {
@@ -754,7 +1001,35 @@
             "type": "string"
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "size_incomplete": {
+                "const": true
+              }
+            },
+            "required": [
+              "size_incomplete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "size_bound": {
+                "const": "lower"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "size_bound": {
+                "const": "exact"
+              }
+            }
+          }
+        }
+      ]
     },
     "handoff_entry": {
       "type": "object",
@@ -780,6 +1055,14 @@
         },
         "size_incomplete": {
           "type": "boolean"
+        },
+        "size_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of the size figure: exact, or lower when size_incomplete is true (the figure is an observed minimum). Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
         },
         "state": {
           "type": "string",
@@ -896,6 +1179,32 @@
               ]
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "size_incomplete": {
+                "const": true
+              }
+            },
+            "required": [
+              "size_incomplete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "size_bound": {
+                "const": "lower"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "size_bound": {
+                "const": "exact"
+              }
+            }
+          }
         }
       ]
     },
@@ -1001,6 +1310,14 @@
         "size_incomplete": {
           "type": "boolean"
         },
+        "size_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of the size figure: exact, or lower when size_incomplete is true (the figure is an observed minimum). Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
+        },
         "reclaim_scope": {
           "type": "string",
           "enum": [
@@ -1068,6 +1385,32 @@
               "required": [
                 "parent_path"
               ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "size_incomplete": {
+                "const": true
+              }
+            },
+            "required": [
+              "size_incomplete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "size_bound": {
+                "const": "lower"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "size_bound": {
+                "const": "exact"
+              }
             }
           }
         }
@@ -1433,6 +1776,14 @@
           "minimum": 0,
           "description": "Exact when measured; lower bound when partial; absent when unavailable."
         },
+        "size_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of size_bytes: exact when measured, lower when partial, absent when unavailable. Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
+        },
         "size_basis": {
           "type": "string",
           "enum": [
@@ -1465,6 +1816,45 @@
             "required": [
               "size_bytes"
             ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "size_status": {
+                "const": "unavailable"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "size_bound"
+              ]
+            }
+          },
+          "else": {
+            "if": {
+              "properties": {
+                "size_status": {
+                  "const": "partial"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "size_bound": {
+                  "const": "lower"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "size_bound": {
+                  "const": "exact"
+                }
+              }
+            }
           }
         }
       ]
@@ -1534,6 +1924,11 @@
           "type": "integer",
           "minimum": 0
         },
+        "skipped_entries": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Listed children that could not be stat'd. They appear in no family row; a family that lost an entry states bytes_bound lower. Absent when none were skipped."
+        },
         "families": {
           "type": "array",
           "items": {
@@ -1559,12 +1954,21 @@
               },
               "entries": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 1,
+                "description": "Observed entries in this family; at least one (a family with no measured entry has no row)."
               },
               "bytes": {
                 "type": "integer",
                 "minimum": 0,
                 "description": "Sum of each entry's own lstat size (a directory record, not its contents). Entry counts are the signal; the temp plane probe owns content sizing."
+              },
+              "bytes_bound": {
+                "type": "string",
+                "enum": [
+                  "exact",
+                  "lower"
+                ],
+                "description": "Bound of bytes. bytes is the sum of each listed entry's own lstat size (symlinks count 0), read without descending. exact when every listed entry was measured; lower when an entry could not be stat'd and was left out of the sum. It is not a content size. Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
               },
               "oldest": {
                 "type": "string",
@@ -1710,6 +2114,11 @@
                 "critical"
               ]
             },
+            "bound": {
+              "type": "string",
+              "const": "exact",
+              "description": "Bound of total_bytes, used_bytes and avail_bytes: exact for the one statfs sample at capture, not stable over time. Present when status is measured, absent otherwise. Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
+            },
             "reason": {
               "type": "string",
               "enum": [
@@ -1783,6 +2192,11 @@
                     {
                       "required": [
                         "level"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "bound"
                       ]
                     }
                   ]
@@ -1948,6 +2362,11 @@
           "minimum": 0,
           "description": "Members referenced by a container."
         },
+        "bound": {
+          "type": "string",
+          "const": "exact",
+          "description": "Bound of every byte figure in the bucket: exact, as reported by the engine API at capture. Present when status is measured, absent when unavailable. Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
+        },
         "reason": {
           "type": "string",
           "enum": [
@@ -2005,6 +2424,11 @@
                 {
                   "required": [
                     "in_use"
+                  ]
+                },
+                {
+                  "required": [
+                    "bound"
                   ]
                 }
               ]
@@ -2184,6 +2608,11 @@
         "unique_bytes": {
           "type": "integer",
           "minimum": 0
+        },
+        "bound": {
+          "type": "string",
+          "const": "exact",
+          "description": "Bound of unique_bytes: exact, as reported by the engine API at capture. Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
         }
       }
     }

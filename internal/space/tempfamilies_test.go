@@ -103,7 +103,7 @@ func TestTempPlane_StillHasNoChildFields(t *testing.T) {
 	}
 	for key := range fields {
 		switch key {
-		case "root", "kind", "size_status", "size_bytes", "size_basis", "follow_up":
+		case "root", "kind", "size_status", "size_bytes", "size_bound", "size_basis", "follow_up":
 		default:
 			t.Fatalf("TempPlane gained field %q; child data belongs in the family summary", key)
 		}

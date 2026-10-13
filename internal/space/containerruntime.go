@@ -107,7 +107,9 @@ type GuestFilesystem struct {
 	UsedBytes  *int64 `json:"used_bytes,omitempty"`
 	AvailBytes *int64 `json:"avail_bytes,omitempty"`
 	Level      string `json:"level,omitempty"`
-	Reason     string `json:"reason,omitempty"`
+	// Bound is exact when measured, absent otherwise; derived on marshal.
+	Bound  string `json:"bound,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // RuntimeBucket aggregates one kind of engine storage. For images, Bytes sums
@@ -122,7 +124,9 @@ type RuntimeBucket struct {
 	SharedBytes      *int64 `json:"shared_bytes,omitempty"`
 	ReclaimableBytes *int64 `json:"reclaimable_bytes,omitempty"`
 	InUse            *int64 `json:"in_use,omitempty"`
-	Reason           string `json:"reason,omitempty"`
+	// Bound is exact when measured, absent when unavailable; derived on marshal.
+	Bound  string `json:"bound,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // RuntimeRecipeStep is one cost-classed relief suggestion. Command is generic
@@ -150,6 +154,8 @@ type RuntimeImageRef struct {
 	Bucket      string `json:"bucket"`
 	Platform    string `json:"platform,omitempty"`
 	UniqueBytes int64  `json:"unique_bytes"`
+	// Bound is always exact (engine-reported); set on marshal.
+	Bound string `json:"bound,omitempty"`
 }
 
 // RuntimeCompareClaims reduces a container_runtime section to named byte
