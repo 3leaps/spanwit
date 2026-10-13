@@ -88,7 +88,7 @@ func (e *Engine) registerUnlocked(ctx context.Context, path string, label string
 				v.Coverage = CoveragePartial
 			}
 			v.ReconcileNeeded = true
-			v.LossReason = "alias_path_change"
+			v.LossReason = LossAliasPathChange
 		}
 		v.Volume.RegisterPath = path
 		if label != "" {
@@ -256,13 +256,13 @@ func (e *Engine) observeOnceUnlocked(ctx context.Context, opts ObserveOpts) (Cyc
 					Basis:      BasisStatfs,
 					Coverage:   CoveragePartial,
 					Level:      v.Level,
-					Source:     "sample_error",
+					Source:     SampleSourceError,
 				}
 				v.LastAttempt = &fail
 				v.Coverage = CoveragePartial
 				v.ReconcileNeeded = true
 				if v.LossReason == "" {
-					v.LossReason = "sample_error"
+					v.LossReason = LossSampleError
 				}
 				if sampleErr == nil {
 					sampleErr = err
@@ -283,7 +283,7 @@ func (e *Engine) observeOnceUnlocked(ctx context.Context, opts ObserveOpts) (Cyc
 					Basis:    s.Basis,
 					Coverage: CoverageDegraded,
 					Level:    s.Level,
-					Source:   "identity_mismatch",
+					Source:   SampleSourceIdentityMismatch,
 				}
 				completed[id] = true
 				mu.Unlock()
@@ -305,7 +305,7 @@ func (e *Engine) observeOnceUnlocked(ctx context.Context, opts ObserveOpts) (Cyc
 				v.Coverage = s.Coverage
 				v.ReconcileNeeded = true
 				if v.LossReason == "" {
-					v.LossReason = "incomplete_sample"
+					v.LossReason = LossIncompleteSample
 				}
 				v.LastAttempt = &s
 				completed[id] = true

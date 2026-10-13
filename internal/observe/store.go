@@ -194,7 +194,7 @@ func validCoverage(value string, allowEmpty bool) bool {
 func validLossReason(value string) bool {
 	switch value {
 	case "", LossOverflow, LossSequenceGap, LossWatcherError, LossDroppedWork,
-		LossCorruptState, LossIdentityShift, "alias_path_change", "sample_error", "incomplete_sample":
+		LossCorruptState, LossIdentityShift, LossAliasPathChange, LossSampleError, LossIncompleteSample:
 		return true
 	default:
 		return false
@@ -203,7 +203,7 @@ func validLossReason(value string) bool {
 
 func validSampleSource(value string) bool {
 	switch value {
-	case "", "capacity.SampleFilesystem", "sample_error", "identity_mismatch":
+	case "", SampleSourceFilesystem, SampleSourceError, SampleSourceIdentityMismatch:
 		return true
 	default:
 		return false

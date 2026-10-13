@@ -43,7 +43,7 @@ func collectDarwin(ctx context.Context, runner CommandRunner, sample *Filesystem
 	}
 	info, err := parseDarwinInfo(infoRaw)
 	if err != nil {
-		gap := CoverageGap{Code: "parse_failed", Scope: "diskutil.info", Detail: "diskutil info plist was missing required typed identity fields"}
+		gap := CoverageGap{Code: GapParseFailed, Scope: "diskutil.info", Detail: "diskutil info plist was missing required typed identity fields"}
 		setDarwinUnavailable(&accounting.Planes, gap, "diskutil.info.plist")
 		return
 	}
@@ -66,7 +66,7 @@ func collectDarwin(ctx context.Context, runner CommandRunner, sample *Filesystem
 	} else {
 		container, parseErr := parseAPFSList(listRaw, info.DeviceID)
 		if parseErr != nil {
-			gap := CoverageGap{Code: "parse_failed", Scope: "diskutil.apfs.list", Detail: "APFS list plist did not contain one typed target volume mapping"}
+			gap := CoverageGap{Code: GapParseFailed, Scope: "diskutil.apfs.list", Detail: "APFS list plist did not contain one typed target volume mapping"}
 			accounting.Planes.Container = unavailableContainer(gap, "diskutil.apfs.list.plist")
 			accounting.Planes.Volumes = unavailableVolumes(gap, "diskutil.apfs.list.plist")
 		} else {
@@ -101,7 +101,7 @@ func collectDarwin(ctx context.Context, runner CommandRunner, sample *Filesystem
 	entries, parseErr := parseSnapshots(snapshotRaw)
 	if parseErr != nil {
 		accounting.Planes.Snapshots = unavailableSnapshots(CoverageGap{
-			Code:   "parse_failed",
+			Code:   GapParseFailed,
 			Scope:  "diskutil.apfs.listSnapshots",
 			Detail: "snapshot plist was missing required typed identity fields",
 		}, "diskutil.apfs.listSnapshots.plist")

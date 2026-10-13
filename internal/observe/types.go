@@ -30,14 +30,30 @@ const (
 	BasisStatfs = "statfs_primary"
 )
 
+// Sample sources recorded on observe samples.
+const (
+	SampleSourceFilesystem       = "capacity.SampleFilesystem"
+	SampleSourceError            = "sample_error"
+	SampleSourceIdentityMismatch = "identity_mismatch"
+)
+
+// Proposal kinds.
+const (
+	ProposalKindNote   = "note"
+	ProposalKindRecipe = "recipe"
+)
+
 // Loss reasons that force degraded scope + reconciliatory full sample.
 const (
-	LossOverflow      = "overflow"
-	LossSequenceGap   = "sequence_gap"
-	LossWatcherError  = "watcher_error"
-	LossDroppedWork   = "dropped_work"
-	LossCorruptState  = "corrupt_state"
-	LossIdentityShift = "identity_mismatch"
+	LossOverflow         = "overflow"
+	LossSequenceGap      = "sequence_gap"
+	LossWatcherError     = "watcher_error"
+	LossDroppedWork      = "dropped_work"
+	LossCorruptState     = "corrupt_state"
+	LossIdentityShift    = "identity_mismatch"
+	LossAliasPathChange  = "alias_path_change"
+	LossSampleError      = "sample_error"
+	LossIncompleteSample = "incomplete_sample"
 )
 
 // VolumeID is a stable opaque filesystem identity (not a mount path).

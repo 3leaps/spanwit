@@ -13,6 +13,12 @@ import (
 	"github.com/3leaps/spanwit/internal/engine"
 )
 
+// Prune plan modes (prune_mode vocabulary).
+const (
+	PruneModeDryRun  = "dry-run"
+	PruneModeExecute = "execute"
+)
+
 const prunePlanSchemaID = "https://schemas.3leaps.dev/spanwit/prune-plan/v1.json"
 
 type prunePlanOutput struct {
@@ -86,9 +92,9 @@ type pruneExecutionSummary struct {
 }
 
 func newPrunePlanOutput(plan PrunePlan, loadedPath string, execute bool, now time.Time) prunePlanOutput {
-	mode := "dry-run"
+	mode := PruneModeDryRun
 	if execute {
-		mode = "execute"
+		mode = PruneModeExecute
 	}
 
 	sortMode := plan.SortMode

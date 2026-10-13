@@ -54,22 +54,22 @@ func (r ExecRunner) Run(ctx context.Context, program string, args ...string) ([]
 	cmd.Stderr = stderrWriter
 	err := cmd.Run()
 	if stdoutWriter.Exceeded {
-		return stdout.Bytes(), &RunError{Code: "truncated"}
+		return stdout.Bytes(), &RunError{Code: GapTruncated}
 	}
 	lower := strings.ToLower(stderr.String())
 	if r.PermissionWarnings &&
 		(strings.Contains(lower, "permission denied") || strings.Contains(lower, "not permitted")) {
-		return stdout.Bytes(), &RunError{Code: "permission_denied"}
+		return stdout.Bytes(), &RunError{Code: GapPermissionDenied}
 	}
 	if err == nil {
 		return stdout.Bytes(), nil
 	}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.Canceled) {
-		return stdout.Bytes(), &RunError{Code: "timeout"}
+		return stdout.Bytes(), &RunError{Code: GapTimeout}
 	}
 	var execErr *exec.Error
 	if errors.As(err, &execErr) {
-		return nil, &RunError{Code: "command_missing"}
+		return nil, &RunError{Code: GapCommandMissing}
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) && r.NoMatchExitCode > 0 &&
@@ -77,9 +77,9 @@ func (r ExecRunner) Run(ctx context.Context, program string, args ...string) ([]
 		return []byte{}, nil
 	}
 	if strings.Contains(lower, "permission") || strings.Contains(lower, "not permitted") {
-		return stdout.Bytes(), &RunError{Code: "permission_denied"}
+		return stdout.Bytes(), &RunError{Code: GapPermissionDenied}
 	}
-	return stdout.Bytes(), &RunError{Code: "command_failed"}
+	return stdout.Bytes(), &RunError{Code: GapCommandFailed}
 }
 
 type boundedWriter struct {
@@ -105,21 +105,21 @@ func (w *boundedWriter) Write(p []byte) (int, error) {
 }
 
 func gapForRunError(err error, scope string) CoverageGap {
-	code := "command_failed"
+	code := GapCommandFailed
 	var runErr *RunError
 	if errors.As(err, &runErr) {
 		code = runErr.Code
 	}
 	details := map[string]string{
-		"timeout":           "public platform query did not complete before the collector deadline",
-		"command_missing":   "required public platform query is not installed",
-		"permission_denied": "public platform query was denied by current privileges",
-		"command_failed":    "public platform query failed",
-		"truncated":         "public platform query exceeded the bounded output limit",
+		GapTimeout:          "public platform query did not complete before the collector deadline",
+		GapCommandMissing:   "required public platform query is not installed",
+		GapPermissionDenied: "public platform query was denied by current privileges",
+		GapCommandFailed:    "public platform query failed",
+		GapTruncated:        "public platform query exceeded the bounded output limit",
 	}
 	detail, ok := details[code]
 	if !ok {
-		code = "command_failed"
+		code = GapCommandFailed
 		detail = details[code]
 	}
 	return CoverageGap{Code: code, Scope: scope, Detail: detail}

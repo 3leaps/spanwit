@@ -216,12 +216,12 @@ func CorroborateEngine(ep EngineEndpoint, info EngineInfo, hostname string) (str
 func normalizeArch(a string) string {
 	switch strings.ToLower(a) {
 	case "aarch64", "arm64":
-		return "arm64"
+		return ArchARM64
 	case "x86_64", "amd64":
-		return "amd64"
+		return ArchAMD64
 	case "":
 		return ""
 	default:
-		return "other"
+		return ArchOther
 	}
 }

@@ -48,11 +48,11 @@ func collectHeldOpen(
 	targetTree string,
 ) HeldOpenPlane {
 	if disclosure == "" {
-		disclosure = "none"
+		disclosure = DisclosureNone
 	}
-	privilege := "unprivileged"
+	privilege := PrivilegeUnprivileged
 	if os.Geteuid() == 0 {
-		privilege = "elevated"
+		privilege = PrivilegeElevated
 	}
 	base := HeldOpenPlane{
 		CollectionStatus: StatusUnavailable,
@@ -73,7 +73,7 @@ func collectHeldOpen(
 		plane.CollectionStatus = StatusPartial
 		plane.Coverage.Gaps = append(plane.Coverage.Gaps, heldOpenRunGap(runErr))
 		var typed *RunError
-		if errors.As(runErr, &typed) && typed.Code == "permission_denied" {
+		if errors.As(runErr, &typed) && typed.Code == GapPermissionDenied {
 			// The runner can classify a permission warning, but it cannot
 			// determine whether the denied entity was a process, path, or
 			// object. Leave the process quantity unclaimed.
@@ -86,13 +86,13 @@ func collectHeldOpen(
 func heldOpenRunGap(err error) CoverageGap {
 	gap := gapForRunError(err, "held_open")
 	gap.Detail = map[string]string{
-		"timeout":           "held-open collection did not complete before its deadline",
-		"command_missing":   "the required held-open collector is not installed",
-		"permission_denied": "held-open collection was denied by current privileges",
-		"command_failed":    "held-open collection failed",
-		"truncated":         "held-open command output exceeded its bounded capture; at least one object was omitted",
+		GapTimeout:          "held-open collection did not complete before its deadline",
+		GapCommandMissing:   "the required held-open collector is not installed",
+		GapPermissionDenied: "held-open collection was denied by current privileges",
+		GapCommandFailed:    "held-open collection failed",
+		GapTruncated:        "held-open command output exceeded its bounded capture; at least one object was omitted",
 	}[gap.Code]
-	if gap.Code == "truncated" {
+	if gap.Code == GapTruncated {
 		one := 1
 		gap.OmittedObjects = &one
 	}
@@ -256,7 +256,7 @@ func buildHeldOpenPlane(
 			LogicalBytes: heldOpenClaim(object.size, StatusMeasured),
 			Holders:      holders,
 		}
-		if disclosure == "full" && object.path != "" {
+		if disclosure == DisclosureFull && object.path != "" {
 			entry.Path = discloseHeldOpenPath(object.path)
 		}
 		entries = append(entries, entry)
@@ -333,7 +333,7 @@ func buildHeldOpenPlane(
 		status = StatusPartial
 		count := parsed.parseOmissions
 		gaps = append(gaps, CoverageGap{
-			Code:           "parse_failed",
+			Code:           GapParseFailed,
 			Scope:          "held_open",
 			Detail:         "held-open rows missing required typed identity or size fields were omitted",
 			OmittedObjects: &count,
@@ -342,7 +342,7 @@ func buildHeldOpenPlane(
 	if omittedObjects > 0 || omittedHolders > 0 {
 		status = StatusPartial
 		gap := CoverageGap{
-			Code:   "truncated",
+			Code:   GapTruncated,
 			Scope:  "held_open",
 			Detail: "held-open report entry caps omitted detail; aggregate totals still cover parsed objects",
 		}
@@ -436,24 +436,24 @@ func interfaceGuess(executable string) string {
 func classifyHeldOpenRoot(path, targetTree string) string {
 	path = cleanDeletedPath(path)
 	if withinRoot(path, targetTree) {
-		return "target_tree"
+		return RootClassTargetTree
 	}
 	if home, err := os.UserHomeDir(); err == nil && withinRoot(path, home) {
-		return "user_home"
+		return RootClassUserHome
 	}
 	for _, root := range []string{"/tmp", "/private/tmp", "/private/var/folders"} {
 		if withinRoot(path, root) {
-			return "system_temp"
+			return RootClassSystemTemp
 		}
 	}
 	for _, root := range []string{
 		"/System", "/Library", "/Applications", "/usr", "/bin", "/sbin", "/private/var",
 	} {
 		if withinRoot(path, root) {
-			return "system"
+			return RootClassSystem
 		}
 	}
-	return "other"
+	return RootClassOther
 }
 
 func withinRoot(path, root string) bool {

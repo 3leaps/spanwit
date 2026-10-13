@@ -38,7 +38,7 @@ func (CapacitySampler) Sample(ctx context.Context, path string) (Sample, error) 
 		UsedPercent:  usedPct,
 		Level:        pressureLevel(fs.Available, usedPct),
 		Coverage:     CoverageComplete,
-		Source:       "capacity.SampleFilesystem",
+		Source:       SampleSourceFilesystem,
 		SizeComplete: true,
 	}, nil
 }

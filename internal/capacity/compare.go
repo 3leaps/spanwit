@@ -112,28 +112,28 @@ func Compare(now time.Time, left, right CompareInput) CompareReport {
 	containerOK, containerKnown := sameKnown(left.Accounting.Target.ContainerID, right.Accounting.Target.ContainerID)
 
 	checks := []CompatibilityCheck{
-		identityCheck("platform", platformOK, platformKnown),
-		identityCheck("volume_id", volumeOK, volumeKnown),
-		identityCheck("container_id", containerOK, containerKnown),
+		identityCheck(CheckPlatform, platformOK, platformKnown),
+		identityCheck(CheckVolumeID, volumeOK, volumeKnown),
+		identityCheck(CheckContainerID, containerOK, containerKnown),
 		{
-			Name:   "measurement_semantics",
+			Name:   CheckMeasurementSemantics,
 			OK:     true,
 			Detail: "source and basis compatibility is evaluated per claim",
 		},
-		informationalCheck("capture_mode", left.CaptureMode, right.CaptureMode),
-		informationalCheck("boot_id", left.Accounting.Capture.BootID, right.Accounting.Capture.BootID),
+		informationalCheck(CheckCaptureMode, left.CaptureMode, right.CaptureMode),
+		informationalCheck(CheckBootID, left.Accounting.Capture.BootID, right.Accounting.Capture.BootID),
 		{
-			Name:   "report_version",
+			Name:   CheckReportVersion,
 			OK:     left.ReportVersion == 2 && right.ReportVersion == 2,
 			Detail: fmt.Sprintf("left=%d right=%d", left.ReportVersion, right.ReportVersion),
 		},
 	}
-	compatibilityStatus := "compatible"
+	compatibilityStatus := CompatCompatible
 	if !platformKnown || !volumeKnown || !containerKnown || !volumeOK || !containerOK {
-		compatibilityStatus = "partial"
+		compatibilityStatus = CompatPartial
 	}
 	if platformKnown && !platformOK {
-		compatibilityStatus = "incompatible"
+		compatibilityStatus = CompatIncompatible
 	}
 
 	leftPlanes := left.Accounting.Planes
@@ -143,32 +143,32 @@ func Compare(now time.Time, left, right CompareInput) CompareReport {
 	platformGate := platformOK && platformKnown
 
 	deltas := []PlaneDelta{
-		compareClaim("filesystem", "total",
+		compareClaim(PlaneFilesystem, "total",
 			claimRef{&leftPlanes.Filesystem.Total, leftPlanes.Filesystem.Source},
 			claimRef{&rightPlanes.Filesystem.Total, rightPlanes.Filesystem.Source},
 			filesystemGate, identityGateDetail("platform and volume_id", filesystemGate)),
-		compareClaim("filesystem", "used",
+		compareClaim(PlaneFilesystem, "used",
 			claimRef{&leftPlanes.Filesystem.Used, leftPlanes.Filesystem.Source},
 			claimRef{&rightPlanes.Filesystem.Used, rightPlanes.Filesystem.Source},
 			filesystemGate, identityGateDetail("platform and volume_id", filesystemGate)),
-		compareClaim("filesystem", "available",
+		compareClaim(PlaneFilesystem, "available",
 			claimRef{&leftPlanes.Filesystem.Available, leftPlanes.Filesystem.Source},
 			claimRef{&rightPlanes.Filesystem.Available, rightPlanes.Filesystem.Source},
 			filesystemGate, identityGateDetail("platform and volume_id", filesystemGate)),
-		compareClaim("container", "capacity",
+		compareClaim(PlaneContainer, "capacity",
 			claimRef{leftPlanes.Container.Capacity, leftPlanes.Container.Source},
 			claimRef{rightPlanes.Container.Capacity, rightPlanes.Container.Source},
 			containerGate, identityGateDetail("platform and container_id", containerGate)),
-		compareClaim("container", "free",
+		compareClaim(PlaneContainer, "free",
 			claimRef{leftPlanes.Container.Free, leftPlanes.Container.Source},
 			claimRef{rightPlanes.Container.Free, rightPlanes.Container.Source},
 			containerGate, identityGateDetail("platform and container_id", containerGate)),
-		compareClaim("volumes", "target.capacity_in_use",
+		compareClaim(PlaneVolumes, "target.capacity_in_use",
 			targetVolumeClaim(leftPlanes.Volumes),
 			targetVolumeClaim(rightPlanes.Volumes),
 			containerGate,
 			identityGateDetail("platform and container_id", containerGate)),
-		compareClaim("snapshots", "bytes",
+		compareClaim(PlaneSnapshots, "bytes",
 			claimRef{leftPlanes.Snapshots.Bytes, leftPlanes.Snapshots.Source},
 			claimRef{rightPlanes.Snapshots.Bytes, rightPlanes.Snapshots.Source},
 			containerGate, identityGateDetail("platform and container_id", containerGate)),
@@ -177,7 +177,7 @@ func Compare(now time.Time, left, right CompareInput) CompareReport {
 	managedIDs := unionManagedIDs(leftPlanes.SystemManaged, rightPlanes.SystemManaged)
 	for _, id := range managedIDs {
 		deltas = append(deltas, compareClaim(
-			"system_managed",
+			PlaneSystemManaged,
 			id+".allocated",
 			managedClaim(leftPlanes.SystemManaged, id),
 			managedClaim(rightPlanes.SystemManaged, id),
@@ -203,8 +203,8 @@ func Compare(now time.Time, left, right CompareInput) CompareReport {
 	if !semanticsOK {
 		checks[3].OK = false
 		checks[3].Detail = "one or more comparable claims use different source or basis semantics"
-		if compatibilityStatus == "compatible" {
-			compatibilityStatus = "partial"
+		if compatibilityStatus == CompatCompatible {
+			compatibilityStatus = CompatPartial
 		}
 	}
 
@@ -218,7 +218,7 @@ func Compare(now time.Time, left, right CompareInput) CompareReport {
 	unavailable := make([]string, 0)
 	for _, delta := range deltas {
 		name := delta.Plane + "." + delta.Field
-		if delta.DeltaStatus == "exact" && delta.DeltaBytes != nil {
+		if delta.DeltaStatus == DeltaExact && delta.DeltaBytes != nil {
 			known = append(known, fmt.Sprintf(
 				"%s changed by %+d bytes (right minus left)",
 				name,
@@ -322,12 +322,12 @@ func compareClaim(
 	delta := PlaneDelta{
 		Plane:       plane,
 		Field:       field,
-		DeltaStatus: "indeterminate",
+		DeltaStatus: DeltaIndeterminate,
 	}
 	copyClaimEndpoint(&delta, left, true)
 	copyClaimEndpoint(&delta, right, false)
 	if !gate {
-		delta.DeltaStatus = "incomparable"
+		delta.DeltaStatus = DeltaIncomparable
 		delta.Detail = stringPointer(gateDetail)
 		return delta
 	}
@@ -348,17 +348,17 @@ func compareClaim(
 		return delta
 	}
 	if left.claim.Basis != right.claim.Basis || leftSource != rightSource {
-		delta.DeltaStatus = "incomparable"
+		delta.DeltaStatus = DeltaIncomparable
 		delta.Detail = stringPointer("claim source or basis differs")
 		return delta
 	}
-	if left.claim.Bound != "exact" || right.claim.Bound != "exact" {
+	if left.claim.Bound != BoundExact || right.claim.Bound != BoundExact {
 		delta.Detail = stringPointer("non-exact endpoints cannot produce a numeric delta")
 		return delta
 	}
 	value := *right.claim.Bytes - *left.claim.Bytes
 	delta.DeltaBytes = &value
-	delta.DeltaStatus = "exact"
+	delta.DeltaStatus = DeltaExact
 	return delta
 }
 
@@ -427,7 +427,7 @@ func managedClaim(plane SystemManagedPlane, id string) claimRef {
 func compareHeldOpenClaim(left, right HeldOpenPlane, platformGate bool) PlaneDelta {
 	if !platformGate {
 		return compareClaim(
-			"held_open",
+			PlaneHeldOpen,
 			"logical_bytes",
 			claimRef{left.LogicalBytes, left.Source},
 			claimRef{right.LogicalBytes, right.Source},
@@ -436,7 +436,7 @@ func compareHeldOpenClaim(left, right HeldOpenPlane, platformGate bool) PlaneDel
 		)
 	}
 	delta := compareClaim(
-		"held_open",
+		PlaneHeldOpen,
 		"logical_bytes",
 		claimRef{left.LogicalBytes, left.Source},
 		claimRef{right.LogicalBytes, right.Source},
@@ -444,19 +444,19 @@ func compareHeldOpenClaim(left, right HeldOpenPlane, platformGate bool) PlaneDel
 		"",
 	)
 	if left.CollectionStatus == StatusNotRequested || right.CollectionStatus == StatusNotRequested {
-		delta.DeltaStatus = "indeterminate"
+		delta.DeltaStatus = DeltaIndeterminate
 		delta.DeltaBytes = nil
 		delta.Detail = stringPointer("held-open collection was not requested on one or both inputs")
 		return delta
 	}
 	if left.CollectionStatus != StatusMeasured || right.CollectionStatus != StatusMeasured {
-		delta.DeltaStatus = "indeterminate"
+		delta.DeltaStatus = DeltaIndeterminate
 		delta.DeltaBytes = nil
 		delta.Detail = stringPointer("held-open collection is partial or unavailable on one or both inputs")
 		return delta
 	}
 	if left.Privilege != right.Privilege {
-		delta.DeltaStatus = "indeterminate"
+		delta.DeltaStatus = DeltaIndeterminate
 		delta.DeltaBytes = nil
 		delta.Detail = stringPointer("held-open privilege differs between inputs")
 	}
@@ -470,12 +470,12 @@ func planeNotes(planes Planes) []string {
 		coverage Coverage
 	}
 	states := []planeState{
-		{"filesystem", planes.Filesystem.CollectionStatus, planes.Filesystem.Coverage},
-		{"container", planes.Container.CollectionStatus, planes.Container.Coverage},
-		{"volumes", planes.Volumes.CollectionStatus, planes.Volumes.Coverage},
-		{"snapshots", planes.Snapshots.CollectionStatus, planes.Snapshots.Coverage},
-		{"system_managed", planes.SystemManaged.CollectionStatus, planes.SystemManaged.Coverage},
-		{"held_open", planes.HeldOpen.CollectionStatus, planes.HeldOpen.Coverage},
+		{PlaneFilesystem, planes.Filesystem.CollectionStatus, planes.Filesystem.Coverage},
+		{PlaneContainer, planes.Container.CollectionStatus, planes.Container.Coverage},
+		{PlaneVolumes, planes.Volumes.CollectionStatus, planes.Volumes.Coverage},
+		{PlaneSnapshots, planes.Snapshots.CollectionStatus, planes.Snapshots.Coverage},
+		{PlaneSystemManaged, planes.SystemManaged.CollectionStatus, planes.SystemManaged.Coverage},
+		{PlaneHeldOpen, planes.HeldOpen.CollectionStatus, planes.HeldOpen.Coverage},
 	}
 	notes := make([]string, 0)
 	for _, state := range states {
@@ -503,12 +503,12 @@ func asymmetricPlanes(left, right Planes) []string {
 		rightStatus string
 	}
 	pairs := []pair{
-		{"filesystem", left.Filesystem.CollectionStatus, right.Filesystem.CollectionStatus},
-		{"container", left.Container.CollectionStatus, right.Container.CollectionStatus},
-		{"volumes", left.Volumes.CollectionStatus, right.Volumes.CollectionStatus},
-		{"snapshots", left.Snapshots.CollectionStatus, right.Snapshots.CollectionStatus},
-		{"system_managed", left.SystemManaged.CollectionStatus, right.SystemManaged.CollectionStatus},
-		{"held_open", left.HeldOpen.CollectionStatus, right.HeldOpen.CollectionStatus},
+		{PlaneFilesystem, left.Filesystem.CollectionStatus, right.Filesystem.CollectionStatus},
+		{PlaneContainer, left.Container.CollectionStatus, right.Container.CollectionStatus},
+		{PlaneVolumes, left.Volumes.CollectionStatus, right.Volumes.CollectionStatus},
+		{PlaneSnapshots, left.Snapshots.CollectionStatus, right.Snapshots.CollectionStatus},
+		{PlaneSystemManaged, left.SystemManaged.CollectionStatus, right.SystemManaged.CollectionStatus},
+		{PlaneHeldOpen, left.HeldOpen.CollectionStatus, right.HeldOpen.CollectionStatus},
 	}
 	result := make([]string, 0)
 	for _, item := range pairs {
@@ -520,12 +520,12 @@ func asymmetricPlanes(left, right Planes) []string {
 		name        string
 		left, right Coverage
 	}{
-		{"filesystem", left.Filesystem.Coverage, right.Filesystem.Coverage},
-		{"container", left.Container.Coverage, right.Container.Coverage},
-		{"volumes", left.Volumes.Coverage, right.Volumes.Coverage},
-		{"snapshots", left.Snapshots.Coverage, right.Snapshots.Coverage},
-		{"system_managed", left.SystemManaged.Coverage, right.SystemManaged.Coverage},
-		{"held_open", left.HeldOpen.Coverage, right.HeldOpen.Coverage},
+		{PlaneFilesystem, left.Filesystem.Coverage, right.Filesystem.Coverage},
+		{PlaneContainer, left.Container.Coverage, right.Container.Coverage},
+		{PlaneVolumes, left.Volumes.Coverage, right.Volumes.Coverage},
+		{PlaneSnapshots, left.Snapshots.Coverage, right.Snapshots.Coverage},
+		{PlaneSystemManaged, left.SystemManaged.Coverage, right.SystemManaged.Coverage},
+		{PlaneHeldOpen, left.HeldOpen.Coverage, right.HeldOpen.Coverage},
 	}
 	for _, item := range coveragePairs {
 		if !sameCoverageShape(item.left, item.right) && !containsString(result, item.name) {
@@ -534,8 +534,8 @@ func asymmetricPlanes(left, right Planes) []string {
 	}
 	if left.HeldOpen.Privilege != right.HeldOpen.Privilege &&
 		left.HeldOpen.Privilege != "" && right.HeldOpen.Privilege != "" &&
-		!containsString(result, "held_open") {
-		result = append(result, "held_open")
+		!containsString(result, PlaneHeldOpen) {
+		result = append(result, PlaneHeldOpen)
 	}
 	return result
 }
@@ -603,7 +603,7 @@ func compareRuntime(left, right *RuntimeClaims, platformGate bool) []PlaneDelta 
 	out := make([]PlaneDelta, 0, len(order))
 	for _, f := range order {
 		pair := fields[f]
-		out = append(out, compareClaim("container_runtime", f,
+		out = append(out, compareClaim(PlaneContainerRuntime, f,
 			claimRef{claim: pair[0]}, claimRef{claim: pair[1]}, gate, detail))
 	}
 	return out
