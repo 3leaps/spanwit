@@ -239,19 +239,19 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 				}
 				return nil
 			}
-			if !d.IsDir() {
+			// A symlink is never admitted or descended, whatever it points at.
+			// filepath.WalkDir reports a symlink with fs.ModeSymlink and does
+			// not descend it; this check runs first, before any other use of
+			// the entry, so the guarantee holds for file- and directory-type
+			// links alike and stays testable.
+			if d.Type()&os.ModeSymlink != 0 {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
 				return nil
 			}
-			// filepath.WalkDir does not follow symlinks: a symlink (even one
-			// pointing at a directory) is reported with fs.ModeSymlink set and is
-			// NOT descended into. The IsDir() guard above therefore already skips
-			// symlinked "directories" (d.IsDir() is false for a symlink), so this
-			// explicit ModeSymlink SkipDir is defense-in-depth: it keeps discovery
-			// symlink-strict even if the entry type is reported differently, and
-			// documents the guarantee so it cannot silently vanish if the walker
-			// changes. A symlinked target/ is never admitted as a candidate.
-			if d.Type()&os.ModeSymlink != 0 {
-				return filepath.SkipDir
+			if !d.IsDir() {
+				return nil
 			}
 			if path == root {
 				return nil
@@ -283,6 +283,10 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 			}
 
 			effMinSize, effMinAge, effMaxAge := resolveFilterStrings(target, profile, cfg.Defaults)
+			// A signature age floor is a minimum the configured window can raise
+			// but never lower; it applies by path match, whatever the target's
+			// provenance, so a pattern-only target cannot escape it.
+			effMinAge = raiseMinAge(effMinAge, ageFloorFor(rel, signatures))
 			minSize, err := ParseSize(displayFilterRaw(effMinSize))
 			if err != nil {
 				return fmt.Errorf("invalid min_size %q: %w", effMinSize, err)
@@ -362,10 +366,14 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 				return filepath.SkipDir
 			}
 
-			// Whole-target mode: age window on the matched path itself.
+			// Whole-target mode: age window on the matched path itself. Under an
+			// age floor the newest activity beneath the path decides, and an
+			// incomplete activity read withholds (an in-flight write is new).
 			state := CandidateStatePrunable
 			withheldReason := ""
-			if !meetsAgeWindow(effMinAge, effMaxAge, info.ModTime(), time.Now()) {
+			now := time.Now()
+			if !meetsAgeWindow(effMinAge, effMaxAge, info.ModTime(), now) ||
+				(ageFloorFor(rel, signatures) != "" && !floorAgeOK(path, effMinAge, now)) {
 				state = CandidateStateWithheld
 				withheldReason = WithheldReasonAge
 			}
@@ -520,6 +528,12 @@ func matchingTarget(root string, path string, rel string, targets []config.Targe
 			return target, signature, evidence, true
 		}
 		if target.Pattern != "" && matchesPattern(rel, target.Pattern) {
+			// A pattern-only target carries no evidence. On a path a guarded
+			// signature covers (sibling, marker or age-floor evidence), it is
+			// refused: the path is reclaimable only through that signature.
+			if guardedSignatureCovers(rel, signatures) {
+				continue
+			}
 			return target, config.Signature{}, []string{"pattern:" + target.Pattern}, true
 		}
 	}
@@ -577,6 +591,20 @@ func signatureEvidence(root string, path string, signature config.Signature) ([]
 		} else {
 			return evidence, false
 		}
+	}
+	if len(signature.SiblingEvidence) > 0 {
+		found, ok := siblingEvidence(root, path, signature)
+		if !ok {
+			return evidence, false
+		}
+		evidence = append(evidence, "sibling:"+found)
+	}
+	if signature.ContentMarker != nil {
+		found, ok := contentMarkerEvidence(path, signature.ContentMarker)
+		if !ok {
+			return evidence, false
+		}
+		evidence = append(evidence, "marker:"+found)
 	}
 	if len(signature.AnyChildPaths) > 0 {
 		for _, child := range signature.AnyChildPaths {
@@ -715,6 +743,38 @@ func sizeCandidateJobs(ctx context.Context, jobs []CandidateJob, sizeMaxDepth in
 				mu.Lock()
 				if err != nil {
 					warnings = append(warnings, err)
+					// A job already withheld (for example by an age floor whose
+					// activity read could not finish) stays visible with an
+					// unknown size: it can never be deleted, and dropping it would
+					// hide an in-flight download. Unsizable prunable jobs are still
+					// dropped, so nothing unmeasured becomes deletable.
+					if job.State == CandidateStateWithheld {
+						scope := job.ReclaimScope
+						if scope == "" {
+							scope = ReclaimScopeWhole
+						}
+						candidates = append(candidates, PruneCandidate{
+							Path:                  job.Path,
+							SizeIncomplete:        true,
+							State:                 job.State,
+							WithheldReason:        job.WithheldReason,
+							Pattern:               job.Pattern,
+							Signature:             job.Signature,
+							Confidence:            job.Confidence,
+							Evidence:              job.Evidence,
+							EffectiveMinSize:      job.EffectiveMinSize,
+							EffectiveMinAge:       job.EffectiveMinAge,
+							EffectiveMaxAge:       job.EffectiveMaxAge,
+							ActivityBasis:         ActivityBasisUnknown,
+							ActivityIncomplete:    true,
+							RebuildExpectation:    DeriveRebuildExpectation(time.Time{}, true, time.Now()),
+							ReclaimScope:          scope,
+							ParentPath:            job.ParentPath,
+							AuthorizationBoundary: job.AuthorizationBoundary,
+							ContainmentRelation:   job.ContainmentRelation,
+							ProvenanceKind:        job.ProvenanceKind,
+						})
+					}
 				} else {
 					state := job.State
 					withheldReason := job.WithheldReason
@@ -898,28 +958,5 @@ func meetsAgeWindow(minAgeDisplay, maxAgeDisplay string, modTime time.Time, now 
 }
 
 func parseAge(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, nil
-	}
-	unit := s[len(s)-1]
-	value := s[:len(s)-1]
-	var n int64
-	if _, err := fmt.Sscanf(value, "%d", &n); err != nil {
-		return 0, err
-	}
-	switch unit {
-	case 's':
-		return time.Duration(n) * time.Second, nil
-	case 'm':
-		return time.Duration(n) * time.Minute, nil
-	case 'h':
-		return time.Duration(n) * time.Hour, nil
-	case 'd':
-		return time.Duration(n) * 24 * time.Hour, nil
-	case 'w':
-		return time.Duration(n) * 7 * 24 * time.Hour, nil
-	default:
-		return 0, fmt.Errorf("unsupported age unit %q", unit)
-	}
+	return config.ParseAge(s)
 }

@@ -38,7 +38,7 @@ entries:
     rebuild_expectation: high
     signature: development.rust.cargo-target
     description: >-
-      Cargo build output (target/ next to Cargo.toml). Context-verified and safe_to_prune; the only prunable-ceiling entry, backed by a registered signature. Discovered under an analysis root, not a home cache.
+      Cargo build output (target/ next to Cargo.toml). Context-verified and safe_to_prune, backed by a registered signature. Discovered under an analysis root, not a home cache.
   - id: development.rust.rustup
     label: Rustup toolchains
     class_ceiling: diagnostic-only
@@ -60,6 +60,13 @@ entries:
         rel_home: .cargo
     description: Cargo registry index, source cache, and git checkouts.
   # --- development.go ---
+  - id: development.go.repo-local-gocache
+    label: Repo-local Go build cache
+    class_ceiling: prunable
+    rebuild_expectation: high
+    signature: development.go.repo-local-gocache
+    description: >-
+      A .gocache directory under a go.mod, verified by the README marker Go writes in its build cache. Context-verified and safe_to_prune; on by default. Exclude with --domain if a repo relies on a warm local cache.
   - id: development.go.go-pkg
     label: Go module cache (GOPATH/pkg)
     class_ceiling: diagnostic-only
@@ -152,6 +159,13 @@ entries:
         rel_home: Library/Caches/virtualenv
     description: virtualenv seed wheels (macOS). Environments are not caches; this entry covers seed packages only and never a venv itself.
   # --- development.security ---
+  - id: development.security.grype-db-download
+    label: grype database download residue
+    class_ceiling: prunable
+    rebuild_expectation: high
+    signature: development.security.grype-db-download
+    description: >-
+      A grype-db-download* partial download beside a live db/<N> whose import.json and vulnerability.db are plain files. Withheld for age until at least 1h old. Context-verified and safe_to_prune; on by default. grype re-downloads its database (about 200 MB) if needed.
   - id: development.security.grype
     label: grype DB cache
     class_ceiling: diagnostic-only

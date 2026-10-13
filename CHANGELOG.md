@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **New reclaim signatures, on by default**: `space` and `prune` recognize
+  grype database download residue and repo-local Go build caches as
+  verified, prunable candidates.
+  - `development.security.grype-db-download` admits a
+    `grype-db-download*` directory only beside a live numeric `db/<N>`
+    whose `import.json` and `vulnerability.db` are plain files. A download
+    younger than 1h is reported withheld for age, never prunable.
+  - `development.go.repo-local-gocache` admits a `.gocache` only under a
+    `go.mod`, and only when it holds the README Go writes in its build cache.
+  - Symlinks never count as evidence. Both rules are marked
+    `rebuild_expectation: high` and can be excluded with `--domain`.
+  - A user config that reuses a built-in signature id keeps that
+    signature's evidence and age floor: it can tighten the rule, never
+    loosen it.
+
 - **Container engine headroom**: `space --containers` adds an opt-in
   `container_runtime` section: the engine (colima, Docker Desktop, OrbStack,
   podman, native Linux), its data-disk fill, storage by kind (images with
@@ -30,6 +45,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- A withheld candidate whose size cannot be measured (for example an
+  unreadable subdirectory) is now listed as withheld with an unknown size
+  instead of being dropped. It is never prunable; an unmeasurable prunable
+  candidate is still left out.
+
 - The colima/lima VM disk recipe now starts with
   `spanwit space --capacity-only --containers --probe-vm` and no longer
   suggests `docker image prune -a` as an early step.
@@ -37,6 +57,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   index digest; bootstrap installs goneat v0.6.3.
 
 ### Fixed
+
+- Exact-plan revalidation matches signature patterns against the path
+  relative to the plan's analysis root, so path-anchored patterns revalidate.
+  An exact plan cannot lower a signature's age floor, and a pattern-only
+  entry that matches a floored signature is refused.
 
 - statfs block counts convert through a checked helper that refuses values
   outside int64, instead of wrapping to a wrong size.

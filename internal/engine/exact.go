@@ -174,9 +174,11 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 			}
 			evidence = append(append([]string{}, evidence...), "reclaim_scope:incremental", "parent:"+parentAbs)
 		} else if e.Signature != "" {
-			// Revalidate against the *same* signature identity only.
+			// Revalidate against the *same* signature identity only. Patterns
+			// match the path relative to the carried analysis_root, as in
+			// BuildPrunePlan, so path-anchored patterns revalidate correctly.
 			parent := filepath.Dir(abs)
-			rel := filepath.ToSlash(filepath.Base(abs))
+			rel := exactRel(analysisRoot, abs)
 			sig, found := signatures.Lookup(e.Signature)
 			if !found {
 				plan.Warnings = append(plan.Warnings, fmt.Errorf(
@@ -193,7 +195,15 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 			}
 		} else if e.Pattern != "" {
 			parent := filepath.Dir(abs)
-			rel := filepath.ToSlash(filepath.Base(abs))
+			rel := exactRel(analysisRoot, abs)
+			// A pattern-only entry carries no signature evidence. If its path
+			// matches a signature that declares an age floor, refuse it rather
+			// than admit it without that signature's floor and evidence.
+			if guardedSignatureCovers(rel, signatures) {
+				plan.Warnings = append(plan.Warnings, fmt.Errorf(
+					"exact-plan path %s: pattern-only entry matches a signature with evidence or an age floor; use the signature (not included)", abs))
+				continue
+			}
 			target = config.Target{Pattern: e.Pattern}
 			target, signature, evidence, ok = matchingTarget(parent, abs, rel, []config.Target{target}, signatures)
 			if !ok {
@@ -212,7 +222,9 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 			return plan, fmt.Errorf("exact-plan path %s: missing effective filter provenance (min_size/min_age/max_age required)", abs)
 		}
 		effMinSize := e.EffectiveMinSize
-		effMinAge := e.EffectiveMinAge
+		// The signature age floor comes from the catalog, never from the plan
+		// file: a plan carrying effective_min_age "none" cannot lower it.
+		effMinAge := raiseMinAge(e.EffectiveMinAge, ageFloorFor(exactRel(analysisRoot, abs), signatures))
 		effMaxAge := e.EffectiveMaxAge
 		minSize, err := ParseSize(displayFilterRaw(effMinSize))
 		if err != nil {
@@ -221,7 +233,9 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 
 		state := CandidateStatePrunable
 		withheldReason := ""
-		if !meetsAgeWindow(effMinAge, effMaxAge, info.ModTime(), time.Now()) {
+		now := time.Now()
+		if !meetsAgeWindow(effMinAge, effMaxAge, info.ModTime(), now) ||
+			(ageFloorFor(exactRel(analysisRoot, abs), signatures) != "" && !floorAgeOK(abs, effMinAge, now)) {
 			state = CandidateStateWithheld
 			withheldReason = WithheldReasonAge
 		}
@@ -299,4 +313,15 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 		plan.ReclaimScope = scope
 	}
 	return plan, nil
+}
+
+// exactRel is the slash path of abs relative to the carried analysis root,
+// falling back to the basename if abs is not under it (containment is
+// checked separately and refuses such entries).
+func exactRel(analysisRoot, abs string) string {
+	rel, err := filepath.Rel(analysisRoot, abs)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return filepath.ToSlash(filepath.Base(abs))
+	}
+	return filepath.ToSlash(rel)
 }
