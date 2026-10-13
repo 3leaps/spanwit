@@ -71,6 +71,10 @@ const (
 	BoundExact = "exact"
 	BoundLower = "lower"
 	BoundUpper = "upper"
+
+	ArchAMD64 = "amd64"
+	ArchARM64 = "arm64"
+	ArchOther = "other"
 )
 
 // ContainerRuntime is the container_runtime section of the space report.

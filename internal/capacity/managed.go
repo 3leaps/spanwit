@@ -50,7 +50,7 @@ func MeasureManagedRoot(ctx context.Context, root string, maxObjects int) Manage
 		if err := ctx.Err(); err != nil {
 			result.Complete = false
 			result.Gaps = append(result.Gaps, CoverageGap{
-				Code:   "timeout",
+				Code:   GapTimeout,
 				Scope:  "system_managed",
 				Detail: "managed-root measurement did not complete before the collector deadline",
 			})
@@ -71,7 +71,7 @@ func MeasureManagedRoot(ctx context.Context, root string, maxObjects int) Manage
 					_ = dir.Close()
 					result.Complete = false
 					result.Gaps = append(result.Gaps, CoverageGap{
-						Code:   "truncated",
+						Code:   GapTruncated,
 						Scope:  "system_managed",
 						Detail: "managed-root object limit reached",
 					})
@@ -102,7 +102,7 @@ func MeasureManagedRoot(ctx context.Context, root string, maxObjects int) Manage
 			if err := ctx.Err(); err != nil {
 				result.Complete = false
 				result.Gaps = append(result.Gaps, CoverageGap{
-					Code:   "timeout",
+					Code:   GapTimeout,
 					Scope:  "system_managed",
 					Detail: "managed-root measurement did not complete before the collector deadline",
 				})
@@ -170,10 +170,10 @@ func collectManagedRoots(
 }
 
 func managedGap(err error, scope string) CoverageGap {
-	code := "command_failed"
+	code := GapCommandFailed
 	detail := "managed-root entry could not be measured"
 	if errors.Is(err, os.ErrPermission) {
-		code = "permission_denied"
+		code = GapPermissionDenied
 		detail = "managed-root entry was denied by current privileges"
 	}
 	one := 1

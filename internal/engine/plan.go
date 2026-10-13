@@ -19,6 +19,10 @@ import (
 // Candidate execution states. A match is discovered independently of whether it
 // is eligible for deletion: discovery and execution-eligibility are separate
 // states.
+// ConfidencePattern marks a name-only match with no signature confidence.
+// Other confidence values come from signature configuration.
+const ConfidencePattern = "pattern"
+
 const (
 	// CandidateStatePrunable marks a match that --execute may delete.
 	CandidateStatePrunable = "prunable"
@@ -283,7 +287,7 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 			if err != nil {
 				return fmt.Errorf("invalid min_size %q: %w", effMinSize, err)
 			}
-			confidence := "pattern"
+			confidence := ConfidencePattern
 			pattern := target.Pattern
 			if target.Signature != "" {
 				confidence = signature.Confidence

@@ -12,6 +12,76 @@ const (
 	ManagedPolicy = "diagnostic_only_never_prune_handoff"
 )
 
+// Coverage gap codes, shared by CoverageGap.Code and RunError.Code.
+const (
+	GapPermissionDenied = "permission_denied"
+	GapCommandMissing   = "command_missing"
+	GapCommandFailed    = "command_failed"
+	GapParseFailed      = "parse_failed"
+	GapTimeout          = "timeout"
+	GapTruncated        = "truncated"
+)
+
+// Byte claim bounds.
+const (
+	BoundExact   = "exact"
+	BoundLower   = "lower"
+	BoundUpper   = "upper"
+	BoundUnknown = "unknown"
+)
+
+// Held-open collector privilege and disclosure.
+const (
+	PrivilegeUnprivileged = "unprivileged"
+	PrivilegeElevated     = "elevated"
+
+	DisclosureNone = "none"
+	DisclosureFull = "full"
+)
+
+// Held-open object root classes.
+const (
+	RootClassTargetTree = "target_tree"
+	RootClassUserHome   = "user_home"
+	RootClassSystemTemp = "system_temp"
+	RootClassSystem     = "system"
+	RootClassOther      = "other"
+)
+
+// System-managed remediation.
+const (
+	RemediationNoneSupported       = "none_supported"
+	RemediationOSOrUpdateMechanism = "os_or_update_mechanism"
+	RemediationUnknown             = "unknown"
+)
+
+// Compare vocabulary.
+const (
+	DeltaExact         = "exact"
+	DeltaIndeterminate = "indeterminate"
+	DeltaIncomparable  = "incomparable"
+
+	CompatCompatible   = "compatible"
+	CompatIncompatible = "incompatible"
+	CompatPartial      = "partial"
+
+	PlaneFilesystem       = "filesystem"
+	PlaneContainer        = "container"
+	PlaneVolumes          = "volumes"
+	PlaneSnapshots        = "snapshots"
+	PlaneSystemManaged    = "system_managed"
+	PlaneHeldOpen         = "held_open"
+	PlaneContainerRuntime = "container_runtime"
+
+	CheckPlatform             = "platform"
+	CheckVolumeID             = "volume_id"
+	CheckContainerID          = "container_id"
+	CheckMeasurementSemantics = "measurement_semantics"
+	CheckCaptureMode          = "capture_mode"
+	CheckBootID               = "boot_id"
+	CheckReportVersion        = "report_version"
+)
+
 // FilesystemSample is one portable filesystem observation. Callers may project
 // it into other carriers, but must not resample when claiming same_observation.
 type FilesystemSample struct {

@@ -196,7 +196,7 @@ func (c Collector) Collect(ctx context.Context, req Request) (Result, error) {
 			roots = []ManagedRoot{{
 				ID:          "apple_assets_v2",
 				Path:        "/System/Library/AssetsV2",
-				Remediation: "os_or_update_mechanism",
+				Remediation: RemediationOSOrUpdateMechanism,
 			}}
 		}
 		measurer := c.ManagedRootMeasurer
@@ -264,14 +264,14 @@ func validateSessionBoundary(value string) error {
 }
 
 func gapForFilesystemError(err error, scope string) CoverageGap {
-	code := "command_failed"
+	code := GapCommandFailed
 	detail := "filesystem observation failed"
 	switch {
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
-		code = "timeout"
+		code = GapTimeout
 		detail = "filesystem observation did not complete within the capacity context budget"
 	case errors.Is(err, os.ErrPermission):
-		code = "permission_denied"
+		code = GapPermissionDenied
 		detail = "filesystem observation was denied by current privileges"
 	}
 	return CoverageGap{Code: code, Scope: scope, Detail: detail}
@@ -279,7 +279,7 @@ func gapForFilesystemError(err error, scope string) CoverageGap {
 
 func deadlineGap(scope, detail string) CoverageGap {
 	return CoverageGap{
-		Code:   "timeout",
+		Code:   GapTimeout,
 		Scope:  scope,
 		Detail: detail,
 	}

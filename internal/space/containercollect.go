@@ -300,7 +300,7 @@ func foreignPlatformBucket(snap engineSnapshot, engineArch string, refs *[]Runti
 		}
 		return RuntimeBucket{Kind: BucketForeignPlatform, Status: ProbeUnavailable, Reason: reason}
 	}
-	if engineArch == "" || engineArch == "other" {
+	if engineArch == "" || engineArch == ArchOther {
 		return RuntimeBucket{Kind: BucketForeignPlatform, Status: ProbeUnavailable, Reason: ReasonUnsupportedEngine}
 	}
 	withManifests := 0

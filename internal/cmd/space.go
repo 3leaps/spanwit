@@ -260,11 +260,11 @@ func runSpace(identity *appidentity.Identity, stdout, stderr io.Writer, opts spa
 		_, _ = fmt.Fprintln(stderr, "Error: --disclose requires --held-open")
 		return 3
 	}
-	disclosure := "none"
+	disclosure := capacity.DisclosureNone
 	switch opts.disclose {
 	case "", "none":
 	case "paths":
-		disclosure = "full"
+		disclosure = capacity.DisclosureFull
 	default:
 		_, _ = fmt.Fprintf(stderr, "Error: unsupported --disclose %q (use none|paths)\n", opts.disclose)
 		return 3

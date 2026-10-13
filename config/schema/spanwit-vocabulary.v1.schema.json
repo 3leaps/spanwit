@@ -1,0 +1,442 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/vocabulary/v1.json",
+  "title": "spanwit closed vocabularies",
+  "description": "Single source of truth for spanwit closed vocabularies. Report schemas inline these enums (self-contained); tests require every inline enum to equal or be a declared subset of one vocabulary here, and Go constants in internal/vocab to equal it.",
+  "$defs": {
+    "activity_basis": {
+      "type": "string",
+      "description": "Evidence used for last activity.",
+      "enum": [
+        "descendant_mtime",
+        "unknown"
+      ]
+    },
+    "byte_bound": {
+      "type": "string",
+      "description": "Direction of a byte figure.",
+      "enum": [
+        "exact",
+        "lower",
+        "upper",
+        "unknown"
+      ]
+    },
+    "byte_status": {
+      "type": "string",
+      "description": "Measurement status of a figure; each site allows a declared subset.",
+      "enum": [
+        "measured",
+        "partial",
+        "unavailable",
+        "unsupported",
+        "not_requested",
+        "not_probed",
+        "indeterminate"
+      ]
+    },
+    "capture_mode": {
+      "type": "string",
+      "description": "SpaceReport v2 capture mode.",
+      "enum": [
+        "full",
+        "capacity_only"
+      ]
+    },
+    "compare_check": {
+      "type": "string",
+      "description": "Compare compatibility check name.",
+      "enum": [
+        "platform",
+        "volume_id",
+        "container_id",
+        "measurement_semantics",
+        "capture_mode",
+        "boot_id",
+        "report_version"
+      ]
+    },
+    "compare_compatibility": {
+      "type": "string",
+      "description": "Overall compare compatibility.",
+      "enum": [
+        "compatible",
+        "incompatible",
+        "partial"
+      ]
+    },
+    "compare_plane": {
+      "type": "string",
+      "description": "Plane a compare delta belongs to.",
+      "enum": [
+        "filesystem",
+        "container",
+        "volumes",
+        "snapshots",
+        "system_managed",
+        "held_open",
+        "container_runtime"
+      ]
+    },
+    "completion_lifecycle": {
+      "type": "string",
+      "description": "Whether the capture finished without coverage warnings.",
+      "enum": [
+        "complete",
+        "partial"
+      ]
+    },
+    "confidence": {
+      "type": "string",
+      "description": "Prune-plan match confidence; pattern means name-only.",
+      "enum": [
+        "high",
+        "medium",
+        "low",
+        "pattern"
+      ]
+    },
+    "cost_class": {
+      "type": "string",
+      "description": "Cost of a relief step.",
+      "enum": [
+        "none",
+        "rebuild",
+        "re_pull",
+        "data_loss_risk"
+      ]
+    },
+    "coverage_gap_code": {
+      "type": "string",
+      "description": "Why a capacity plane has a gap.",
+      "enum": [
+        "permission_denied",
+        "command_missing",
+        "command_failed",
+        "parse_failed",
+        "timeout",
+        "truncated"
+      ]
+    },
+    "delta_status": {
+      "type": "string",
+      "description": "Whether a compare delta is numeric.",
+      "enum": [
+        "exact",
+        "indeterminate",
+        "incomparable"
+      ]
+    },
+    "engine": {
+      "type": "string",
+      "description": "Container engine behind the docker endpoint.",
+      "enum": [
+        "colima",
+        "docker-desktop",
+        "orbstack",
+        "podman",
+        "native",
+        "unknown",
+        "none"
+      ]
+    },
+    "engine_arch": {
+      "type": "string",
+      "description": "Engine architecture.",
+      "enum": [
+        "amd64",
+        "arm64",
+        "other"
+      ]
+    },
+    "engine_detection": {
+      "type": "string",
+      "description": "Engine detection outcome.",
+      "enum": [
+        "identified",
+        "unidentified",
+        "unavailable"
+      ]
+    },
+    "engine_detection_basis": {
+      "type": "string",
+      "description": "Evidence used to identify the engine.",
+      "enum": [
+        "endpoint_path",
+        "engine_info"
+      ]
+    },
+    "guest_basis": {
+      "type": "string",
+      "description": "How the engine data disk was measured.",
+      "enum": [
+        "guest_statfs",
+        "host_statfs",
+        "none"
+      ]
+    },
+    "held_open_disclosure": {
+      "type": "string",
+      "description": "Held-open path disclosure.",
+      "enum": [
+        "none",
+        "full"
+      ]
+    },
+    "held_open_root_class": {
+      "type": "string",
+      "description": "Root class of a held-open object.",
+      "enum": [
+        "target_tree",
+        "user_home",
+        "system_temp",
+        "system",
+        "other"
+      ]
+    },
+    "mutation_contract": {
+      "type": "string",
+      "description": "Invocation no-mutation assertion.",
+      "enum": [
+        "open",
+        "read_only"
+      ]
+    },
+    "observe_coverage": {
+      "type": "string",
+      "description": "Observe sample coverage.",
+      "enum": [
+        "complete",
+        "partial",
+        "degraded",
+        "incomparable",
+        "indeterminate",
+        "unavailable"
+      ]
+    },
+    "observe_loss": {
+      "type": "string",
+      "description": "Observe loss cause.",
+      "enum": [
+        "alias_path_change",
+        "corrupt_state",
+        "dropped_work",
+        "identity_mismatch",
+        "incomplete_sample",
+        "overflow",
+        "sample_error",
+        "sequence_gap",
+        "watcher_error"
+      ]
+    },
+    "observe_sample_source": {
+      "type": "string",
+      "description": "Observe sample source.",
+      "enum": [
+        "capacity.SampleFilesystem",
+        "identity_mismatch",
+        "sample_error"
+      ]
+    },
+    "pressure_level": {
+      "type": "string",
+      "description": "Free-space pressure on a volume.",
+      "enum": [
+        "ok",
+        "warn",
+        "critical"
+      ]
+    },
+    "pressure_role": {
+      "type": "string",
+      "description": "Which volume a pressure block describes.",
+      "enum": [
+        "primary_write",
+        "analysis_root"
+      ]
+    },
+    "privilege": {
+      "type": "string",
+      "description": "Privilege a collector ran with.",
+      "enum": [
+        "unprivileged",
+        "elevated"
+      ]
+    },
+    "proposal_kind": {
+      "type": "string",
+      "description": "Observe proposal kind.",
+      "enum": [
+        "note",
+        "recipe"
+      ]
+    },
+    "prune_mode": {
+      "type": "string",
+      "description": "Prune plan mode.",
+      "enum": [
+        "dry-run",
+        "execute"
+      ]
+    },
+    "rebuild_expectation": {
+      "type": "string",
+      "description": "How costly regenerating the bytes is after removal.",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "recipe_kind": {
+      "type": "string",
+      "description": "Recipe shape.",
+      "enum": [
+        "argv",
+        "structural"
+      ]
+    },
+    "recipe_step_kind": {
+      "type": "string",
+      "description": "Structural recipe step kind.",
+      "enum": [
+        "command",
+        "config_snippet",
+        "observe",
+        "purge_hint",
+        "verify"
+      ]
+    },
+    "reclaim_scope": {
+      "type": "string",
+      "description": "Verified reclaim granularity (incremental is Cargo incremental only).",
+      "enum": [
+        "whole",
+        "incremental"
+      ]
+    },
+    "ref_disclosure": {
+      "type": "string",
+      "description": "Container image-ref disclosure.",
+      "enum": [
+        "aggregate",
+        "local"
+      ]
+    },
+    "runtime_bucket": {
+      "type": "string",
+      "description": "Container storage bucket kind.",
+      "enum": [
+        "images",
+        "build_cache",
+        "dangling_images",
+        "foreign_platform",
+        "superseded_tags",
+        "volumes_unreferenced"
+      ]
+    },
+    "runtime_reason": {
+      "type": "string",
+      "description": "Why a container figure is unavailable or not probed.",
+      "enum": [
+        "endpoint_unresolved",
+        "engine_unreachable",
+        "engine_disagreement",
+        "probe_failed",
+        "timeout",
+        "parse_failed",
+        "unsupported_engine",
+        "probe_not_requested"
+      ]
+    },
+    "runtime_step": {
+      "type": "string",
+      "description": "Container relief step.",
+      "enum": [
+        "dangling_image_prune",
+        "build_cache_prune",
+        "foreign_platform_remove",
+        "superseded_tag_remove",
+        "image_prune_all",
+        "volume_prune",
+        "guest_trim",
+        "disk_grow"
+      ]
+    },
+    "session_boundary": {
+      "type": "string",
+      "description": "Operator-declared capture boundary.",
+      "enum": [
+        "before-running",
+        "before-quiesced",
+        "after-reboot",
+        "after-update"
+      ]
+    },
+    "size_basis": {
+      "type": "string",
+      "description": "Size basis for temp planes.",
+      "enum": [
+        "apparent"
+      ]
+    },
+    "sort_mode": {
+      "type": "string",
+      "description": "Advisory ranking of verified candidates.",
+      "enum": [
+        "idle",
+        "size"
+      ]
+    },
+    "system_remediation": {
+      "type": "string",
+      "description": "How a system-managed root can be reduced.",
+      "enum": [
+        "none_supported",
+        "os_or_update_mechanism",
+        "unknown"
+      ]
+    },
+    "temp_family": {
+      "type": "string",
+      "description": "Closed temp residue family table.",
+      "enum": [
+        "bunx",
+        "codex",
+        "opencode",
+        "tsx",
+        "other"
+      ]
+    },
+    "temp_plane_kind": {
+      "type": "string",
+      "description": "OS temp root class.",
+      "enum": [
+        "shared-temp",
+        "user-temp"
+      ]
+    },
+    "trust_state": {
+      "type": "string",
+      "description": "ADR-0004 trust states.",
+      "enum": [
+        "prunable",
+        "withheld",
+        "diagnostic-only",
+        "unverified",
+        "unknown"
+      ]
+    },
+    "withheld_reason": {
+      "type": "string",
+      "description": "Why a matched candidate is withheld.",
+      "enum": [
+        "age",
+        "domain_disabled",
+        "indeterminate",
+        "min_size",
+        "safe_to_prune"
+      ]
+    }
+  }
+}

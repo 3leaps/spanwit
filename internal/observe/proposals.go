@@ -24,14 +24,14 @@ func BuildProposals(vols []*VolumeRuntime, growth map[VolumeID]GrowthResult) []P
 		// Generic diagnosis note only — no cargo/go recipe ids without catalog evidence.
 		out = append(out, Proposal{
 			ID:       "propose-space-sense-" + string(v.Volume.ID),
-			Kind:     "note",
+			Kind:     ProposalKindNote,
 			Title:    "Pressure elevated; run spanwit space for diagnosis (no auto-delete)",
 			Evidence: ev,
 		})
 		if v.ReconcileNeeded {
 			out = append(out, Proposal{
 				ID:       "propose-reconcile-" + string(v.Volume.ID),
-				Kind:     "note",
+				Kind:     ProposalKindNote,
 				Title:    "Observation degraded; full reconcile required before trusting growth/runway",
 				Evidence: append(ev, "loss_reason="+BoundString(v.LossReason, MaxStateStringLen)),
 			})

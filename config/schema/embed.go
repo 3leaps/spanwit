@@ -37,3 +37,13 @@ var SpanwitObserveHealthV1 []byte
 
 //go:embed spanwit-filesystem-inventory-aggregation.v2.schema.json
 var SpanwitFilesystemInventoryAggregationV2 []byte
+
+// Vocabulary is the closed-vocabulary registry (single source of truth).
+// Report schemas inline these enums; VocabularySitemap ties each inline enum
+// site to a registry vocabulary.
+//
+//go:embed spanwit-vocabulary.v1.schema.json
+var Vocabulary []byte
+
+//go:embed spanwit-vocabulary-sitemap.v1.json
+var VocabularySitemap []byte
