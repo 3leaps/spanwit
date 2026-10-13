@@ -52,8 +52,10 @@ type TempPlane struct {
 	// lower bound), or unavailable (no bytes reported).
 	SizeStatus string `json:"size_status"`
 	SizeBytes  *int64 `json:"size_bytes,omitempty"`
-	SizeBasis  string `json:"size_basis"`
-	FollowUp   string `json:"follow_up"`
+	// SizeBound is derived from SizeStatus on marshal (absent when unavailable).
+	SizeBound string `json:"size_bound,omitempty"`
+	SizeBasis string `json:"size_basis"`
+	FollowUp  string `json:"follow_up"`
 }
 
 type tempPlaneCandidate struct {

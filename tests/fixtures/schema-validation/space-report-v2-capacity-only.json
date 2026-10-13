@@ -15,6 +15,7 @@
     "used_human": "585.9 KiB",
     "avail_bytes": 400000,
     "avail_human": "390.6 KiB",
+    "bytes_bound": "exact",
     "used_percent": 60,
     "level": "ok"
   },

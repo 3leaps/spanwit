@@ -21,6 +21,7 @@
     "used_human": "595.7 KiB",
     "avail_bytes": 390000,
     "avail_human": "380.9 KiB",
+    "bytes_bound": "exact",
     "used_percent": 61,
     "level": "ok"
   },
@@ -108,9 +109,11 @@
     "prunable_candidates": 0,
     "prunable_bytes": 0,
     "prunable_human": "0 B",
+    "prunable_bound": "exact",
     "withheld_candidates": 0,
     "withheld_bytes": 0,
     "withheld_human": "0 B",
+    "withheld_bound": "exact",
     "size_incomplete": false
   },
   "hotspots": [],
@@ -119,7 +122,8 @@
     "total_bytes": 0,
     "total_human": "0 B",
     "entries": [],
-    "size_incomplete": false
+    "size_incomplete": false,
+    "size_bound": "exact"
   },
   "unknown": []
 }

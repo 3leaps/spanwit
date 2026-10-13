@@ -38,6 +38,8 @@ type ExactCandidate struct {
 	SizeBytes        int64    `json:"size_bytes"`
 	SizeHuman        string   `json:"size_human"`
 	SizeIncomplete   bool     `json:"size_incomplete,omitempty"`
+	// SizeBound restates SizeIncomplete as a byte bound; derived on marshal.
+	SizeBound string `json:"size_bound,omitempty"`
 	// ReclaimScope is always explicit (whole|incremental).
 	ReclaimScope string `json:"reclaim_scope"`
 	// ParentPath is required for incremental revalidation; empty for whole.
@@ -60,6 +62,7 @@ type PruneHandoff struct {
 	PrunableBytes     int64              `json:"prunable_bytes"`
 	PrunableHuman     string             `json:"prunable_human"`
 	SizeIncomplete    bool               `json:"size_incomplete"`
+	SizeBound         string             `json:"size_bound,omitempty"` // derived on marshal
 	Candidates        []Entry            `json:"candidates"`
 	ExactPlan         *ExactPlan         `json:"exact_plan,omitempty"`
 	SuggestedCommands []SuggestedCommand `json:"suggested_commands"`

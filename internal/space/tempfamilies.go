@@ -47,11 +47,16 @@ func classifyTempEntry(name string) string {
 
 // TempFamily is one aggregate row keyed by a fixed label. It carries no path.
 type TempFamily struct {
-	Family  string    `json:"family"`
-	Entries int64     `json:"entries"`
-	Bytes   int64     `json:"bytes"`
-	Oldest  time.Time `json:"oldest"`
-	Newest  time.Time `json:"newest"`
+	Family  string `json:"family"`
+	Entries int64  `json:"entries"`
+	Bytes   int64  `json:"bytes"`
+	// BytesBound is exact when every listed entry was measured, and lower when
+	// an entry could not be stat'd and was left out of the sum; set on marshal.
+	BytesBound string `json:"bytes_bound,omitempty"`
+	// bytesIncomplete records that an entry of this family was skipped.
+	bytesIncomplete bool
+	Oldest          time.Time `json:"oldest"`
+	Newest          time.Time `json:"newest"`
 }
 
 // TempResidueSummary aggregates the direct children of the temp planes by
@@ -60,9 +65,12 @@ type TempFamily struct {
 // directory, its record, not its contents): counts are the signal, and the
 // plane probe owns content sizing.
 type TempResidueSummary struct {
-	EntriesTotal  int64        `json:"entries_total"`
-	HiddenEntries int64        `json:"hidden_entries"`
-	Families      []TempFamily `json:"families"`
+	EntriesTotal  int64 `json:"entries_total"`
+	HiddenEntries int64 `json:"hidden_entries"`
+	// SkippedEntries counts listed children that could not be stat'd. They are
+	// in no family row; a family that lost an entry states a lower bound.
+	SkippedEntries int64        `json:"skipped_entries,omitempty"`
+	Families       []TempFamily `json:"families"`
 }
 
 // summarizeTempEntries folds direct children of a temp root into family rows.
@@ -70,21 +78,27 @@ type TempResidueSummary struct {
 // caller so the walk stays bounded and symlink-strict.
 func summarizeTempEntries(entries []os.DirEntry, sizeOf func(os.DirEntry) int64) TempResidueSummary {
 	rows := map[string]*TempFamily{}
-	var summary TempResidueSummary
+	// Families is required and an array: an empty or all-skipped root gives
+	// [], never null, so the report still validates and emits.
+	summary := TempResidueSummary{Families: []TempFamily{}}
 	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		summary.EntriesTotal++
-		if strings.HasPrefix(entry.Name(), ".") {
-			summary.HiddenEntries++
-		}
 		label := classifyTempEntry(entry.Name())
 		row, ok := rows[label]
 		if !ok {
 			row = &TempFamily{Family: label}
 			rows[label] = row
+		}
+		info, err := entry.Info()
+		if err != nil {
+			// Not counted: the family's bytes are now a lower bound, and the
+			// skip is reported at summary level, never as a zero-entry row.
+			row.bytesIncomplete = true
+			summary.SkippedEntries++
+			continue
+		}
+		summary.EntriesTotal++
+		if strings.HasPrefix(entry.Name(), ".") {
+			summary.HiddenEntries++
 		}
 		row.Entries++
 		row.Bytes += sizeOf(entry)
@@ -97,7 +111,10 @@ func summarizeTempEntries(entries []os.DirEntry, sizeOf func(os.DirEntry) int64)
 		}
 	}
 	for _, label := range []string{TempFamilyCodex, TempFamilyOpencode, TempFamilyBunx, TempFamilyTsx, TempFamilyOther} {
-		if row, ok := rows[label]; ok {
+		// Rows mean observed entries: a family with no measured entry has no
+		// row (its skips are in SkippedEntries), so no zero-entry row with
+		// fabricated dates is emitted.
+		if row, ok := rows[label]; ok && row.Entries > 0 {
 			summary.Families = append(summary.Families, *row)
 		}
 	}

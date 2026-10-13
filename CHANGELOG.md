@@ -20,6 +20,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reported. The section is defined identically in SpaceReport v1 and v2.
 - **`space --compare`** diffs `container_runtime` figures between two
   captures of the same identified engine.
+- **Byte bounds**: every byte figure in the space report states its bound
+  (`exact`, `lower`, `upper` or `unknown`). Sizes flagged `size_incomplete`
+  gain `size_bound`, which the schema requires to agree with the flag;
+  `verified_reclaimable` gains `prunable_bound` and `withheld_bound`; pressure
+  carries `bytes_bound: exact` for its one statfs sample; temp planes, residue
+  families and measured container runtime figures state their bound. The new
+  fields are optional in the schema so older reports still load.
 
 ### Changed
 
