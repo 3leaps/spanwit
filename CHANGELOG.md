@@ -96,6 +96,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `space --config` now applies the config's default `min_size`, `min_age`
+  and `max_age` gates to verified candidates, their effective filters and
+  the prune handoff. Previously only signatures, targets and domains were
+  read, so a report could state no age gate while the config set one.
+  `--min-size` still overrides the config size floor. A config target for a
+  built-in signature now replaces the built-in target, so its gates apply. A
+  config whose path profile sets `min_size`, `min_age` or `max_age` is
+  refused, because that gate belongs to a different root.
 - A configured `min_age` now reads the newest activity inside a candidate,
   not only the candidate directory's own mtime. A build target with recent
   writes, deletions or new directories deeper inside is withheld for age in `prune`, exact-plan
