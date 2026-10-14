@@ -97,6 +97,24 @@ func (o Options) partial(u PartialUpdate) {
 	}
 }
 
+// refusePathProfileGates rejects a --config overlay whose path profile sets a
+// size or age gate. space walks its own roots and takes only targets from the
+// overlay's paths; a gate set on a path names a different root, so it can be
+// neither applied nor silently dropped. Gates in defaults or on targets apply.
+func refusePathProfileGates(cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for _, p := range cfg.Paths {
+		if p.MinSize != "" || p.MinAge != "" || p.MaxAge != "" {
+			return fmt.Errorf(
+				"config path %q sets min_size/min_age/max_age; space applies only defaults and target gates from --config: move the gate to defaults or to its targets",
+				p.Path)
+		}
+	}
+	return nil
+}
+
 // Analyze builds a read-only SpaceReport. It never deletes and has no execute path.
 //
 // Work order prioritizes crisis triage: pressure and home-cache hotspots are
@@ -130,6 +148,9 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
+	if err := refusePathProfileGates(opts.Config); err != nil {
+		return Report{}, err
+	}
 
 	// Resolve authorize-narrow policy and the domain catalog (built-in + user
 	// overlay). Overlay/link errors are usage errors surfaced to the caller.
@@ -144,6 +165,11 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 		return Report{}, err
 	}
 
+	// A config size floor applies when --min-size is not given, so the report,
+	// its listings and the handoff carry the floor the operator set.
+	if opts.MinSize == "" && opts.Config != nil {
+		opts.MinSize = opts.Config.Defaults.MinSize
+	}
 	var minSize int64
 	minSizeDisplay := "none"
 	if opts.MinSize != "" {
@@ -279,6 +305,11 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 		}
 	}
 	if opts.Config != nil {
+		// Config age gates reach the verified walk as they do for prune, so a
+		// floor the operator set is applied, reported per candidate and
+		// carried in the handoff; signature and temp floors still raise it.
+		cfg.Defaults.MinAge = opts.Config.Defaults.MinAge
+		cfg.Defaults.MaxAge = opts.Config.Defaults.MaxAge
 		cfg.Signatures = opts.Config.Signatures
 		// Carry the domain policy so the engine applies the same authorize-narrow
 		// gate as direct prune (single mechanism; disabled-domain prunables are
@@ -286,7 +317,7 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 		cfg.Domains = opts.Config.Domains
 		for _, p := range opts.Config.Paths {
 			for i := range cfg.Paths {
-				cfg.Paths[i].Targets = append(cfg.Paths[i].Targets, p.Targets...)
+				cfg.Paths[i].Targets = mergeOverlayTargets(cfg.Paths[i].Targets, p.Targets)
 			}
 		}
 	}
@@ -682,6 +713,30 @@ func countMinSizeInconclusive(minSize int64, sets ...[]Entry) int {
 		}
 	}
 	return n
+}
+
+// mergeOverlayTargets adds overlay targets to a profile's targets. An overlay
+// target naming a signature already present replaces that target in place:
+// the first matching target wins discovery, so an appended duplicate would
+// leave the overlay's gates (min_size/min_age/max_age) silently unapplied.
+func mergeOverlayTargets(base, overlay []config.Target) []config.Target {
+	out := append([]config.Target(nil), base...)
+	for _, t := range overlay {
+		replaced := false
+		if t.Signature != "" {
+			for i := range out {
+				if out[i].Signature == t.Signature {
+					out[i] = t
+					replaced = true
+					break
+				}
+			}
+		}
+		if !replaced {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func builtInSignatureTargets() []config.Target {

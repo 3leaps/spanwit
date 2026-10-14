@@ -173,7 +173,7 @@ CARGO_TARGET_DIR on a roomier volume (advice only; never auto-relocates).
 	}
 
 	cmd.Flags().StringVarP(&minSizeStr, "min-size", "m", "", "minimum size to list (default: no filter)")
-	cmd.Flags().StringVarP(&configOverride, "config", "c", "", "add signatures/targets from this config on top of built-ins")
+	cmd.Flags().StringVarP(&configOverride, "config", "c", "", "add signatures, targets and default min_size/min_age/max_age gates from this config on top of built-ins (--min-size overrides the config size floor)")
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text|json")
 	cmd.Flags().IntVar(&top, "top", 20, "max rows listed per multi-entry section (display only)")
 	cmd.Flags().IntVar(&maxDepth, "max-depth", space.DefaultMaxDepth, "max directory depth for discovery under the analysis path")
