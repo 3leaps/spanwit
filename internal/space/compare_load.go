@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 
 	spanwitschema "github.com/3leaps/spanwit/config/schema"
 	"github.com/3leaps/spanwit/internal/capacity"
 	"github.com/3leaps/spanwit/internal/contract"
+	env "github.com/3leaps/spanwit/internal/envelope"
 )
 
 const (
@@ -22,9 +24,11 @@ type compareCarrier struct {
 	Version            int                 `json:"version"`
 	GeneratedAt        string              `json:"generated_at"`
 	CaptureMode        string              `json:"capture_mode"`
+	Root               string              `json:"root"`
 	Pressure           Pressure            `json:"pressure"`
 	CapacityAccounting capacity.Accounting `json:"capacity_accounting"`
 	ContainerRuntime   *ContainerRuntime   `json:"container_runtime"`
+	Completion         *Completion         `json:"completion"`
 }
 
 // LoadCompareInputJSON validates one untrusted SpaceReport v2 capture for the
@@ -72,8 +76,18 @@ func LoadCompareInputJSON(raw []byte, sourcePath string) (capacity.CompareInput,
 	if err := validateCompareCapacityTopology(carrier.CapacityAccounting); err != nil {
 		return capacity.CompareInput{}, fmt.Errorf("compare input capacity topology: %w", err)
 	}
+	// The input's envelope must be consistent with its content; a legacy
+	// input loads at the most disclosed level, which compare never echoes.
+	if _, err := env.Check(raw, []string{carrier.Root}, LegacySpaceDisclosure); err != nil {
+		return capacity.CompareInput{}, fmt.Errorf("compare input envelope: %w", err)
+	}
+	partial := false
+	if carrier.Completion != nil {
+		partial = carrier.Completion.Lifecycle == CompletionPartial
+	}
 	return capacity.CompareInput{
-		Path:          sourcePath,
+		Path:          compareInputName(sourcePath),
+		Partial:       partial,
 		ReportSchema:  carrier.Schema,
 		ReportVersion: carrier.Version,
 		CaptureMode:   carrier.CaptureMode,
@@ -81,6 +95,15 @@ func LoadCompareInputJSON(raw []byte, sourcePath string) (capacity.CompareInput,
 		Accounting:    carrier.CapacityAccounting,
 		Runtime:       RuntimeCompareClaims(carrier.ContainerRuntime),
 	}, nil
+}
+
+// compareInputName is the input file name only. The directory never enters
+// a compare document; stdin ("-") stays "-".
+func compareInputName(sourcePath string) string {
+	if sourcePath == "" || sourcePath == "-" {
+		return sourcePath
+	}
+	return filepath.Base(sourcePath)
 }
 
 func validateCompareCapacityTopology(accounting capacity.Accounting) error {

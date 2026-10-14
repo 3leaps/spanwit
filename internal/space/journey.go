@@ -77,6 +77,9 @@ func BuildCargoPlacementJourney(in CargoPlacementInput) (Recipe, bool) {
 	if !recipeDomainAllowed(in.Enabled, "development") {
 		return Recipe{}, false
 	}
+	// The journey and its exact plan are bounded by the analysis root;
+	// candidates under a temp root belong to that root's own exact plan.
+	in.Verified = verifiedUnderRoot(in.Verified, in.AnalysisRoot)
 
 	projects := cargoProjectsFromVerified(in.Verified)
 	if len(projects) == 0 {
@@ -280,6 +283,18 @@ func cargoPrunableBytes(projects []cargoProject) int64 {
 
 // cargoPrunableVerified returns a VerifiedSection limited to prunable whole
 // cargo-target rows so journey purge hints never ride a report-wide handoff.
+// verifiedUnderRoot keeps only candidates at or under root.
+func verifiedUnderRoot(v VerifiedSection, root string) VerifiedSection {
+	out := v
+	out.Candidates = make([]Entry, 0, len(v.Candidates))
+	for _, e := range v.Candidates {
+		if e.Path == root || strings.HasPrefix(e.Path, root+string(filepath.Separator)) {
+			out.Candidates = append(out.Candidates, e)
+		}
+	}
+	return out
+}
+
 func cargoPrunableVerified(v VerifiedSection) VerifiedSection {
 	out := VerifiedSection{Candidates: make([]Entry, 0)}
 	for _, e := range v.Candidates {

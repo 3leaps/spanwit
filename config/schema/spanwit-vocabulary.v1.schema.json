@@ -454,6 +454,24 @@
         "min_size",
         "safe_to_prune"
       ]
+    },
+    "disclosure_paths": {
+      "type": "string",
+      "description": "How much of the filesystem a document discloses, ordered none < analysis < system < full. Derived from the emitted content.",
+      "enum": [
+        "none",
+        "analysis",
+        "system",
+        "full"
+      ]
+    },
+    "disclosure_image_refs": {
+      "type": "string",
+      "description": "Whether a document names any container image, volume, profile or socket (local) or none (aggregate).",
+      "enum": [
+        "aggregate",
+        "local"
+      ]
     }
   }
 }

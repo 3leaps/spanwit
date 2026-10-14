@@ -11,6 +11,7 @@ import (
 	"github.com/3leaps/spanwit/internal/capacity"
 	"github.com/3leaps/spanwit/internal/cmd"
 	"github.com/3leaps/spanwit/internal/engine"
+	"github.com/3leaps/spanwit/internal/envelope"
 	"github.com/3leaps/spanwit/internal/inventory"
 	"github.com/3leaps/spanwit/internal/observe"
 	"github.com/3leaps/spanwit/internal/space"
@@ -211,6 +212,9 @@ func TestGoConstantsMatchRegistry(t *testing.T) {
 		{"observe_sample_source", false, []string{observe.SampleSourceFilesystem, observe.SampleSourceIdentityMismatch, observe.SampleSourceError}},
 		{"proposal_kind", false, []string{observe.ProposalKindNote, observe.ProposalKindRecipe}},
 		{"prune_mode", false, []string{cmd.PruneModeDryRun, cmd.PruneModeExecute}},
+		{"disclosure_paths", false, []string{envelope.PathsNone, envelope.PathsAnalysis, envelope.PathsSystem, envelope.PathsFull}},
+		{"disclosure_image_refs", false, []string{envelope.ImageRefsAggregate, envelope.ImageRefsLocal}},
+		{"completion_lifecycle", false, []string{envelope.CompletionComplete, envelope.CompletionPartial}},
 		{"temp_root_reason", false, []string{engine.TempRootNotOwned, engine.TempRootSharedPath, engine.TempRootGroupOtherWritable, engine.TempRootSticky, engine.TempRootSymlink, engine.TempRootNotDirectory, engine.TempRootOverlapsAnalysis, engine.TempRootUnsupported, engine.TempRootNotRequested, engine.TempRootMode, engine.TempRootEuidRoot}},
 	}
 	covered := map[string]bool{}

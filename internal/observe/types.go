@@ -6,6 +6,8 @@ package observe
 
 import (
 	"time"
+
+	"github.com/3leaps/spanwit/internal/envelope"
 )
 
 // Coverage status for a sample or volume baseline.
@@ -133,6 +135,9 @@ type Health struct {
 	MutationContract  string         `json:"mutation_contract"` // open|read_only; never execute
 	ForegroundActive  bool           `json:"foreground_active"`
 	BacklogReconciles int            `json:"backlog_reconciles"`
+	// Tool and Disclosure are the report envelope (see internal/envelope).
+	Tool       *envelope.Tool       `json:"tool,omitempty"`
+	Disclosure *envelope.Disclosure `json:"disclosure,omitempty"`
 }
 
 // VolumeHealth is one volume's health row (no raw process lists).

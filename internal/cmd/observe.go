@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -11,6 +12,9 @@ import (
 	"github.com/fulmenhq/gofulmen/appidentity"
 	"github.com/spf13/cobra"
 
+	spanwitschema "github.com/3leaps/spanwit/config/schema"
+	"github.com/3leaps/spanwit/internal/contract"
+	"github.com/3leaps/spanwit/internal/envelope"
 	"github.com/3leaps/spanwit/internal/observe"
 )
 
@@ -166,13 +170,32 @@ func runObserveOnce(identity *appidentity.Identity, stateDir, format string, reg
 	}
 
 	if format == "json" {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(res.Health)
+		return writeHealthJSON(os.Stdout, res.Health)
 	}
 	_, _ = fmt.Fprint(os.Stdout, observe.HealthText(res.Health))
 	if len(res.Notifies) > 0 {
 		_, _ = fmt.Fprintf(os.Stderr, "level transitions (notify): %v\n", res.Notifies)
 	}
 	return nil
+}
+
+// writeHealthJSON stamps the envelope on an observe health report and writes
+// it, schema-validated.
+func writeHealthJSON(w io.Writer, h observe.Health) error {
+	h.Tool = envelope.CurrentTool()
+	h.Disclosure = nil
+	d, err := envelope.Stamp(h)
+	if err != nil {
+		return err
+	}
+	h.Disclosure = d
+	payload, err := json.MarshalIndent(h, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := contract.ValidateJSON(spanwitschema.SpanwitObserveHealthV1, payload); err != nil {
+		return fmt.Errorf("observe health schema validation failed: %w", err)
+	}
+	_, err = w.Write(append(payload, '\n'))
+	return err
 }

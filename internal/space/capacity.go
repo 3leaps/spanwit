@@ -7,6 +7,7 @@ import (
 
 	"github.com/3leaps/spanwit/internal/capacity"
 	"github.com/3leaps/spanwit/internal/engine"
+	"github.com/3leaps/spanwit/internal/envelope"
 )
 
 const (
@@ -28,6 +29,18 @@ type CapacityOnlyReport struct {
 	MutationContract string `json:"mutation_contract,omitempty"`
 	// ContainerRuntime reports container-engine storage headroom (opt-in).
 	ContainerRuntime *ContainerRuntime `json:"container_runtime,omitempty"`
+	// Completion is partial iff any capacity plane reports a coverage gap.
+	Completion *Completion          `json:"completion,omitempty"`
+	Tool       *envelope.Tool       `json:"tool,omitempty"`
+	Disclosure *envelope.Disclosure `json:"disclosure,omitempty"`
+}
+
+// CapacityGapCount counts coverage gaps across every capacity plane: the
+// warnings a capacity-only capture carries.
+func CapacityGapCount(p capacity.Planes) int {
+	return len(p.Filesystem.Coverage.Gaps) + len(p.Container.Coverage.Gaps) +
+		len(p.Volumes.Coverage.Gaps) + len(p.Snapshots.Coverage.Gaps) +
+		len(p.SystemManaged.Coverage.Gaps) + len(p.HeldOpen.Coverage.Gaps)
 }
 
 type CapacityOptions struct {
@@ -87,6 +100,7 @@ func AnalyzeCapacityOnly(ctx context.Context, opts CapacityOptions) (CapacityOnl
 		AnalysisPressure:   analysisPressure,
 		CapacityAccounting: result.Accounting,
 		MutationContract:   mutationContract,
+		Completion:         envelope.NewCompletion(CapacityGapCount(result.Accounting.Planes)),
 	}, nil
 }
 

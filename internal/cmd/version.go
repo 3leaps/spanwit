@@ -7,6 +7,8 @@ import (
 	"github.com/fulmenhq/gofulmen/appidentity"
 	"github.com/fulmenhq/gofulmen/crucible"
 	"github.com/spf13/cobra"
+
+	"github.com/3leaps/spanwit/internal/envelope"
 )
 
 var (
@@ -20,6 +22,7 @@ func SetVersionInfo(v, c, b string) {
 	version = v
 	commit = c
 	buildDate = b
+	envelope.SetTool(envelope.Tool{Name: "spanwit", Version: v, Commit: knownCommit(c)})
 }
 
 // newVersionCmd creates the version command

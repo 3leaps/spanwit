@@ -11,6 +11,7 @@ import (
 	"github.com/3leaps/spanwit/internal/capacity"
 	"github.com/3leaps/spanwit/internal/contract"
 	"github.com/3leaps/spanwit/internal/engine"
+	env "github.com/3leaps/spanwit/internal/envelope"
 )
 
 var ErrCapacityOnlyNotPruneCarrier = errors.New("capacity-only space report is not a prune carrier")
@@ -85,7 +86,37 @@ func LoadSpaceReportJSON(raw []byte) (Report, error) {
 	if err := validateAppliedFiltersInvariants(report); err != nil {
 		return Report{}, err
 	}
+	checked, err := env.Check(raw, reportRoots(report), LegacySpaceDisclosure)
+	if err != nil {
+		return Report{}, fmt.Errorf("space report envelope: %w", err)
+	}
+	tool := checked.Tool
+	report.Tool = &tool
+	d := checked.Disclosure
+	report.Disclosure = &d
+	report.Warnings = append(report.Warnings, checked.Warnings...)
 	return report, nil
+}
+
+// LegacySpaceDisclosure is how a space report without a disclosure summary
+// loads: the most disclosed level reachable for its kind (paths full, image
+// refs local, process identity present), never a narrower guess.
+var LegacySpaceDisclosure = env.Disclosure{
+	Paths:           env.PathsFull,
+	ImageRefs:       env.ImageRefsLocal,
+	ProcessIdentity: true,
+}
+
+// reportRoots are the analysis roots of a space report: the report root
+// plus each admitted temp root, which bound their own exact plans.
+func reportRoots(report Report) []string {
+	roots := []string{report.Root}
+	for _, tr := range report.TempRoots {
+		if tr.Admitted {
+			roots = append(roots, tr.Root)
+		}
+	}
+	return roots
 }
 
 // validateRecipesInvariants locks structural vs argv recipe shape and command

@@ -11,6 +11,7 @@ import (
 	spanwitschema "github.com/3leaps/spanwit/config/schema"
 	"github.com/3leaps/spanwit/internal/contract"
 	"github.com/3leaps/spanwit/internal/engine"
+	"github.com/3leaps/spanwit/internal/envelope"
 )
 
 // Prune plan modes (prune_mode vocabulary).
@@ -34,6 +35,8 @@ type prunePlanOutput struct {
 	Execution        *pruneExecutionSummary `json:"execution,omitempty"`
 	Candidates       []pruneCandidateOutput `json:"candidates"`
 	Warnings         []string               `json:"warnings,omitempty"`
+	Tool             *envelope.Tool         `json:"tool,omitempty"`
+	Disclosure       *envelope.Disclosure   `json:"disclosure,omitempty"`
 }
 
 // pruneEffectiveFilters is the operator-visible policy banner for size/age
@@ -354,7 +357,14 @@ func formatWithheldByReason(byReason map[string]*reasonAgg) string {
 }
 
 func writePrunePlanJSON(w io.Writer, plan PrunePlan, loadedPath string, execute bool, now time.Time) error {
-	payload, err := json.MarshalIndent(newPrunePlanOutput(plan, loadedPath, execute, now), "", "  ")
+	out := newPrunePlanOutput(plan, loadedPath, execute, now)
+	out.Tool = envelope.CurrentTool()
+	d, err := envelope.Stamp(out)
+	if err != nil {
+		return fmt.Errorf("encode prune plan json: %w", err)
+	}
+	out.Disclosure = d
+	payload, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode prune plan json: %w", err)
 	}

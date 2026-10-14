@@ -7,13 +7,20 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
+
+	"github.com/3leaps/spanwit/internal/envelope"
 )
 
 // StateDocument is the versioned on-disk observe state.
 type StateDocument struct {
-	Schema  string                    `json:"$schema"`
-	Version int                       `json:"version"`
-	Volumes map[string]*VolumeRuntime `json:"volumes"` // key = VolumeID string
+	Schema  string `json:"$schema"`
+	Version int    `json:"version"`
+	// GeneratedAt, Tool and Disclosure are the envelope, stamped on Save.
+	GeneratedAt string                    `json:"generated_at,omitempty"`
+	Tool        *envelope.Tool            `json:"tool,omitempty"`
+	Disclosure  *envelope.Disclosure      `json:"disclosure,omitempty"`
+	Volumes     map[string]*VolumeRuntime `json:"volumes"` // key = VolumeID string
 }
 
 // Store persists observe state. Implementations must fail closed on corrupt data.
@@ -224,6 +231,14 @@ func (s *FileStore) Save(doc *StateDocument) error {
 	if err := validateStateSemantics(doc); err != nil {
 		return fmt.Errorf("refusing invalid observe state: %w", err)
 	}
+	doc.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
+	doc.Tool = envelope.CurrentTool()
+	doc.Disclosure = nil
+	d, err := envelope.Stamp(doc)
+	if err != nil {
+		return err
+	}
+	doc.Disclosure = d
 	raw, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return err
