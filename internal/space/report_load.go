@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	spanwitschema "github.com/3leaps/spanwit/config/schema"
 	"github.com/3leaps/spanwit/internal/capacity"
@@ -475,16 +476,61 @@ func validateHandoffInvariants(report Report) error {
 		return nil // no handoff is valid (nothing to revalidate)
 	}
 	h := report.PruneHandoff
+	plans := make([]*ExactPlan, 0, 1+len(h.TempExactPlans))
+	if h.ExactPlan != nil {
+		plans = append(plans, h.ExactPlan)
+	}
+	for i := range h.TempExactPlans {
+		plans = append(plans, &h.TempExactPlans[i])
+	}
 	if !h.Present {
-		if h.ExactPlan != nil && len(h.ExactPlan.Candidates) > 0 {
-			return fmt.Errorf("prune_handoff.present=false but exact_plan has candidates")
+		for _, ep := range plans {
+			if len(ep.Candidates) > 0 {
+				return fmt.Errorf("prune_handoff.present=false but an exact plan has candidates")
+			}
 		}
 		return nil
 	}
-	if h.ExactPlan == nil {
-		return fmt.Errorf("prune_handoff.present=true requires exact_plan")
+	if len(plans) == 0 {
+		return fmt.Errorf("prune_handoff.present=true requires exact_plan or temp_exact_plans")
 	}
-	ep := h.ExactPlan
+	if len(h.TempExactPlans) > 0 && !report.IncludeTemp {
+		return fmt.Errorf("prune_handoff.temp_exact_plans present but report did not request include_temp")
+	}
+
+	handoffPaths := make(map[string]Entry, len(h.Candidates))
+	for _, c := range h.Candidates {
+		if c.State != StatePrunable {
+			return fmt.Errorf("handoff candidate %s has state %q (must be prunable)", c.Path, c.State)
+		}
+		if err := validateEntryScope("prune_handoff.candidates", c); err != nil {
+			return err
+		}
+		handoffPaths[c.Path] = c
+	}
+
+	total := 0
+	for i, ep := range plans {
+		isTemp := !(h.ExactPlan != nil && i == 0)
+		if err := validateOneExactPlan(report, ep, isTemp, handoffPaths); err != nil {
+			return err
+		}
+		total += len(ep.Candidates)
+	}
+	if h.PrunableCount != len(h.Candidates) || h.PrunableCount != total {
+		return fmt.Errorf("prune_handoff candidate counts disagree: prunable_count=%d candidates=%d exact_plans=%d",
+			h.PrunableCount, len(h.Candidates), total)
+	}
+	for p := range handoffPaths {
+		return fmt.Errorf("prune_handoff.candidates path %s missing from every exact plan", p)
+	}
+	return nil
+}
+
+// validateOneExactPlan checks one exact plan and consumes its paths from
+// handoffPaths, so a path in two plans (or none) is caught. A temp plan's
+// candidates must lie under that plan's own analysis_root.
+func validateOneExactPlan(report Report, ep *ExactPlan, isTemp bool, handoffPaths map[string]Entry) error {
 	if ep.Schema != ExactPlanSchemaID {
 		return fmt.Errorf("exact_plan.$schema must be %q (got %q)", ExactPlanSchemaID, ep.Schema)
 	}
@@ -504,26 +550,10 @@ func validateHandoffInvariants(report Report) error {
 		return fmt.Errorf("exact_plan.reclaim_scope %q disagrees with report.reclaim_scope %q", ep.ReclaimScope, report.ReclaimScope)
 	}
 	if len(ep.Candidates) == 0 {
-		return fmt.Errorf("prune_handoff.present=true requires non-empty exact_plan.candidates")
+		return fmt.Errorf("an emitted exact plan must have candidates")
 	}
-	if h.PrunableCount != len(h.Candidates) || h.PrunableCount != len(ep.Candidates) {
-		return fmt.Errorf("prune_handoff candidate counts disagree: prunable_count=%d candidates=%d exact_plan=%d",
-			h.PrunableCount, len(h.Candidates), len(ep.Candidates))
-	}
-
-	handoffPaths := make(map[string]Entry, len(h.Candidates))
-	for _, c := range h.Candidates {
-		if c.State != StatePrunable {
-			return fmt.Errorf("handoff candidate %s has state %q (must be prunable)", c.Path, c.State)
-		}
-		if err := validateEntryScope("prune_handoff.candidates", c); err != nil {
-			return err
-		}
-		if NormalizeReclaimScope(c.ReclaimScope) != ep.ReclaimScope {
-			return fmt.Errorf("handoff candidate %s reclaim_scope %q disagrees with exact_plan.reclaim_scope %q",
-				c.Path, c.ReclaimScope, ep.ReclaimScope)
-		}
-		handoffPaths[c.Path] = c
+	if ep.AnalysisRoot == "" {
+		return fmt.Errorf("exact plan missing analysis_root")
 	}
 	for _, ec := range ep.Candidates {
 		if ec.Path == "" {
@@ -544,9 +574,16 @@ func validateHandoffInvariants(report Report) error {
 		if err := validateExactCandidateScope(ec, ep.ReclaimScope); err != nil {
 			return err
 		}
+		if isTemp && !(ec.Path == ep.AnalysisRoot || strings.HasPrefix(ec.Path, ep.AnalysisRoot+string(filepath.Separator))) {
+			return fmt.Errorf("temp exact plan candidate %s is outside its analysis_root %s", ec.Path, ep.AnalysisRoot)
+		}
 		hc, ok := handoffPaths[ec.Path]
 		if !ok {
-			return fmt.Errorf("exact_plan path %s not present in prune_handoff.candidates", ec.Path)
+			return fmt.Errorf("exact plan path %s not present in prune_handoff.candidates (or in two plans)", ec.Path)
+		}
+		if NormalizeReclaimScope(hc.ReclaimScope) != ep.ReclaimScope {
+			return fmt.Errorf("handoff candidate %s reclaim_scope %q disagrees with exact_plan.reclaim_scope %q",
+				hc.Path, hc.ReclaimScope, ep.ReclaimScope)
 		}
 		if NormalizeReclaimScope(hc.ReclaimScope) != NormalizeReclaimScope(ec.ReclaimScope) {
 			return fmt.Errorf("path %s reclaim_scope mismatch: handoff=%q exact=%q",
@@ -557,11 +594,6 @@ func validateHandoffInvariants(report Report) error {
 				ec.Path, hc.ParentPath, ec.ParentPath)
 		}
 		delete(handoffPaths, ec.Path)
-	}
-	if len(handoffPaths) > 0 {
-		for p := range handoffPaths {
-			return fmt.Errorf("prune_handoff.candidates path %s missing from exact_plan", p)
-		}
 	}
 	return nil
 }

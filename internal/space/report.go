@@ -89,6 +89,11 @@ type Report struct {
 	// TempPlaneCoverage names OS temp roots not walked by this run, present
 	// only under warn/critical primary pressure. Observation only.
 	TempPlaneCoverage *TempPlaneCoverage `json:"temp_plane_coverage,omitempty"`
+	// IncludeTemp records whether --include-temp requested verified temp walk
+	// roots; TempRoots reports each candidate's admission. A report without
+	// the scope carries no temp candidates.
+	IncludeTemp bool       `json:"include_temp,omitempty"`
+	TempRoots   []TempRoot `json:"temp_roots,omitempty"`
 	// ContainerRuntime reports container-engine storage headroom. Diagnostic
 	// only: it adds no prune candidates. See containerruntime.go.
 	ContainerRuntime *ContainerRuntime `json:"container_runtime,omitempty"`

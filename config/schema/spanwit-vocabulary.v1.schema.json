@@ -416,6 +416,23 @@
         "user-temp"
       ]
     },
+    "temp_root_reason": {
+      "type": "string",
+      "description": "Why a candidate temp root was not admitted as a verified walk root.",
+      "enum": [
+        "not_owned",
+        "shared_path",
+        "group_or_other_writable",
+        "sticky",
+        "symlink",
+        "not_directory",
+        "overlaps_analysis_root",
+        "unsupported_platform",
+        "not_requested",
+        "mode",
+        "euid_root"
+      ]
+    },
     "trust_state": {
       "type": "string",
       "description": "ADR-0004 trust states.",

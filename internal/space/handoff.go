@@ -3,6 +3,8 @@ package space
 import (
 	"github.com/3leaps/spanwit/internal/config"
 	"github.com/3leaps/spanwit/internal/engine"
+	"path/filepath"
+	"strings"
 )
 
 // ExactPlanSchemaID is the $schema for the embedded exact prune plan.
@@ -55,16 +57,19 @@ type ExactCandidate struct {
 // rows from this SpaceReport. Suggested revalidation uses the embedded ExactPlan
 // via `spanwit prune --from-space-report <this-json>`. No --execute is suggested.
 type PruneHandoff struct {
-	Present           bool               `json:"present"`
-	AnalysisRoot      string             `json:"analysis_root"`
-	MinSize           string             `json:"min_size"`
-	PrunableCount     int                `json:"prunable_count"`
-	PrunableBytes     int64              `json:"prunable_bytes"`
-	PrunableHuman     string             `json:"prunable_human"`
-	SizeIncomplete    bool               `json:"size_incomplete"`
-	SizeBound         string             `json:"size_bound,omitempty"` // derived on marshal
-	Candidates        []Entry            `json:"candidates"`
-	ExactPlan         *ExactPlan         `json:"exact_plan,omitempty"`
+	Present        bool       `json:"present"`
+	AnalysisRoot   string     `json:"analysis_root"`
+	MinSize        string     `json:"min_size"`
+	PrunableCount  int        `json:"prunable_count"`
+	PrunableBytes  int64      `json:"prunable_bytes"`
+	PrunableHuman  string     `json:"prunable_human"`
+	SizeIncomplete bool       `json:"size_incomplete"`
+	SizeBound      string     `json:"size_bound,omitempty"` // derived on marshal
+	Candidates     []Entry    `json:"candidates"`
+	ExactPlan      *ExactPlan `json:"exact_plan,omitempty"`
+	// TempExactPlans holds one exact plan per admitted temp root, each with
+	// that root as its analysis_root. prune re-admits each root at prune time.
+	TempExactPlans    []ExactPlan        `json:"temp_exact_plans,omitempty"`
 	SuggestedCommands []SuggestedCommand `json:"suggested_commands"`
 	Notes             []string           `json:"notes"`
 }
@@ -81,6 +86,10 @@ type HandoffInput struct {
 	// suggesting a fresh `space` rescan so the command does not silently broaden.
 	ClassFilters  []string
 	DomainFilters []string
+	// TempRoots are the admitted canonical temp roots (space --include-temp).
+	// Prunable candidates under each get their own exact plan whose
+	// analysis_root is that temp root, so no candidate picks its own boundary.
+	TempRoots []string
 }
 
 // NormalizeReclaimScope maps empty to whole (explicit carrier value).
@@ -193,15 +202,29 @@ func BuildPruneHandoff(in HandoffInput) PruneHandoff {
 		return out
 	}
 
-	out.ExactPlan = &ExactPlan{
-		Schema:       ExactPlanSchemaID,
-		Version:      1,
-		AnalysisRoot: in.AnalysisRoot,
-		MinSize:      minSizeDisplay,
-		SortMode:     sortMode,
-		ReclaimScope: planScope,
-		Candidates:   exactCands,
-		Signatures:   neededSigs,
+	// One exact plan per root: candidates under an admitted temp root go to
+	// that root's plan; everything else stays in the analysis-root plan.
+	primary, byTemp := partitionByRoot(exactCands, in.TempRoots)
+	newPlan := func(root string, cands []ExactCandidate) ExactPlan {
+		return ExactPlan{
+			Schema:       ExactPlanSchemaID,
+			Version:      1,
+			AnalysisRoot: root,
+			MinSize:      minSizeDisplay,
+			SortMode:     sortMode,
+			ReclaimScope: planScope,
+			Candidates:   cands,
+			Signatures:   neededSigs,
+		}
+	}
+	if len(primary) > 0 {
+		p := newPlan(in.AnalysisRoot, primary)
+		out.ExactPlan = &p
+	}
+	for _, root := range in.TempRoots {
+		if cands := byTemp[root]; len(cands) > 0 {
+			out.TempExactPlans = append(out.TempExactPlans, newPlan(root, cands))
+		}
 	}
 
 	// Primary revalidate path: from-space-report (policy-preserving).
@@ -322,4 +345,26 @@ func ExactPlanToEngine(p *ExactPlan) engine.ExactPlanInput {
 		AnalysisRoot: p.AnalysisRoot,
 		Signatures:   p.Signatures,
 	}
+}
+
+// partitionByRoot assigns each exact candidate to the admitted temp root that
+// contains it, or to the analysis-root plan otherwise. Temp roots never
+// overlap the analysis root or each other (admission refuses overlap).
+func partitionByRoot(cands []ExactCandidate, tempRoots []string) ([]ExactCandidate, map[string][]ExactCandidate) {
+	primary := make([]ExactCandidate, 0, len(cands))
+	byTemp := map[string][]ExactCandidate{}
+	for _, c := range cands {
+		placed := false
+		for _, root := range tempRoots {
+			if c.Path == root || strings.HasPrefix(c.Path, root+string(filepath.Separator)) {
+				byTemp[root] = append(byTemp[root], c)
+				placed = true
+				break
+			}
+		}
+		if !placed {
+			primary = append(primary, c)
+		}
+	}
+	return primary, byTemp
 }

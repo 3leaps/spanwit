@@ -241,21 +241,66 @@ func buildPrunePlanFromSpaceReport(ctx context.Context, path string, opts ...eng
 		// Zero-candidate carrier replay: still schema-valid and self-describing.
 		return emptyPlanFromSpaceReport(report, opts...), nil
 	}
-	if report.PruneHandoff.ExactPlan == nil {
-		return PrunePlan{}, fmt.Errorf("space report has no prune_handoff.exact_plan")
+	h := report.PruneHandoff
+	if h.ExactPlan == nil && len(h.TempExactPlans) == 0 {
+		return PrunePlan{}, fmt.Errorf("space report has no prune_handoff exact plan")
 	}
-	in := space.ExactPlanToEngine(report.PruneHandoff.ExactPlan)
-	// Carrier sort from exact_plan (report-validated parity). Explicit CLI
-	// --sort (passed in opts) overrides because ranking is advisory only.
+	// Carrier sort (report-validated parity). Explicit CLI --sort (passed in
+	// opts) overrides because ranking is advisory only.
 	carrierSort := report.SortMode
-	if report.PruneHandoff.ExactPlan.SortMode != "" {
-		carrierSort = report.PruneHandoff.ExactPlan.SortMode
+	if h.ExactPlan != nil && h.ExactPlan.SortMode != "" {
+		carrierSort = h.ExactPlan.SortMode
 	}
 	if carrierSort == "" {
 		carrierSort = engine.SortIdle
 	}
 	merged := append([]engine.PlanOptions{engine.WithSortMode(carrierSort)}, opts...)
-	return buildPrunePlanFromExact(ctx, in, merged...)
+
+	var out PrunePlan
+	have := false
+	add := func(p PrunePlan) {
+		if !have {
+			out = p
+			have = true
+			return
+		}
+		out.Candidates = append(out.Candidates, p.Candidates...)
+		out.TotalSize += p.TotalSize
+		out.SizeIncomplete = out.SizeIncomplete || p.SizeIncomplete
+		out.Warnings = append(out.Warnings, p.Warnings...)
+	}
+	if h.ExactPlan != nil {
+		p, err := buildPrunePlanFromExact(ctx, space.ExactPlanToEngine(h.ExactPlan), merged...)
+		if err != nil {
+			return PrunePlan{}, err
+		}
+		add(p)
+	}
+	// Each temp plan is revalidated under its own root, and only after that
+	// root is re-admitted now: ownership and mode may have changed since the
+	// report was written, so admission is never taken from the report.
+	for i := range h.TempExactPlans {
+		tp := &h.TempExactPlans[i]
+		adm := engine.ReadmitCarriedTempRoot(tp.AnalysisRoot, report.Root)
+		if !adm.Admitted || adm.Root != tp.AnalysisRoot {
+			reason := adm.Reason
+			if reason == "" {
+				reason = "root changed on canonicalization"
+			}
+			dropped := PrunePlan{Warnings: []error{fmt.Errorf(
+				"temp root %s no longer admitted (%s); its %d candidate(s) are not included", tp.AnalysisRoot, reason, len(tp.Candidates))}}
+			add(dropped)
+			continue
+		}
+		in := space.ExactPlanToEngine(tp)
+		in.TempRoot = true
+		p, err := buildPrunePlanFromExact(ctx, in, merged...)
+		if err != nil {
+			return PrunePlan{}, err
+		}
+		add(p)
+	}
+	return out, nil
 }
 
 // emptyPlanFromSpaceReport builds a schema-valid empty prune plan that retains

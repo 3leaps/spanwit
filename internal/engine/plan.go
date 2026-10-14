@@ -256,6 +256,11 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 			if path == root {
 				return nil
 			}
+			// Under a temp root, a group- or other-writable directory is not
+			// descended: another user could have planted what is inside it.
+			if profile.TempRoot && groupOrOtherWritable(d) {
+				return filepath.SkipDir
+			}
 
 			rel, err := filepath.Rel(root, path)
 			if err != nil {
@@ -287,6 +292,11 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 			// but never lower; it applies by path match, whatever the target's
 			// provenance, so a pattern-only target cannot escape it.
 			effMinAge = raiseMinAge(effMinAge, ageFloorFor(rel, signatures))
+			floored := ageFloorFor(rel, signatures) != ""
+			if profile.TempRoot {
+				effMinAge = raiseMinAge(effMinAge, tempRootAgeFloor)
+				floored = true
+			}
 			minSize, err := ParseSize(displayFilterRaw(effMinSize))
 			if err != nil {
 				return fmt.Errorf("invalid min_size %q: %w", effMinSize, err)
@@ -373,7 +383,7 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 			withheldReason := ""
 			now := time.Now()
 			if !meetsAgeWindow(effMinAge, effMaxAge, info.ModTime(), now) ||
-				(ageFloorFor(rel, signatures) != "" && !floorAgeOK(path, effMinAge, now)) {
+				(floored && !floorAgeOK(path, effMinAge, now)) {
 				state = CandidateStateWithheld
 				withheldReason = WithheldReasonAge
 			}
