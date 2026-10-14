@@ -22,6 +22,7 @@ import (
 	"github.com/3leaps/spanwit/internal/config"
 	"github.com/3leaps/spanwit/internal/contract"
 	"github.com/3leaps/spanwit/internal/engine"
+	"github.com/3leaps/spanwit/internal/envelope"
 	"github.com/3leaps/spanwit/internal/inventory"
 	"github.com/3leaps/spanwit/internal/space"
 )
@@ -563,6 +564,13 @@ func writeCapacityJSON(w io.Writer, report space.CapacityOnlyReport) error {
 	if err := space.ValidateCapacityInvariants(report); err != nil {
 		return fmt.Errorf("space report invariant validation failed: %w", err)
 	}
+	report.Tool = envelope.CurrentTool()
+	report.Disclosure = nil
+	d, err := envelope.Stamp(report, report.Root)
+	if err != nil {
+		return err
+	}
+	report.Disclosure = d
 	payload, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err
@@ -744,6 +752,13 @@ func readCompareSource(path string, stdin io.Reader) ([]byte, error) {
 }
 
 func writeCompareJSON(w io.Writer, report capacity.CompareReport) error {
+	report.Tool = envelope.CurrentTool()
+	report.Disclosure = nil
+	d, err := envelope.Stamp(report)
+	if err != nil {
+		return err
+	}
+	report.Disclosure = d
 	payload, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err
@@ -825,6 +840,13 @@ func formatOptionalBytes(value *int64) string {
 }
 
 func writeSpaceJSON(w io.Writer, report space.Report) error {
+	report.Tool = envelope.CurrentTool()
+	report.Disclosure = nil
+	d, err := envelope.Stamp(report, report.Root)
+	if err != nil {
+		return err
+	}
+	report.Disclosure = d
 	payload, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err

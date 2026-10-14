@@ -257,9 +257,16 @@ func TestRunSpaceCompareExplicitFileAndStdin(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if report.Left.Path != "-" || report.Right.Path != right ||
+	// Compare carries the input file name only, never its directory.
+	if report.Left.Path != "-" || report.Right.Path != filepath.Base(right) ||
 		report.GeneratedAt != "2026-07-31T13:00:00Z" {
 		t.Fatalf("report=%#v", report)
+	}
+	if strings.Contains(stdout.String(), filepath.Dir(right)) {
+		t.Fatalf("compare output must not carry the input directory %s", filepath.Dir(right))
+	}
+	if report.Disclosure == nil || report.Disclosure.Paths != "none" {
+		t.Fatalf("a new compare is paths none, got %+v", report.Disclosure)
 	}
 }
 

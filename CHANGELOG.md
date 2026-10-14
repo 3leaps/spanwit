@@ -57,6 +57,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   carries `bytes_bound: exact` for its one statfs sample; temp planes, residue
   families and measured container runtime figures state their bound. The new
   fields are optional in the schema so older reports still load.
+- **Report envelope**: every whole-document report (space v1/v2, compare,
+  prune plan, observe health and observe state) carries a top-level `tool`
+  (`name`, `version`, optional `commit`) and a `disclosure` summary.
+  - **`disclosure`** states what the document contains, derived from its
+    content when it is written:
+    - `paths`: `none`, `analysis`, `system` or `full`;
+    - `image_refs`: `aggregate` or `local`;
+    - `process_identity`: whether held-open holders are present.
+
+    Loaders re-derive it. A summary narrower than the content fails to load.
+    Reports from earlier releases load as the most disclosed level for their
+    kind, with `tool` unknown.
+
+  - **`completion`**: space capacity-only reports now emit it (`partial`
+    when any capacity plane has a coverage gap), and compare emits it
+    (`partial` when it has its own warnings or either input was partial).
+  - **`generated_at`**: observe state now records it.
+- **Exact prune plan schema**: `spanwit-exact-prune-plan.v1.schema.json`
+  is published at the URL an exact plan's `$schema` names.
 
 ### Changed
 
@@ -70,9 +89,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   suggests `docker image prune -a` as an early step.
 - CI and release builds run on `goneat-tools-runner-glibc` v0.5.9 pinned by
   index digest; bootstrap installs goneat v0.6.3.
+- `space --compare` records each input as its file name only; the directory
+  is no longer written to the compare report.
+- An exact plan whose candidate is not inside its `analysis_root` now fails
+  to load, rather than at revalidation.
 
 ### Fixed
 
+- With `--include-temp`, the Cargo placement recipe's exact plan carries only
+  candidates under the analysis root, so its purge step revalidates; temp
+  candidates stay in their own temp-root plan.
 - Exact-plan revalidation matches signature patterns against the path
   relative to the plan's analysis root, so path-anchored patterns revalidate.
   An exact plan cannot lower a signature's age floor, and a pattern-only

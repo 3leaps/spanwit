@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/3leaps/spanwit/internal/engine"
@@ -63,8 +64,22 @@ func ValidateStandaloneExactPlan(ep *ExactPlan) error {
 		if err := validateExactCandidateScope(ec, ep.ReclaimScope); err != nil {
 			return err
 		}
+		// Every candidate is inside analysis_root: that is what makes an exact
+		// plan's disclosure analysis by contract. Revalidation enforces the
+		// same boundary; failing here refuses the document before any walk.
+		if !pathWithinRoot(ec.Path, ep.AnalysisRoot) {
+			return fmt.Errorf("exact_plan candidate %s is outside analysis_root %s", ec.Path, ep.AnalysisRoot)
+		}
 	}
 	return nil
+}
+
+func pathWithinRoot(p, root string) bool {
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(p))
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // ParseAndValidateExactPlanJSON decodes a standalone exact_plan document with

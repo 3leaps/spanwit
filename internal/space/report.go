@@ -1,5 +1,7 @@
 package space
 
+import "github.com/3leaps/spanwit/internal/envelope"
+
 // Trust vocabulary for space (extends prune prunable/withheld).
 // See docs/decisions/ADR-0004-diagnostic-only-state.md.
 const (
@@ -98,7 +100,11 @@ type Report struct {
 	// only: it adds no prune candidates. See containerruntime.go.
 	ContainerRuntime *ContainerRuntime `json:"container_runtime,omitempty"`
 	Warnings         []string          `json:"warnings,omitempty"`
-	Notes            []string          `json:"notes,omitempty"`
+	// Tool and Disclosure are the report envelope (see internal/envelope).
+	// Stamped at write time; absent on reports written before v0.2.2.
+	Tool       *envelope.Tool       `json:"tool,omitempty"`
+	Disclosure *envelope.Disclosure `json:"disclosure,omitempty"`
+	Notes      []string             `json:"notes,omitempty"`
 }
 
 // Pressure describes filesystem capacity for one measured path/volume.
@@ -220,22 +226,15 @@ const CriticalDeepMaxDepth = 6
 
 // Completion lifecycles for a finished space report.
 const (
-	CompletionComplete = "complete"
-	CompletionPartial  = "partial"
+	CompletionComplete = envelope.CompletionComplete
+	CompletionPartial  = envelope.CompletionPartial
 )
 
 // Completion summarizes a finished report: partial iff it carries warnings
 // (coverage gaps). The report is still usable when partial.
-type Completion struct {
-	Lifecycle    string `json:"lifecycle"`
-	WarningCount int    `json:"warning_count"`
-}
+type Completion = envelope.Completion
 
 // NewCompletion derives the completion record from a report's warnings.
 func NewCompletion(warnings []string) *Completion {
-	c := &Completion{Lifecycle: CompletionComplete, WarningCount: len(warnings)}
-	if len(warnings) > 0 {
-		c.Lifecycle = CompletionPartial
-	}
-	return c
+	return envelope.NewCompletion(len(warnings))
 }

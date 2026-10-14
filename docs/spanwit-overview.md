@@ -127,6 +127,36 @@ Capacity reports are not automatically share-safe: analysis roots and mounts
 are present, catalog-constrained system roots may be present, and user-renamed
 APFS volume names may carry personal or organizational text.
 
+Every whole-document report carries an envelope: `tool` (`name`, `version`,
+optional `commit`; never a host, user or path), `completion` where the
+document describes a capture, and a `disclosure` summary derived from the
+document's own content:
+
+| `paths`    | Contains                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------ |
+| `none`     | no paths (compare, observe health)                                                                     |
+| `analysis` | the analysis root and paths under it, plus compiled catalog constants                                  |
+| `system`   | also the home directory as the pressure anchor, and the mounts `/`, `/System/Volumes/Data` and `/home` |
+| `full`     | any other path: home caches and recipes, temp roots, held-open paths, other mounts                     |
+
+Every string is scanned except the summary itself, including map keys and
+`tool`. A path token is an absolute path, `~` or `~user/`, `$VAR/` or
+`%VAR%\`, a dot-relative or dotfile path (`./x`, `../x`, `.ssh/x`), a
+Windows drive or UNC path, a `file:` URL, an encoded slash, or a path inside
+an http(s) URL's query or fragment. Only a plain absolute path can be
+`analysis` or `system`; every other token is `full`. A bare relative word
+with no leading `/`, `~`, `$`, `.` or drive (`registry/git`) cannot be told
+apart from prose and is not counted; every spanwit path field is absolute.
+
+`image_refs` is `local` when any image, volume, profile or socket name is
+present, and `process_identity` is true when held-open holders (pid, uid,
+executable name) are present. Only `none` with `aggregate` and no process
+identity is a screenshot-safe document; a default `space` report is `full`
+because home caches and recipes are on by default. Loaders re-derive the
+summary and refuse one narrower than the content; reports from earlier
+releases load as the most disclosed level for their kind. Compare records each
+input by file name only.
+
 `inventory` is neutral evidence: file size and age never grant deletion
 authority. It requires explicit roots, follows no directory symlinks, creates
 no persistent/temp state by default, and reports permission, disappearance,
@@ -159,7 +189,10 @@ Spanwit reads a YAML config validated against `config/schema/spanwit-config.v1.s
 
 Environment variables use the `SPANWIT_` prefix (defined in `.fulmen/app.yaml`).
 The structured `prune --format json` output is validated against
-`config/schema/spanwit-prune-plan.v1.schema.json`. See
+`config/schema/spanwit-prune-plan.v1.schema.json`. A standalone exact plan
+for `prune --from-exact-plan` follows
+`config/schema/spanwit-exact-prune-plan.v1.schema.json`; every candidate must
+be inside its `analysis_root`. See
 [configuration.md](configuration.md) for the config layout and signature model.
 
 ## gofulmen Integration

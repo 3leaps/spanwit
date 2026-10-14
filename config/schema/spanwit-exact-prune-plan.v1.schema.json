@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/exact-prune-plan/v1.json",
+  "title": "Spanwit Exact Prune Plan v1",
+  "description": "Policy-preserving exact-path plan for prune --from-space-report revalidation.",
+  "type": "object",
+  "required": [
+    "$schema",
+    "version",
+    "analysis_root",
+    "min_size",
+    "sort_mode",
+    "reclaim_scope",
+    "candidates"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "analysis_root": {
+      "type": "string"
+    },
+    "min_size": {
+      "type": "string"
+    },
+    "sort_mode": {
+      "type": "string",
+      "enum": [
+        "idle",
+        "size"
+      ]
+    },
+    "reclaim_scope": {
+      "type": "string",
+      "enum": [
+        "whole",
+        "incremental"
+      ]
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/exact_candidate"
+      }
+    },
+    "signatures": {
+      "type": "object",
+      "description": "Additive signature catalog (custom signatures only).",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "exact_candidate": {
+      "type": "object",
+      "required": [
+        "path",
+        "effective_min_size",
+        "effective_min_age",
+        "effective_max_age",
+        "size_bytes",
+        "size_human",
+        "reclaim_scope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signature": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "effective_min_size": {
+          "type": "string"
+        },
+        "effective_min_age": {
+          "type": "string"
+        },
+        "effective_max_age": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size_human": {
+          "type": "string"
+        },
+        "size_incomplete": {
+          "type": "boolean"
+        },
+        "size_bound": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "lower"
+          ],
+          "description": "Bound of the size figure: exact, or lower when size_incomplete is true (the figure is an observed minimum). Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
+        },
+        "reclaim_scope": {
+          "type": "string",
+          "enum": [
+            "whole",
+            "incremental"
+          ]
+        },
+        "parent_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "last_activity_at": {
+          "type": "string"
+        },
+        "activity_basis": {
+          "type": "string",
+          "enum": [
+            "descendant_mtime",
+            "unknown"
+          ]
+        },
+        "activity_incomplete": {
+          "type": "boolean"
+        },
+        "rebuild_expectation": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reclaim_scope": {
+                "const": "incremental"
+              }
+            },
+            "required": [
+              "reclaim_scope"
+            ]
+          },
+          "then": {
+            "required": [
+              "parent_path"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reclaim_scope": {
+                "const": "whole"
+              }
+            },
+            "required": [
+              "reclaim_scope"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "parent_path"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "size_incomplete": {
+                "const": true
+              }
+            },
+            "required": [
+              "size_incomplete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "size_bound": {
+                "const": "lower"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "size_bound": {
+                "const": "exact"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

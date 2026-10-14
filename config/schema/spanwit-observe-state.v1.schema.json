@@ -27,6 +27,17 @@
       "additionalProperties": {
         "$ref": "#/$defs/runtime"
       }
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this state document was written. Absent on state written before v0.2.2."
+    },
+    "tool": {
+      "$ref": "#/$defs/envelope_tool"
+    },
+    "disclosure": {
+      "$ref": "#/$defs/disclosure"
     }
   },
   "$defs": {
@@ -201,6 +212,60 @@
         },
         "scan_in_flight": {
           "const": false
+        }
+      }
+    },
+    "envelope_tool": {
+      "type": "object",
+      "description": "The spanwit build that produced this document: name, version and an optional commit. Never a host, user, cwd or path. Absent on documents written before v0.2.2, which load as tool unknown.",
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "const": "spanwit"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "disclosure": {
+      "type": "object",
+      "description": "What this document discloses, derived from its emitted content. paths: none < analysis (analysis root and below, catalog constants) < system (also the home directory as pressure anchor and the OS root mounts /, /System/Volumes/Data, /home) < full (any other path). image_refs: local iff any image, volume, profile or socket name is present. process_identity: true iff any held-open holder is present. A loader re-derives it: a wider summary loads, a narrower one fails. Absent on documents written before v0.2.2, which load as the most disclosed level for their kind.",
+      "required": [
+        "paths",
+        "image_refs",
+        "process_identity"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "type": "string",
+          "enum": [
+            "none",
+            "analysis",
+            "system",
+            "full"
+          ]
+        },
+        "image_refs": {
+          "type": "string",
+          "enum": [
+            "aggregate",
+            "local"
+          ]
+        },
+        "process_identity": {
+          "type": "boolean"
         }
       }
     }

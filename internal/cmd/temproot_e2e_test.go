@@ -370,3 +370,41 @@ func TestS4bE2E_TempFloorAtRevalidation(t *testing.T) {
 		t.Fatalf("the fresh temp candidate must be present exactly once at prune (got %d)", n)
 	}
 }
+
+// A structural recipe's exact plan is bounded by the analysis root: with
+// temp roots present, the Cargo placement recipe carries only analysis-root
+// candidates, so its plan loads and revalidates on its own.
+func TestS4bE2E_RecipeExactPlanStaysInAnalysisRoot(t *testing.T) {
+	e2eSkip(t)
+	analysis := t.TempDir()
+	temp := e2eTempRoot(t)
+	inAnalysis := e2eCargo(t, filepath.Join(analysis, "app"))
+	inTemp := e2eCargo(t, filepath.Join(temp, "checkout"))
+	e2eAge(t, analysis)
+	e2eAge(t, temp)
+	_, r := e2eReport(t, analysis, temp)
+
+	var ep *space.ExactPlan
+	for i := range r.Recipes {
+		if r.Recipes[i].ExactPlan != nil {
+			ep = r.Recipes[i].ExactPlan
+		}
+	}
+	if ep == nil {
+		t.Fatal("expected the Cargo placement recipe to carry an exact plan")
+	}
+	paths := map[string]bool{}
+	for _, c := range ep.Candidates {
+		paths[c.Path] = true
+	}
+	if !paths[inAnalysis] || paths[inTemp] {
+		t.Fatalf("recipe plan must hold the analysis-root target only, got %v", paths)
+	}
+	raw, err := json.Marshal(ep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := space.ParseAndValidateExactPlanJSON(raw); err != nil {
+		t.Fatalf("the recipe plan must load standalone: %v", err)
+	}
+}

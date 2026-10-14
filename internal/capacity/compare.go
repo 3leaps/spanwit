@@ -4,12 +4,18 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/3leaps/spanwit/internal/envelope"
 )
 
 const CompareSchemaID = "https://schemas.3leaps.dev/spanwit/space-compare/v1.json"
 
 type CompareInput struct {
-	Path          string
+	// Path is the input file name only (filepath.Base): the directory is
+	// never carried into a compare document.
+	Path string
+	// Partial is true when the input capture's completion was partial.
+	Partial       bool
 	ReportSchema  string
 	ReportVersion int
 	CaptureMode   string
@@ -99,6 +105,11 @@ type CompareReport struct {
 	Coverage      CompareCoverage      `json:"coverage"`
 	Narrative     *CompareNarrative    `json:"narrative,omitempty"`
 	Warnings      []string             `json:"warnings,omitempty"`
+	// Completion is partial iff the compare has its own warnings or either
+	// input capture was partial.
+	Completion *envelope.Completion `json:"completion,omitempty"`
+	Tool       *envelope.Tool       `json:"tool,omitempty"`
+	Disclosure *envelope.Disclosure `json:"disclosure,omitempty"`
 }
 
 type claimRef struct {
@@ -251,7 +262,15 @@ func Compare(now time.Time, left, right CompareInput) CompareReport {
 			Unavailable: unavailable,
 			Unexplained: []string{},
 		},
+		Completion: envelope.NewCompletion(boolCount(left.Partial) + boolCount(right.Partial)),
 	}
+}
+
+func boolCount(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func compareSide(input CompareInput) CompareSide {

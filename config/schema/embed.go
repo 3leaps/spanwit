@@ -17,6 +17,9 @@ var SpanwitSpaceReportV2 []byte
 //go:embed spanwit-space-compare.v1.schema.json
 var SpanwitSpaceCompareV1 []byte
 
+//go:embed spanwit-exact-prune-plan.v1.schema.json
+var SpanwitExactPrunePlanV1 []byte
+
 //go:embed spanwit-domain-catalog.v1.schema.json
 var SpanwitDomainCatalogV1 []byte
 
