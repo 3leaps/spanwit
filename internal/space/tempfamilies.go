@@ -3,7 +3,6 @@ package space
 import (
 	"os"
 	"strings"
-	"time"
 )
 
 // Temp residue families.
@@ -45,34 +44,6 @@ func classifyTempEntry(name string) string {
 	return TempFamilyOther
 }
 
-// TempFamily is one aggregate row keyed by a fixed label. It carries no path.
-type TempFamily struct {
-	Family  string `json:"family"`
-	Entries int64  `json:"entries"`
-	Bytes   int64  `json:"bytes"`
-	// BytesBound is exact when every listed entry was measured, and lower when
-	// an entry could not be stat'd and was left out of the sum; set on marshal.
-	BytesBound string `json:"bytes_bound,omitempty"`
-	// bytesIncomplete records that an entry of this family was skipped.
-	bytesIncomplete bool
-	Oldest          time.Time `json:"oldest"`
-	Newest          time.Time `json:"newest"`
-}
-
-// TempResidueSummary aggregates the direct children of the temp planes by
-// family. HiddenEntries counts dot-prefixed children inside the totals; hidden
-// entries are never excluded. Bytes are each entry's own lstat size (for a
-// directory, its record, not its contents): counts are the signal, and the
-// plane probe owns content sizing.
-type TempResidueSummary struct {
-	EntriesTotal  int64 `json:"entries_total"`
-	HiddenEntries int64 `json:"hidden_entries"`
-	// SkippedEntries counts listed children that could not be stat'd. They are
-	// in no family row; a family that lost an entry states a lower bound.
-	SkippedEntries int64        `json:"skipped_entries,omitempty"`
-	Families       []TempFamily `json:"families"`
-}
-
 // summarizeTempEntries folds direct children of a temp root into family rows.
 // sizeOf reports the bytes attributed to one child; it is supplied by the
 // caller so the walk stays bounded and symlink-strict.
@@ -92,7 +63,7 @@ func summarizeTempEntries(entries []os.DirEntry, sizeOf func(os.DirEntry) int64)
 		if err != nil {
 			// Not counted: the family's bytes are now a lower bound, and the
 			// skip is reported at summary level, never as a zero-entry row.
-			row.bytesIncomplete = true
+			row.BytesIncomplete = true
 			summary.SkippedEntries++
 			continue
 		}

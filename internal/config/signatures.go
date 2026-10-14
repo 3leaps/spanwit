@@ -168,23 +168,6 @@ func ParseAge(s string) (time.Duration, error) {
 	}
 }
 
-func (c SignatureCatalog) Lookup(id string) (Signature, bool) {
-	parts := strings.Split(id, ".")
-	if len(parts) != 3 {
-		return Signature{}, false
-	}
-	ecosystems, ok := c[parts[0]]
-	if !ok {
-		return Signature{}, false
-	}
-	signatures, ok := ecosystems[parts[1]]
-	if !ok {
-		return Signature{}, false
-	}
-	signature, ok := signatures[parts[2]]
-	return signature, ok
-}
-
 func ValidateSignatureID(id string) error {
 	parts := strings.Split(id, ".")
 	if len(parts) != 3 {

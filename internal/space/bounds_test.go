@@ -478,8 +478,8 @@ func TestBounds_EmittedReportsCarryEveryBound(t *testing.T) {
 }
 
 func TestBoundFor(t *testing.T) {
-	if boundFor(false) != BoundExact || boundFor(true) != BoundLower {
-		t.Fatal("boundFor must map complete→exact, incomplete→lower")
+	if BoundFor(false) != BoundExact || BoundFor(true) != BoundLower {
+		t.Fatal("BoundFor must map complete→exact, incomplete→lower")
 	}
 }
 
@@ -681,14 +681,14 @@ func TestBounds_LowerBoundsSurviveRoundTrip(t *testing.T) {
 		Signature: "development.rust.cargo-target", RebuildExpectation: RebuildHigh,
 		EffectiveMinSize: "none", EffectiveMinAge: "none", EffectiveMaxAge: "none"}
 	r.Verified.Candidates = []Entry{inc}
-	annotateVerifiedBoundState(&r.Verified)
+	AnnotateVerifiedBoundState(&r.Verified)
 	r.Unverified.SizeIncomplete = true
 	sz := int64(5)
 	r.TempPlaneCoverage = &TempPlaneCoverage{Trigger: PressureWarn, Planes: []TempPlane{{
 		Root: "/private/tmp", Kind: TempPlaneKindShared, SizeStatus: TempPlaneSizePartial,
 		SizeBytes: &sz, SizeBasis: "apparent", FollowUp: "spanwit space /private/tmp",
 	}}, Residue: &TempResidueSummary{EntriesTotal: 1, Families: []TempFamily{{
-		Family: TempFamilyOther, Entries: 1, Bytes: 1, bytesIncomplete: true,
+		Family: TempFamilyOther, Entries: 1, Bytes: 1, BytesIncomplete: true,
 		Oldest: time.Unix(1, 0).UTC(), Newest: time.Unix(1, 0).UTC(),
 	}}}}
 
@@ -732,7 +732,7 @@ func TestBounds_VerifiedPerSideBoundsSurviveRoundTrip(t *testing.T) {
 				Signature: "development.rust.cargo-target", RebuildExpectation: RebuildHigh,
 				EffectiveMinSize: "none", EffectiveMinAge: "none", EffectiveMaxAge: "none",
 			}}}
-			annotateVerifiedBoundState(&v)
+			AnnotateVerifiedBoundState(&v)
 			first, err := json.Marshal(v)
 			if err != nil {
 				t.Fatal(err)

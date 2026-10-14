@@ -412,7 +412,7 @@ func TestAnnotateVerifiedBoundState_IndependentSubtotals(t *testing.T) {
 		PrunableCandidates: 1, PrunableBytes: 100,
 		WithheldCandidates: 1, WithheldBytes: 50,
 	}
-	annotateVerifiedBoundState(&v)
+	AnnotateVerifiedBoundState(&v)
 	if !v.SizeIncomplete || !v.PrunableSizeIncomplete || v.WithheldSizeIncomplete {
 		t.Fatalf("want section+prunable incomplete only: %#v", v)
 	}
@@ -422,7 +422,7 @@ func TestAnnotateVerifiedBoundState_IndependentSubtotals(t *testing.T) {
 			{Path: "/w", State: StateWithheld, SizeBytes: 50, SizeIncomplete: true},
 		},
 	}
-	annotateVerifiedBoundState(&v2)
+	AnnotateVerifiedBoundState(&v2)
 	if !v2.SizeIncomplete || v2.PrunableSizeIncomplete || !v2.WithheldSizeIncomplete {
 		t.Fatalf("want section+withheld incomplete only: %#v", v2)
 	}

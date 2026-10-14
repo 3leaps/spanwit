@@ -2,6 +2,7 @@ package capacity
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -66,7 +67,7 @@ func TestCompareIdentityAndHeldAsymmetryStayPlaneLocal(t *testing.T) {
 	if got := findDelta(t, report, "held_open", "logical_bytes"); got.DeltaStatus != "indeterminate" {
 		t.Fatalf("held=%#v", got)
 	}
-	if !containsString(report.Coverage.AsymmetricPlanes, "held_open") {
+	if !slices.Contains(report.Coverage.AsymmetricPlanes, "held_open") {
 		t.Fatalf("coverage=%#v", report.Coverage)
 	}
 }

@@ -12,43 +12,6 @@ import (
 	"github.com/3leaps/spanwit/internal/engine"
 )
 
-// Recipe kind: argv recipes are single-shot external command suggestions;
-// structural recipes are multi-step guided journeys (print-only).
-const (
-	RecipeKindArgv       = "argv"
-	RecipeKindStructural = "structural"
-)
-
-// Recipe step kinds for structural journeys. None are auto-executed.
-const (
-	StepObserve       = "observe"
-	StepCommand       = "command"
-	StepConfigSnippet = "config_snippet"
-	StepPurgeHint     = "purge_hint"
-	StepVerify        = "verify"
-)
-
-// RecipeStep is one ordered step in a structural guided recipe.
-// Print-only: spanwit never writes config, never moves trees, never deletes.
-type RecipeStep struct {
-	ID    string   `json:"id"`
-	Title string   `json:"title"`
-	Kind  string   `json:"kind"`
-	Body  []string `json:"body,omitempty"`
-	Paths []string `json:"paths,omitempty"`
-	// Command is set for kind=command (or purge_hint when a revalidate argv exists).
-	Command *SuggestedCommand `json:"command,omitempty"`
-	// ConfigSnippet is set for kind=config_snippet — copy-paste only.
-	ConfigSnippet *ConfigSnippet `json:"config_snippet,omitempty"`
-}
-
-// ConfigSnippet is a copy-paste config fragment (never written by spanwit).
-type ConfigSnippet struct {
-	// Label is a human file/role hint (e.g. ".envrc", "shell profile").
-	Label   string `json:"label"`
-	Content string `json:"content"`
-}
-
 // CargoPlacementInput supplies evidence for the Cargo structural journey.
 type CargoPlacementInput struct {
 	// Verified is the full projected verified set (pre --top).
@@ -224,7 +187,7 @@ func BuildCargoPlacementJourney(in CargoPlacementInput) (Recipe, bool) {
 	})
 
 	// suggested_commands = ordered projection of step commands (structural authority is steps).
-	suggested := projectCommandsFromSteps(steps)
+	suggested := ProjectCommandsFromSteps(steps)
 	if len(suggested) == 0 && purgeCmd != nil {
 		// Fallback if steps somehow lack commands (should not happen).
 		suggested = []SuggestedCommand{*purgeCmd, verifyCmd}
@@ -251,17 +214,6 @@ func BuildCargoPlacementJourney(in CargoPlacementInput) (Recipe, bool) {
 	}
 	AnnotateRecipeTaxonomy(&r)
 	return r, true
-}
-
-// projectCommandsFromSteps returns argv suggestions in step order (structural projection).
-func projectCommandsFromSteps(steps []RecipeStep) []SuggestedCommand {
-	out := make([]SuggestedCommand, 0)
-	for _, s := range steps {
-		if s.Command != nil {
-			out = append(out, *s.Command)
-		}
-	}
-	return out
 }
 
 type cargoProject struct {

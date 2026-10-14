@@ -61,34 +61,6 @@ type Target struct {
 	MaxAge    string `yaml:"max_age,omitempty"`
 }
 
-type SignatureCatalog map[string]map[string]map[string]Signature
-
-type Signature struct {
-	Description           string   `yaml:"description,omitempty" json:"description,omitempty"`
-	CandidatePatterns     []string `yaml:"candidate_patterns" json:"candidate_patterns"`
-	RequiredAncestorFiles []string `yaml:"required_ancestor_files,omitempty" json:"required_ancestor_files,omitempty"`
-	AnyChildPaths         []string `yaml:"any_child_paths,omitempty" json:"any_child_paths,omitempty"`
-	Confidence            string   `yaml:"confidence,omitempty" json:"confidence,omitempty"`
-	SafeToPrune           bool     `yaml:"safe_to_prune,omitempty" json:"safe_to_prune,omitempty"`
-	// SiblingEvidence lists patterns relative to the candidate's parent
-	// directory; at least one must match a plain regular file under a sibling
-	// directory of the live-db shape (^[0-9]+$) that does not itself match the
-	// signature's candidate patterns. Required when set.
-	SiblingEvidence []string `yaml:"sibling_evidence,omitempty" json:"sibling_evidence,omitempty"`
-	// ContentMarker requires a plain regular file under the candidate whose
-	// first line equals FirstLine exactly. Required when set.
-	ContentMarker *ContentMarker `yaml:"content_marker,omitempty" json:"content_marker,omitempty"`
-	// MinAgeFloor is an absolute minimum age (for example "1h"). A younger
-	// match is withheld for age, whatever min_age the user configures.
-	MinAgeFloor string `yaml:"min_age_floor,omitempty" json:"min_age_floor,omitempty"`
-}
-
-// ContentMarker names a marker file and its exact first line.
-type ContentMarker struct {
-	Path      string `yaml:"path" json:"path"`
-	FirstLine string `yaml:"first_line" json:"first_line"`
-}
-
 // EmptyConfig returns a version-1 config shell with no policy defaults.
 // Age and size gates are opt-in: omitted fields stay unset after load and mean
 // "no gate". Do not seed min_size / min_age / max_age here — YAML decode-over
