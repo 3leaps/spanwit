@@ -435,7 +435,7 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 	// verified rows cannot reappear as unverified/unknown.
 	// Bound-state notes/warnings use these projected full sets (before --top),
 	// never the unfiltered scan sets, so filtered output does not claim hidden rows.
-	annotateVerifiedBoundState(&verifiedFull)
+	AnnotateVerifiedBoundState(&verifiedFull)
 	verifiedProjected := ProjectVerified(verifiedFull, invFilters)
 	verifiedProjected.PrunableHuman = engine.HumanSize(verifiedProjected.PrunableBytes)
 	verifiedProjected.WithheldHuman = engine.HumanSize(verifiedProjected.WithheldBytes)

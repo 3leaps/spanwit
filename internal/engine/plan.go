@@ -50,8 +50,6 @@ const (
 	// on the existing execute path, never a new execute path.
 	WithheldReasonDomainDisabled = "domain_disabled"
 
-	// FilterDisplayNone is the operator-visible value when a gate is unset.
-	FilterDisplayNone = "none"
 	// FilterDisplayMixed is used on the plan-level banner when candidates
 	// resolved to more than one distinct value for that gate.
 	FilterDisplayMixed = "mixed"

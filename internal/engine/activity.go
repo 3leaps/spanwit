@@ -13,17 +13,6 @@ const (
 	// ActivityBasisUnknown means activity could not be established confidently.
 	ActivityBasisUnknown = "unknown"
 
-	// SortSize is largest-first (historical default for prune/scan).
-	SortSize = "size"
-	// SortIdle ranks complete cold activity first, incomplete/unknown last.
-	SortIdle = "idle"
-
-	// ReclaimScopeWhole deletes the entire verified candidate path (default).
-	ReclaimScopeWhole = "whole"
-	// ReclaimScopeIncremental deletes only Cargo incremental cache dirs under a
-	// verified cargo-target parent.
-	ReclaimScopeIncremental = "incremental"
-
 	// Rebuild expectation values (refill likelihood; advisory only).
 	RebuildHigh   = "high"
 	RebuildMedium = "medium"

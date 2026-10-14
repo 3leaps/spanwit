@@ -86,14 +86,14 @@ func TestValidateCompareCapacityTopologyRejectsIdentityConfusion(t *testing.T) {
 			},
 		},
 	}
-	if err := validateCompareCapacityTopology(accounting); err == nil ||
+	if err := ValidateCompareCapacityTopology(accounting); err == nil ||
 		!strings.Contains(err.Error(), "container identity") {
 		t.Fatalf("container error=%v", err)
 	}
 	accounting.Planes.Container = capacity.ContainerPlane{}
 	accounting.Planes.Volumes.Entries = append(accounting.Planes.Volumes.Entries,
 		capacity.VolumeEntry{ID: "volume-3", IsTarget: true})
-	if err := validateCompareCapacityTopology(accounting); err == nil ||
+	if err := ValidateCompareCapacityTopology(accounting); err == nil ||
 		!strings.Contains(err.Error(), "multiple target") {
 		t.Fatalf("volume error=%v", err)
 	}

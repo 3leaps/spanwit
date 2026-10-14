@@ -88,16 +88,3 @@ func ResolveCatalog(cfg *Config) (*catalog.Catalog, error) {
 	}
 	return cat, nil
 }
-
-// IDs flattens a signature catalog into the set of full-spine signature ids.
-func (c SignatureCatalog) IDs() map[string]bool {
-	out := map[string]bool{}
-	for domain, ecosystems := range c {
-		for ecosystem, signatures := range ecosystems {
-			for name := range signatures {
-				out[domain+"."+ecosystem+"."+name] = true
-			}
-		}
-	}
-	return out
-}

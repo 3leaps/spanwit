@@ -113,7 +113,7 @@ func TestBuildCargoPlacementJourney_EmitsStructuralSteps(t *testing.T) {
 		t.Fatal("structural recipe must still carry suggested_commands for schema")
 	}
 	// Projection parity: suggested_commands == command-bearing steps.
-	proj := projectCommandsFromSteps(r.Steps)
+	proj := ProjectCommandsFromSteps(r.Steps)
 	if len(proj) != len(r.SuggestedCommands) {
 		t.Fatalf("suggested_commands projection drift: %d vs %d", len(r.SuggestedCommands), len(proj))
 	}

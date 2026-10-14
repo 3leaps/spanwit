@@ -2,7 +2,6 @@ package space
 
 import (
 	"context"
-	"github.com/3leaps/spanwit/internal/config"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -10,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/3leaps/spanwit/internal/config"
 )
 
 // R4b S3 fixtures for temp walk roots (S4, split after grype and .gocache).
