@@ -362,6 +362,34 @@ func floorAgeOK(path, effMinAge string, now time.Time) bool {
 	return now.Sub(newest) >= d
 }
 
+// descendantsMeetMinAge applies any effective min_age (configured, signature
+// or temp) to the newest activity the full sizing walk observed beneath a
+// candidate. A directory's own mtime does not move when a file inside it is
+// written, so the pre-sizing gate on the candidate's mtime alone admits an
+// active build. With no min_age it admits. Otherwise the newest observed
+// mtime must be at least min_age old, and activity that may be understated
+// (depth bound, symlink, walk error) withholds. A regular-file candidate's
+// walk visits only itself, so its own mtime is its activity.
+func descendantsMeetMinAge(effMinAge string, sized SizeResult, now time.Time) bool {
+	raw := displayFilterRaw(effMinAge)
+	if raw == "" {
+		return true
+	}
+	d, err := config.ParseAge(raw)
+	if err != nil {
+		return false
+	}
+	if sized.ActivityIncomplete || sized.Incomplete {
+		return false
+	}
+	if sized.NewestMtime.IsZero() {
+		// Nothing beneath the candidate: the pre-sizing gate on its own
+		// mtime already decided.
+		return true
+	}
+	return now.Sub(sized.NewestMtime) >= d
+}
+
 // tempRootAgeFloor is the age floor on every candidate under an admitted temp
 // root, raised by configured min_age and never lowered. Cargo and pattern
 // targets carry no signature floor, so without this an in-flight build in a

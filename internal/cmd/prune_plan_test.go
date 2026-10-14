@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -371,7 +372,7 @@ func TestBuildPrunePlan_SignatureSafeIsPrunable(t *testing.T) {
 	tmp := t.TempDir()
 	writeFile(t, filepath.Join(tmp, "rust-app", "Cargo.toml"), 64)
 	writeFile(t, filepath.Join(tmp, "rust-app", "target", "debug", "app.o"), 2048)
-	mustChtimes(t, filepath.Join(tmp, "rust-app", "target"), time.Now().Add(-48*time.Hour))
+	mustAgeTree(t, filepath.Join(tmp, "rust-app", "target"), time.Now().Add(-48*time.Hour))
 
 	cfg := &config.Config{
 		Version:  1,
@@ -403,7 +404,7 @@ func TestBuildPrunePlan_PatternOnlyStaysPrunable(t *testing.T) {
 	// safe_to_prune gate applies only to signatures.
 	tmp := t.TempDir()
 	writeFile(t, filepath.Join(tmp, "proj", "build", "out.bin"), 2048)
-	mustChtimes(t, filepath.Join(tmp, "proj", "build"), time.Now().Add(-48*time.Hour))
+	mustAgeTree(t, filepath.Join(tmp, "proj", "build"), time.Now().Add(-48*time.Hour))
 
 	cfg := &config.Config{
 		Version:  1,
@@ -471,9 +472,9 @@ func TestBuildPrunePlan_AgeWindowFloorAndCeiling(t *testing.T) {
 	writeFile(t, filepath.Join(tmp, "mid", "target", "debug", "a.o"), 2048)
 	writeFile(t, filepath.Join(tmp, "new", "Cargo.toml"), 64)
 	writeFile(t, filepath.Join(tmp, "new", "target", "debug", "a.o"), 2048)
-	mustChtimes(t, filepath.Join(tmp, "old", "target"), time.Now().Add(-10*24*time.Hour))
-	mustChtimes(t, filepath.Join(tmp, "mid", "target"), time.Now().Add(-3*24*time.Hour))
-	mustChtimes(t, filepath.Join(tmp, "new", "target"), time.Now())
+	mustAgeTree(t, filepath.Join(tmp, "old", "target"), time.Now().Add(-10*24*time.Hour))
+	mustAgeTree(t, filepath.Join(tmp, "mid", "target"), time.Now().Add(-3*24*time.Hour))
+	mustAgeTree(t, filepath.Join(tmp, "new", "target"), time.Now())
 
 	// Window: at least 1d old and at most 7d old → only "mid" is prunable.
 	cfg := &config.Config{
@@ -702,6 +703,21 @@ func mustChtimes(t *testing.T, path string, modTime time.Time) {
 	t.Helper()
 	if err := os.Chtimes(path, modTime, modTime); err != nil {
 		t.Fatalf("chtimes %s: %v", path, err)
+	}
+}
+
+// mustAgeTree sets path and every entry beneath it to modTime, as an idle
+// build tree looks: the age gate reads the newest activity inside a candidate,
+// not only the candidate directory's own mtime.
+func mustAgeTree(t *testing.T, path string, modTime time.Time) {
+	t.Helper()
+	if err := filepath.WalkDir(path, func(p string, _ fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Chtimes(p, modTime, modTime)
+	}); err != nil {
+		t.Fatalf("age tree %s: %v", path, err)
 	}
 }
 

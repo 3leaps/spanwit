@@ -801,6 +801,10 @@ func sizeCandidateJobs(ctx context.Context, jobs []CandidateJob, sizeMaxDepth in
 							withheldReason = WithheldReasonMinSize
 						}
 					}
+					if state != CandidateStateWithheld && !descendantsMeetMinAge(job.EffectiveMinAge, sized, time.Now()) {
+						state = CandidateStateWithheld
+						withheldReason = WithheldReasonAge
+					}
 					basis := ActivityBasisDescendantMtime
 					activityIncomplete := sized.ActivityIncomplete || sized.Incomplete
 					if sized.NewestMtime.IsZero() {

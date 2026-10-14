@@ -96,6 +96,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- A configured `min_age` now reads the newest activity inside a candidate,
+  not only the candidate directory's own mtime. A build target with recent
+  writes, deletions or new directories deeper inside is withheld for age in `prune`, exact-plan
+  revalidation and incremental scope. Activity that may be understated
+  withholds when a `min_age` is set. With no `min_age`, nothing changes.
 - With `--include-temp`, the Cargo placement recipe's exact plan carries only
   candidates under the analysis root, so its purge step revalidates; temp
   candidates stay in their own temp-root plan.
