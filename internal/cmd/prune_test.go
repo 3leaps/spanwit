@@ -20,7 +20,7 @@ func TestPruneCommand_DryRunPrintsPlan(t *testing.T) {
 	tmp := t.TempDir()
 	writeFile(t, filepath.Join(tmp, "project", "Cargo.toml"), 64)
 	writeFile(t, filepath.Join(tmp, "project", "target", "debug", "app.o"), 2048)
-	mustChtimes(t, filepath.Join(tmp, "project", "target"), time.Now().Add(-48*time.Hour))
+	mustAgeTree(t, filepath.Join(tmp, "project", "target"), time.Now().Add(-48*time.Hour))
 
 	configFile := filepath.Join(tmp, "config.yaml")
 	configData := []byte(`version: 1
@@ -139,7 +139,7 @@ func TestPruneCommand_ExecuteDeletesCandidates(t *testing.T) {
 	writeFile(t, filepath.Join(tmp, "project", "Cargo.toml"), 64)
 	targetPath := filepath.Join(tmp, "project", "target")
 	writeFile(t, filepath.Join(targetPath, "debug", "app.o"), 2048)
-	mustChtimes(t, targetPath, time.Now().Add(-48*time.Hour))
+	mustAgeTree(t, targetPath, time.Now().Add(-48*time.Hour))
 
 	configFile := filepath.Join(tmp, "config.yaml")
 	if err := os.WriteFile(configFile, []byte(`version: 1
@@ -186,11 +186,11 @@ func TestPruneCommand_ExecuteNeverDeletesWithheld(t *testing.T) {
 	writeFile(t, filepath.Join(tmp, "rust-app", "Cargo.toml"), 64)
 	safePath := filepath.Join(tmp, "rust-app", "target")
 	writeFile(t, filepath.Join(safePath, "debug", "app.o"), 2048)
-	mustChtimes(t, safePath, time.Now().Add(-48*time.Hour))
+	mustAgeTree(t, safePath, time.Now().Add(-48*time.Hour))
 	// Not-safe, signature-backed match -> withheld, must survive --execute.
 	withheldPath := filepath.Join(tmp, "etl", "node_modules")
 	writeFile(t, filepath.Join(withheldPath, "dep", "index.js"), 2048)
-	mustChtimes(t, withheldPath, time.Now().Add(-48*time.Hour))
+	mustAgeTree(t, withheldPath, time.Now().Add(-48*time.Hour))
 
 	configFile := filepath.Join(tmp, "config.yaml")
 	if err := os.WriteFile(configFile, []byte(`version: 1
@@ -317,7 +317,7 @@ func TestPruneCommand_JSONExecuteOutputMatchesSchema(t *testing.T) {
 	writeFile(t, filepath.Join(tmp, "project", "Cargo.toml"), 64)
 	targetPath := filepath.Join(tmp, "project", "target")
 	writeFile(t, filepath.Join(targetPath, "debug", "app.o"), 2048)
-	mustChtimes(t, targetPath, time.Now().Add(-48*time.Hour))
+	mustAgeTree(t, targetPath, time.Now().Add(-48*time.Hour))
 
 	configFile := filepath.Join(tmp, "config.yaml")
 	configData := []byte(`version: 1

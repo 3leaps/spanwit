@@ -11,12 +11,14 @@ import (
 )
 
 // SizeResult is a directory size measurement that may be incomplete when a
-// depth bound is applied. Activity fields capture newest observed file mtime
-// for advisory idle ranking (never a deletion trigger).
+// depth bound is applied. Activity fields capture the newest observed mtime
+// beneath the path: idle ranking reads them, and an effective min_age
+// withholds on them (they never admit a candidate on their own).
 type SizeResult struct {
 	Bytes      int64
 	Incomplete bool // true if maxDepth stopped descent before the full tree
-	// NewestMtime is the newest file mtime observed under path (zero if none).
+	// NewestMtime is the newest mtime observed under path: every file and every
+	// nested directory, not path itself (zero if none).
 	// Symlink directories are not followed; encountering one marks activity incomplete.
 	NewestMtime time.Time
 	// ActivityIncomplete is true when activity may be understated (depth bound,
@@ -107,6 +109,21 @@ func DirSizeContext(ctx context.Context, path string, maxDepth int) (SizeResult,
 			result.Bytes += info.Size()
 			mt := info.ModTime()
 			if result.NewestMtime.IsZero() || mt.After(result.NewestMtime) {
+				result.NewestMtime = mt
+			}
+		} else if p != path {
+			// A nested directory's mtime moves when an entry inside it is
+			// created or removed, so delete-only and create-only activity
+			// counts. The candidate's own mtime stays with the caller.
+			info, infoErr := d.Info()
+			if infoErr != nil {
+				result.ActivityIncomplete = true
+				if fullDepth {
+					return infoErr
+				}
+				return nil
+			}
+			if mt := info.ModTime(); result.NewestMtime.IsZero() || mt.After(result.NewestMtime) {
 				result.NewestMtime = mt
 			}
 		}
