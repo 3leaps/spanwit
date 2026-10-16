@@ -275,6 +275,45 @@ entries:
         rel_home: .colima/_lima/_disks
     description: >-
       colima VM data disks (sparse). Container images, volumes and build cache live inside; freed space reaches the host only after a trim in the guest. The disks themselves are never targets.
+  # --- development.agent ---
+  - id: development.agent.codex-packages
+    label: Codex installed releases
+    class_ceiling: diagnostic-only
+    rebuild_expectation: low
+    recipes:
+      - codex-releases
+    platforms:
+      - darwin
+      - linux
+    locations:
+      default:
+        rel_home: .codex/packages
+    description: >-
+      Codex self-updating install packages. Each package keeps every downloaded release beside a current link; only current is launched by new sessions. Sessions, history and settings are out of scope.
+  - id: development.agent.grok-home
+    label: Grok CLI home
+    class_ceiling: diagnostic-only
+    rebuild_expectation: low
+    platforms:
+      - darwin
+      - linux
+    locations:
+      default:
+        rel_home: .grok
+    description: >-
+      Grok CLI home: sessions, downloads, memory and settings. Listed for visibility only; it holds session history and credentials, so nothing here is suggested for removal.
+  - id: development.agent.opencode-data
+    label: OpenCode data
+    class_ceiling: diagnostic-only
+    rebuild_expectation: low
+    platforms:
+      - darwin
+      - linux
+    locations:
+      default:
+        rel_home: .local/share/opencode
+    description: >-
+      OpenCode data directory: session database, snapshots and logs. Listed for visibility only; it holds session history, so nothing here is suggested for removal. See scripts/reclaim/opencode-data.sh for an operator-run workflow.
   # --- media.audio ---
   - id: media.audio.spotify
     label: Spotify cache

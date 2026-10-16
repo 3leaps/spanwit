@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Agent app-state hotspots:** the domain catalog lists Codex installed
+  releases (`~/.codex/packages`), the Grok CLI home (`~/.grok`) and OpenCode
+  data (`~/.local/share/opencode`) as diagnostic-only hotspots. A print-only
+  `codex-releases` recipe lists superseded release directories. It keeps
+  `current`, its link target and the newest two releases of each package, and
+  starts with an `lsof` check of the release executables codex processes have open. Session history is never named.
 - **`space --include-temp`** (opt-in) also walks the per-user temp directory
   as a verified root, so a Cargo build or the new reclaim targets in a temp
   checkout become candidates.
