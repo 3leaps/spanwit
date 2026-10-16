@@ -60,7 +60,8 @@ spanwit prune --format json | jq .                  # machine-readable plan
 - filter provenance for prunable-only paths). Revalidate with
   `prune --from-space-report <space.json>` (dry-run by default; `--execute` only
   after match). Bare `--allowlist` is dry-run-only convenience. Optional **guided
-  recipes** (e.g. rustup, colima/lima VM disk trim, grype download residue) print
+  recipes** (e.g. rustup, colima/lima VM disk trim, grype download residue,
+  superseded Codex releases) print
   argv-safe external commands — never auto-run. Under warn/critical pressure,
   `temp_plane_coverage` lists the temp roots it did not walk, with a name-free
   `residue` summary by fixed family.

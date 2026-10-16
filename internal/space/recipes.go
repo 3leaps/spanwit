@@ -48,6 +48,7 @@ func recipeBuilders() map[string]recipeBuilder {
 		catalog.RecipeUVCachePrune:   uvCachePruneRecipe,
 		catalog.RecipeGrypeDBResidue: grypeDBResidueRecipe,
 		catalog.RecipeVMDiskTrim:     vmDiskTrimRecipe,
+		catalog.RecipeCodexReleases:  codexReleasesRecipe,
 	}
 }
 
