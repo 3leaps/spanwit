@@ -28,8 +28,10 @@ chmod +x "$repo/scripts/release-verify-published-tag.sh"
 # Throwaway signing keys and the committed pins they correspond to.
 home="$scratch/gpg"
 gpg --homedir "$home" --batch --quiet --pinentry-mode loopback --passphrase '' \
-    --quick-generate-key 'Synthetic signing <signing@example.invalid>' ed25519 sign 1d > /dev/null 2>&1
+    --quick-generate-key 'Synthetic signing <signing@example.invalid>' ed25519 cert,sign 1d > /dev/null 2>&1
 primary="$(gpg --homedir "$home" --batch --with-colons --fingerprint --list-keys | awk -F: '$1=="fpr" {print $10;exit}')"
+gpg --homedir "$home" --batch --quiet --pinentry-mode loopback --passphrase '' --quick-add-key "$primary" ed25519 sign 1d > /dev/null 2>&1
+subkey="$(gpg --homedir "$home" --batch --with-colons --with-subkey-fingerprint --list-keys | awk -F: '$1=="sub" {s=1;next} s && $1=="fpr" {print $10;exit}')"
 gpg --homedir "$home" --batch --armor --export "$primary" > "$repo/docs/security/release-signing-keys.asc"
 minisign -G -W -p "$scratch/minisign.pub" -s "$scratch/minisign.key" > /dev/null
 pin_minisign="$(sed -n 2p "$scratch/minisign.pub" | base64 -d | shasum -a 256 | awk '{print $1}')"
@@ -38,7 +40,8 @@ printf 'gpg %s\nminisign %s\n' "$primary" "$pin_minisign" > "$repo/keys/expected
 mkdir -p "$repo/docs/releases"
 printf '# notes\n' > "$repo/docs/releases/v1.2.3.md"
 git -C "$repo" init -q -b main
-git -C "$repo" -c user.name=Fixture -c user.email=fixture@example.invalid add docs/releases/v1.2.3.md
+git -C "$repo" -c user.name=Fixture -c user.email=fixture@example.invalid add docs/releases/v1.2.3.md \
+    keys/expected-fingerprints.txt docs/security/release-signing-keys.asc
 git -C "$repo" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm fixture
 tagged_commit="$(git -C "$repo" rev-parse HEAD)"
 
@@ -53,10 +56,10 @@ stage() {
     for m in SHA256SUMS SHA512SUMS; do
         minisign -S -s "$scratch/minisign.key" -m "$d/$m" -x "$d/$m.minisig" > /dev/null
         gpg --homedir "$home" --batch --pinentry-mode loopback --passphrase '' \
-            --local-user "$primary" --armor --detach-sign --output "$d/$m.asc" "$d/$m" 2> /dev/null
+            --local-user "$subkey!" --armor --detach-sign --output "$d/$m.asc" "$d/$m" 2> /dev/null
     done
     cp "$scratch/minisign.pub" "$d/spanwit-minisign.pub"
-    cp "$repo/docs/security/release-signing-keys.asc" "$d/spanwit-release-signing-key.asc"
+    git -C "$repo" cat-file blob "$tagged_commit:docs/security/release-signing-keys.asc" > "$d/spanwit-release-signing-key.asc"
     cp "$repo/docs/releases/v1.2.3.md" "$d/release-notes-v1.2.3.md"
     printf 'tag=v1.2.3\nobject=%040d\ncommit=%s\n' 1 "$tagged_commit" > "$d.anchor"
     cp "$d"/* "$scratch/draft/"
@@ -127,7 +130,17 @@ refuse 'SHA256SUMS does not list exactly the expected packages'
 stage
 minisign -G -W -f -p "$scratch/other.pub" -s "$scratch/other.key" > /dev/null
 cp "$scratch/other.pub" "$d/spanwit-minisign.pub"
-refuse 'does not match the committed pin'
+refuse 'does not match the pin in the tagged commit'
+# The staged minisign key must be exactly comment + key line: extra lines refuse.
+stage
+printf 'trailing line\n' >> "$d/spanwit-minisign.pub"
+cp "$d/spanwit-minisign.pub" "$scratch/draft/"
+refuse 'is not a two-line minisign public key'
+# A third line with no trailing newline is still a third line.
+stage
+printf 'extra-junk' >> "$d/spanwit-minisign.pub"
+cp "$d/spanwit-minisign.pub" "$scratch/draft/"
+refuse 'is not a two-line minisign public key'
 stage
 # Flip one signature byte (minisign ignores appended lines), then mirror the
 # tampered file into the draft so only the signature gate can catch it.
@@ -148,10 +161,147 @@ gpg --homedir "$home" --batch --pinentry-mode loopback --passphrase '' \
 gpg --homedir "$home" --batch --pinentry-mode loopback --passphrase '' --local-user other@example.invalid \
     --armor --detach-sign --yes --output "$d/SHA512SUMS.asc" "$d/SHA512SUMS" 2> /dev/null
 cp "$d/SHA512SUMS.asc" "$scratch/draft/"
-refuse 'not from the pinned primary'
+refuse 'not a good signature by the pinned signing subkey'
 stage
 printf 'swapped on the server\n' > "$scratch/draft/spanwit_1.2.3_darwin_arm64.tar.gz"
 refuse 'draft asset differs from the verified local file'
+
+# Trust comes from the pins in the anchored tag commit, never the working tree.
+# A second key set B stands in for an attacker's or a later rotation's keys.
+gpg --homedir "$home" --batch --pinentry-mode loopback --passphrase '' \
+    --quick-generate-key 'Rotated signing <rotated@example.invalid>' ed25519 cert 1d > /dev/null 2>&1
+rot_primary="$(gpg --homedir "$home" --batch --with-colons --fingerprint --list-keys rotated@example.invalid | awk -F: '$1=="fpr" {print $10;exit}')"
+gpg --homedir "$home" --batch --pinentry-mode loopback --passphrase '' --quick-add-key "$rot_primary" ed25519 sign 1d > /dev/null 2>&1
+rot_subkey="$(gpg --homedir "$home" --batch --with-colons --with-subkey-fingerprint --list-keys rotated@example.invalid | awk -F: '$1=="sub" {s=1;next} s && $1=="fpr" {print $10;exit}')"
+minisign -G -W -f -p "$scratch/rot.pub" -s "$scratch/rot.key" > /dev/null
+rot_pin="$(sed -n 2p "$scratch/rot.pub" | base64 -d | shasum -a 256 | awk '{print $1}')"
+pins=(keys/expected-fingerprints.txt docs/security/release-signing-keys.asc)
+mkdir -p "$scratch/saved"
+save_pins() { for p in "${pins[@]}"; do cp "$repo/$p" "$scratch/saved/${p//\//_}"; done; }
+restore_pins() { for p in "${pins[@]}"; do cp "$scratch/saved/${p//\//_}" "$repo/$p"; done; }
+# Move the working-tree pins out of the checkout (saved copies stay intact).
+hide_pins() { for p in "${pins[@]}"; do mv "$repo/$p" "$scratch/saved/hidden-${p//\//_}"; done; }
+write_rotated_pins() {
+    gpg --homedir "$home" --batch --armor --export "$rot_primary" > "$repo/docs/security/release-signing-keys.asc"
+    printf 'gpg %s\nminisign %s\n' "$rot_primary" "$rot_pin" > "$repo/keys/expected-fingerprints.txt"
+}
+# Stage a release signed by B, with B's public keys staged beside it.
+stage_signed_by_rotated() {
+    stage
+    for m in SHA256SUMS SHA512SUMS; do
+        minisign -S -s "$scratch/rot.key" -m "$d/$m" -x "$d/$m.minisig" > /dev/null
+        gpg --homedir "$home" --batch --pinentry-mode loopback --passphrase '' \
+            --local-user "$rot_subkey!" --armor --detach-sign --yes --output "$d/$m.asc" "$d/$m" 2> /dev/null
+    done
+    cp "$scratch/rot.pub" "$d/spanwit-minisign.pub"
+    gpg --homedir "$home" --batch --armor --export "$rot_primary" > "$d/spanwit-release-signing-key.asc"
+    cp "$d"/* "$scratch/draft/"
+}
+save_pins
+# Working-tree pins replaced with B (uncommitted): a B-signed set is refused.
+write_rotated_pins
+stage_signed_by_rotated
+refuse 'staged minisign key does not match the pin in the tagged commit'
+# Same, but minisign re-signed with the pinned key, so only the PGP gates can
+# catch the B signatures and the B key asset.
+stage_signed_by_rotated
+cp "$scratch/minisign.pub" "$d/spanwit-minisign.pub"
+for m in SHA256SUMS SHA512SUMS; do minisign -S -s "$scratch/minisign.key" -m "$d/$m" -x "$d/$m.minisig" > /dev/null; done
+cp "$d"/* "$scratch/draft/"
+refuse 'staged PGP key asset is not the committed primary with its pinned signing subkey'
+restore_pins
+# Working-tree pins absent: the anchored commit still supplies them, and a
+# correctly signed set publishes.
+hide_pins
+stage
+: > "$FIXTURE_LOG"
+(cd "$repo" && ./scripts/release-publish.sh v1.2.3 "$d") > /dev/null
+[[ "$(grep -c '^release edit v1.2.3 .*--draft=false' "$FIXTURE_LOG")" == 1 ]]
+restore_pins
+# A later key rotation committed on main, anchor still on the tagged commit: the
+# release must stay bound to the tagged pins. B-signed is refused ...
+write_rotated_pins
+git -C "$repo" -c user.name=Fixture -c user.email=fixture@example.invalid add "${pins[@]}"
+git -C "$repo" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm 'rotate keys'
+stage_signed_by_rotated
+refuse 'staged minisign key does not match the pin in the tagged commit'
+# ... and the original signer is still accepted against the tagged pins.
+stage
+: > "$FIXTURE_LOG"
+(cd "$repo" && ./scripts/release-publish.sh v1.2.3 "$d") > /dev/null
+[[ "$(grep -c '^release edit v1.2.3 .*--draft=false' "$FIXTURE_LOG")" == 1 ]]
+# A tagged commit without the pins refuses outright.
+notes_blob="$(git -C "$repo" rev-parse "$tagged_commit:docs/releases/v1.2.3.md")"
+releases_tree="$(printf '100644 blob %s\tv1.2.3.md\n' "$notes_blob" | git -C "$repo" mktree)"
+docs_tree="$(printf '040000 tree %s\treleases\n' "$releases_tree" | git -C "$repo" mktree)"
+unpinned_tree="$(printf '040000 tree %s\tdocs\n' "$docs_tree" | git -C "$repo" mktree)"
+unpinned_commit="$(git -C "$repo" -c user.name=Fixture -c user.email=fixture@example.invalid commit-tree "$unpinned_tree" -m 'notes, no pins')"
+stage
+printf 'tag=v1.2.3\nobject=%040d\ncommit=%s\n' 1 "$unpinned_commit" > "$d.anchor"
+refuse 'committed keys/expected-fingerprints.txt required in the tagged commit'
+# A pin path that is a symlink in the tagged commit is not a regular file.
+key_blob="$(git -C "$repo" rev-parse "$tagged_commit:docs/security/release-signing-keys.asc")"
+link_blob="$(printf '../docs/security/release-signing-keys.asc' | git -C "$repo" hash-object -w --stdin)"
+keys_tree="$(printf '120000 blob %s\texpected-fingerprints.txt\n' "$link_blob" | git -C "$repo" mktree)"
+security_tree="$(printf '100644 blob %s\trelease-signing-keys.asc\n' "$key_blob" | git -C "$repo" mktree)"
+docs2_tree="$(printf '040000 tree %s\treleases\n040000 tree %s\tsecurity\n' "$releases_tree" "$security_tree" | git -C "$repo" mktree)"
+linked_tree="$(printf '040000 tree %s\tdocs\n040000 tree %s\tkeys\n' "$docs2_tree" "$keys_tree" | git -C "$repo" mktree)"
+linked_commit="$(git -C "$repo" -c user.name=Fixture -c user.email=fixture@example.invalid commit-tree "$linked_tree" -m 'symlinked pins')"
+stage
+printf 'tag=v1.2.3\nobject=%040d\ncommit=%s\n' 1 "$linked_commit" > "$d.anchor"
+refuse 'committed keys/expected-fingerprints.txt required in the tagged commit'
+
+# A good signature by the pinned primary itself, not its signing subkey, refuses:
+# the primary can sign, so only the subkey pin rejects it.
+stage
+for m in SHA256SUMS SHA512SUMS; do
+    gpg --homedir "$home" --batch --pinentry-mode loopback --passphrase '' --local-user "$primary!" \
+        --armor --detach-sign --yes --output "$d/$m.asc" "$d/$m" 2> /dev/null
+done
+cp "$d"/*.asc "$scratch/draft/"
+refuse 'not a good signature by the pinned signing subkey'
+
+# The PGP key asset published beside the signatures must be the committed key:
+# signatures stay valid, only the exported key is swapped or damaged.
+gpg --homedir "$home" --batch --pinentry-mode loopback --passphrase '' \
+    --quick-generate-key 'Unrelated <unrelated@example.invalid>' ed25519 sign 1d > /dev/null 2>&1
+stage
+gpg --homedir "$home" --batch --armor --export unrelated@example.invalid > "$d/spanwit-release-signing-key.asc"
+cp "$d/spanwit-release-signing-key.asc" "$scratch/draft/"
+refuse 'staged PGP key asset is not the committed primary with its pinned signing subkey'
+stage
+gpg --homedir "$home" --batch --armor --export "$primary" unrelated@example.invalid > "$d/spanwit-release-signing-key.asc"
+cp "$d/spanwit-release-signing-key.asc" "$scratch/draft/"
+refuse 'staged PGP key asset is not the committed primary with its pinned signing subkey'
+stage
+printf -- '-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nnot a key\n-----END PGP PUBLIC KEY BLOCK-----\n' > "$d/spanwit-release-signing-key.asc"
+cp "$d/spanwit-release-signing-key.asc" "$scratch/draft/"
+refuse 'staged PGP key asset is not a readable OpenPGP public key'
+stage
+gpg --homedir "$home" --batch --pinentry-mode loopback --passphrase '' --armor --export-secret-keys "$primary" \
+    > "$d/spanwit-release-signing-key.asc"
+cp "$d/spanwit-release-signing-key.asc" "$scratch/draft/"
+refuse 'staged PGP key asset contains secret key material'
+# The pinned primary with an extra signing subkey (a key the committed export
+# does not carry) is not the committed key.
+extra_home="$scratch/gpg-extra"
+mkdir -m 700 "$extra_home"
+gpg --homedir "$home" --batch --pinentry-mode loopback --passphrase '' --armor --export-secret-keys "$primary" |
+    gpg --homedir "$extra_home" --batch --quiet --pinentry-mode loopback --passphrase '' --import 2> /dev/null
+gpg --homedir "$extra_home" --batch --pinentry-mode loopback --passphrase '' --quick-add-key "$primary" ed25519 sign 1d > /dev/null 2>&1
+stage
+gpg --homedir "$extra_home" --batch --armor --export "$primary" > "$d/spanwit-release-signing-key.asc"
+cp "$d/spanwit-release-signing-key.asc" "$scratch/draft/"
+refuse 'staged PGP key asset is not the committed primary with its pinned signing subkey'
+gpgconf --homedir "$extra_home" --kill all > /dev/null 2>&1 || true
+# The committed key with its signing subkey, freshly re-exported (bytes may
+# differ from the committed blob), is accepted.
+stage
+gpg --homedir "$home" --batch --armor --export "$primary" > "$d/spanwit-release-signing-key.asc"
+cp "$d/spanwit-release-signing-key.asc" "$scratch/draft/"
+: > "$FIXTURE_LOG"
+(cd "$repo" && ./scripts/release-publish.sh v1.2.3 "$d") > /dev/null
+[[ "$(grep -c '^release edit v1.2.3 .*--draft=false' "$FIXTURE_LOG")" == 1 ]]
 
 # Every gate holds: promotion happens exactly once, after the byte comparison.
 stage

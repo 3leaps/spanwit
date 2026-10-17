@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+
+- **Release publish trusts only the tagged commit's pins.** `make release-publish`
+  reads `keys/expected-fingerprints.txt` and the committed PGP key from the
+  anchored tag commit, as regular-file blobs, never from the working tree. The
+  staged minisign key must hash to that pin, and both manifests are verified with
+  a key file rebuilt from the pinned key line. PGP signatures must be good
+  signatures by the committed key's only signing subkey. The staged PGP key asset
+  must be that key, public only.
+- **CI artifact staging is bound to one artifact.** `make release-download`
+  requires exactly one unexpired `release-packages-<tag>` artifact from the named
+  run on the tagged commit. It downloads that artifact by id and checks the bytes
+  against its digest. It then re-reads the run and the artifact list and refuses
+  if either changed. Only flat, unique, regular-file entries are extracted, into
+  private scratch first. The anchor now records `artifact=` and `digest=`, and a
+  refused fetch leaves no anchor and no staged files.
+- **`make release-verify-signatures` fails closed.** It now runs
+  `scripts/release-verify-signatures.sh` and requires:
+  - both manifests, all four signatures and both exported keys;
+  - the exported minisign key to hash to the committed pin;
+  - the exported PGP key to be the pinned primary, with signatures by its only
+    signing subkey, verified in an isolated keyring.
+
+  Any failure stops the target. Previously a failed check could still print
+  success, and a missing SHA512 signature was skipped.
+
 ### Added
 
 - **Agent app-state hotspots:** the domain catalog lists Codex installed

@@ -375,6 +375,7 @@ release-tag-tests:  ## Signed-tag tooling tests (throwaway keys only; needs gpg,
 	@./scripts/workflow-pins.test.sh
 	@./scripts/release-ci-artifact-draft.test.sh
 	@./scripts/release-publish.test.sh
+	@./scripts/release-verify-signatures.test.sh
 	@./scripts/release-pin-precursors.test.sh
 	@./scripts/sign-release-manifests.test.sh
 	@echo "✅ Signed-tag tooling tests passed"
@@ -401,29 +402,8 @@ release-verify-keys:  ## Verify exported public keys are public-only (no secrets
 	@if [ -f "$(DIST_RELEASE)/$(BINARY_NAME)-minisign.pub" ]; then ./scripts/verify-minisign-public-key.sh "$(DIST_RELEASE)/$(BINARY_NAME)-minisign.pub"; else echo "ℹ️  No minisign public key found (skipping)"; fi
 	@if [ -f "$(DIST_RELEASE)/$(BINARY_NAME)-release-signing-key.asc" ]; then ./scripts/verify-public-key.sh "$(DIST_RELEASE)/$(BINARY_NAME)-release-signing-key.asc"; else echo "ℹ️  No PGP public key found (skipping)"; fi
 
-release-verify-signatures:  ## Verify signatures on checksum manifests
-	@echo "🔍 Verifying signatures in $(DIST_RELEASE)..."
-	@has_any=false; \
-	if [ -f "$(DIST_RELEASE)/SHA256SUMS.minisig" ]; then \
-		if [ ! -f "$(DIST_RELEASE)/$(BINARY_NAME)-minisign.pub" ]; then \
-			echo "❌ minisign public key not found; run 'make release-export-keys' first" >&2; exit 1; \
-		fi; \
-		(cd "$(DIST_RELEASE)" && minisign -V -p $(BINARY_NAME)-minisign.pub -m SHA256SUMS); \
-		if [ -f "$(DIST_RELEASE)/SHA512SUMS.minisig" ]; then (cd "$(DIST_RELEASE)" && minisign -V -p $(BINARY_NAME)-minisign.pub -m SHA512SUMS); fi; \
-		echo "✅ Minisign signatures verified"; has_any=true; \
-	fi; \
-	if [ -f "$(DIST_RELEASE)/SHA256SUMS.asc" ]; then \
-		GPG_HOME="$${SPANWIT_GPG_HOMEDIR:-}"; \
-		if [ -n "$$GPG_HOME" ]; then \
-			(cd "$(DIST_RELEASE)" && gpg --homedir "$$GPG_HOME" --verify SHA256SUMS.asc SHA256SUMS); \
-			if [ -f "$(DIST_RELEASE)/SHA512SUMS.asc" ]; then (cd "$(DIST_RELEASE)" && gpg --homedir "$$GPG_HOME" --verify SHA512SUMS.asc SHA512SUMS); fi; \
-		else \
-			(cd "$(DIST_RELEASE)" && gpg --verify SHA256SUMS.asc SHA256SUMS); \
-			if [ -f "$(DIST_RELEASE)/SHA512SUMS.asc" ]; then (cd "$(DIST_RELEASE)" && gpg --verify SHA512SUMS.asc SHA512SUMS); fi; \
-		fi; \
-		echo "✅ PGP signatures verified"; has_any=true; \
-	fi; \
-	if [ "$$has_any" = false ]; then echo "❌ No signatures found to verify" >&2; exit 1; fi
+release-verify-signatures:  ## Verify all four manifest signatures and both exported keys against the pins (fail closed)
+	@./scripts/release-verify-signatures.sh "$(DIST_RELEASE)"
 
 release-notes: release-guard-tag-version  ## Stage docs/releases/<tag>.md into dist/release
 	@notes_src="docs/releases/$(RELEASE_TAG).md"; \
