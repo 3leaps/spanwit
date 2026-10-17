@@ -82,3 +82,22 @@ func collectHotspots(ctx context.Context, cat *catalog.Catalog, minSize int64, s
 	out = walker.size(ctx, out, sizeDepth, minSize, coverage)
 	return out, coverage.warnings(PhaseHotspots)
 }
+
+// linkHotspotRecipes sets each hotspot's recipe_ids to the recipes emitted in
+// the same report for the same catalog entry. A hotspot never names a recipe
+// the report does not contain (gated, disabled domain, or not applicable here).
+func linkHotspotRecipes(hotspots []Entry, recipes []Recipe) {
+	byCatalog := make(map[string][]string)
+	for _, r := range recipes {
+		if r.CatalogID == "" || r.ID == "" {
+			continue
+		}
+		byCatalog[r.CatalogID] = append(byCatalog[r.CatalogID], r.ID)
+	}
+	for i := range hotspots {
+		// byCatalog has no "" key, so a hotspot without a catalog id never links.
+		if ids := byCatalog[hotspots[i].CatalogID]; len(ids) > 0 {
+			hotspots[i].RecipeIDs = append([]string(nil), ids...)
+		}
+	}
+}

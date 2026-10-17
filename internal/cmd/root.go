@@ -66,6 +66,10 @@ func Initialize(ctx context.Context, identity *appidentity.Identity, logger *log
 		},
 	}
 
+	// --version prints the same line as the version subcommand.
+	rootCmd.Version = version
+	rootCmd.SetVersionTemplate(identity.BinaryName + " {{.Version}}\n")
+
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&logLevel, "log-level", "l", "info", "logging level (trace|debug|info|warn|error)")
 	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "config file path override")

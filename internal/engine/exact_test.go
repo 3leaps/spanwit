@@ -242,3 +242,98 @@ func TestPlanFromExact_RejectsSymlinkAncestor(t *testing.T) {
 		t.Fatal("expected warning")
 	}
 }
+
+// Revalidation bounds the ancestor-evidence walk by the carried analysis_root,
+// as discovery does, so a candidate whose required ancestor sits two or more
+// levels up (goneat/.scratchpad/.gocache with goneat/go.mod) still matches.
+func TestPlanFromExact_NestedAncestorEvidenceUsesAnalysisRoot(t *testing.T) {
+	tmp := t.TempDir()
+	writeFile(t, filepath.Join(tmp, "proj", "BUILD.marker"), 8)
+	writeFile(t, filepath.Join(tmp, "proj", "scratch", "build-out", "obj", "a"), 2048)
+	custom := config.SignatureCatalog{"development": {"custom": {"build": {
+		CandidatePatterns:     []string{"**/build-out"},
+		RequiredAncestorFiles: []string{"BUILD.marker"},
+		AnyChildPaths:         []string{"obj"},
+		Confidence:            "high",
+		SafeToPrune:           true,
+	}}}}
+	path := filepath.Join(tmp, "proj", "scratch", "build-out")
+	entry := ExactEntry{
+		Path: path, Signature: "development.custom.build",
+		EffectiveMinSize: FilterDisplayNone, EffectiveMinAge: FilterDisplayNone, EffectiveMaxAge: FilterDisplayNone,
+	}
+
+	// Discovery and revalidation agree: discovery finds it under tmp ...
+	discovered, err := BuildPrunePlan(context.Background(), &config.Config{
+		Version:    1,
+		Signatures: custom,
+		Paths: []config.PathProfile{{
+			Path: tmp, MaxDepth: 12,
+			Targets: []config.Target{{Signature: "development.custom.build"}},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(discovered.Candidates) != 1 {
+		t.Fatalf("discovery: %+v warnings=%v", discovered.Candidates, discovered.Warnings)
+	}
+	// ... and exact-plan revalidation under the same analysis_root keeps it.
+	plan, err := PlanFromExact(context.Background(), ExactPlanInput{
+		AnalysisRoot: tmp, Entries: []ExactEntry{entry}, Signatures: custom,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Candidates) != 1 || plan.Candidates[0].State != CandidateStatePrunable {
+		t.Fatalf("revalidation: %+v warnings=%v", plan.Candidates, plan.Warnings)
+	}
+
+	// The walk never ascends past analysis_root: with the analysis root set
+	// below the marker, the same candidate is refused.
+	inner := filepath.Join(tmp, "proj", "scratch")
+	plan, err = PlanFromExact(context.Background(), ExactPlanInput{
+		AnalysisRoot: inner, Entries: []ExactEntry{entry}, Signatures: custom,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Candidates) != 0 {
+		t.Fatalf("evidence above analysis_root must not count: %+v", plan.Candidates)
+	}
+}
+
+// A symlinked ancestor marker between the candidate and analysis_root never
+// counts, even now that the walk spans the whole root.
+func TestPlanFromExact_NestedAncestorSymlinkMarkerRefused(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs privileges on windows")
+	}
+	tmp := t.TempDir()
+	writeFile(t, filepath.Join(tmp, "elsewhere", "BUILD.marker"), 8)
+	writeFile(t, filepath.Join(tmp, "proj", "scratch", "build-out", "obj", "a"), 2048)
+	if err := os.Symlink(filepath.Join(tmp, "elsewhere", "BUILD.marker"), filepath.Join(tmp, "proj", "BUILD.marker")); err != nil {
+		t.Fatal(err)
+	}
+	custom := config.SignatureCatalog{"development": {"custom": {"build": {
+		CandidatePatterns:     []string{"**/build-out"},
+		RequiredAncestorFiles: []string{"BUILD.marker"},
+		AnyChildPaths:         []string{"obj"},
+		Confidence:            "high",
+		SafeToPrune:           true,
+	}}}}
+	plan, err := PlanFromExact(context.Background(), ExactPlanInput{
+		AnalysisRoot: tmp,
+		Entries: []ExactEntry{{
+			Path: filepath.Join(tmp, "proj", "scratch", "build-out"), Signature: "development.custom.build",
+			EffectiveMinSize: FilterDisplayNone, EffectiveMinAge: FilterDisplayNone, EffectiveMaxAge: FilterDisplayNone,
+		}},
+		Signatures: custom,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Candidates) != 0 {
+		t.Fatalf("symlinked ancestor marker must not count: %+v", plan.Candidates)
+	}
+}

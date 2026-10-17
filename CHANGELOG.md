@@ -123,6 +123,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   index digest; bootstrap installs goneat v0.6.3.
 - `space --compare` records each input as its file name only; the directory
   is no longer written to the compare report.
+- Space report hotspot rows carry `recipe_ids` naming the guided recipes in
+  the same report for that catalog entry (for example the Go build cache
+  hotspot links `go-build-cache`). A hotspot never names a recipe the report
+  does not contain.
 - An exact plan whose candidate is not inside its `analysis_root` now fails
   to load, rather than at revalidation.
 
@@ -148,6 +152,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   relative to the plan's analysis root, so path-anchored patterns revalidate.
   An exact plan cannot lower a signature's age floor, and a pattern-only
   entry that matches a floored signature is refused.
+- Exact-plan revalidation looks for a signature's required ancestor files up
+  to the plan's analysis root, as discovery does. A candidate whose evidence
+  sits two or more levels up (for example a repo-local `.gocache` in a
+  subdirectory of a Go module) is no longer refused at prune time after
+  `space` listed it. The search still never goes above the analysis root, and
+  symlinked evidence still never counts.
+- `spanwit --version` prints the version, the same as `spanwit version`.
 
 - statfs block counts convert through a checked helper that refuses values
   outside int64, instead of wrapping to a wrong size.

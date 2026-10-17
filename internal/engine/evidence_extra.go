@@ -230,11 +230,6 @@ func raiseMinAge(effMinAge, floor string) string {
 	return effMinAge
 }
 
-// floorMatchedPath reports whether rel matches any floored catalog signature.
-func floorMatchedPath(rel string, signatures config.SignatureCatalog) bool {
-	return ageFloorFor(rel, signatures) != ""
-}
-
 // guarded reports whether a signature declares evidence beyond a name match
 // that a pattern-only target could otherwise bypass.
 func guarded(sig config.Signature) bool {
