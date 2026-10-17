@@ -250,7 +250,7 @@ farms.
 
 ## Status
 
-v0.2.1 — alpha. Dry-run by default. `space`, `inventory` and `diagnose` are
+v0.2.2 — alpha. Dry-run by default. `space`, `inventory` and `diagnose` are
 read-only (`--coverage-attest` additionally writes a separate attestation
 file). `observe` keeps local state and is propose-only: it never deletes, but
 it writes, so `--read-only` rejects it.
