@@ -154,7 +154,7 @@ consumers never see an unsigned release window.
   ```bash
   make release-clean
   export RELEASE_RUN_ID=<release run id> RELEASE_RUN_ATTEMPT=<successful attempt>
-  make release-download        # verifies the tag and the named run attempt, records the anchor, fetches the artifact
+  make release-download        # verifies the tag and the named run attempt, binds one artifact by id and digest, re-checks the run, records the anchor (artifact= and digest= lines)
   make release-checksums
   make release-verify-checksums
   make release-create-draft    # re-verifies against that anchor; exact manifest-verified packages only
@@ -163,11 +163,11 @@ consumers never see an unsigned release window.
 - [ ] Sign manifests with minisign and PGP (publish refuses either missing): `make release-sign`
 - [ ] Export public keys: `make release-export-keys`
 - [ ] Verify exported keys are public-only: `make release-verify-keys`
-- [ ] Verify signatures: `make release-verify-signatures`
+- [ ] Verify signatures: `make release-verify-signatures` (fails closed: all four signatures and both exported keys required; keys must match `keys/expected-fingerprints.txt`; PGP checked in an isolated keyring, never the ambient one)
 - [ ] Copy release notes: `make release-notes`
 - [ ] Upload provenance assets (manifests + sigs + keys + notes): `make release-upload`
 - [ ] **Review the draft** (devlead): binaries present, notes accurate, signatures + keys attached
-- [ ] **Promote draft → public** (final step, the authorization step): `make release-publish` re-verifies the published tag, the manifests, both signatures against the committed pins, and downloads the draft to confirm every asset is byte-identical to the verified local set before promoting
+- [ ] **Promote draft → public** (final step, the authorization step): `make release-publish` re-verifies the published tag, the manifests, both signatures against the pins committed in the tagged commit (never the working tree), and downloads the draft to confirm every asset is byte-identical to the verified local set before promoting
 
 For one-off invocations without sourcing the env file, pass `RELEASE_TAG=v<version>`
 to each `make` invocation. The guard target `release-guard-tag-version` (wired as a dep

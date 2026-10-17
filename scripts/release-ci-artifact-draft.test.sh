@@ -51,29 +51,67 @@ case "$1 $2" in
     done
     case "$path" in
     */attempts/*) body="${FIXTURE_ATTEMPT:-}" ;;
-    *) body="{\"run_attempt\":${FIXTURE_LATEST:-1}}" ;;
+    */runs/*/artifacts)
+        # Listing calls are counted so a test can change the answer between the
+        # before- and after-download snapshots (a re-run landing mid-download).
+        n="$(($(cat "$FIXTURE_DIR/listings" 2> /dev/null || echo 0) + 1))"
+        printf '%s\n' "$n" > "$FIXTURE_DIR/listings"
+        if [[ -n "${FIXTURE_LISTING:-}" ]]; then
+            body="$FIXTURE_LISTING"
+        else
+            id="${FIXTURE_ARTIFACT_ID:-501}"
+            [[ "$n" -ge 2 && -n "${FIXTURE_ARTIFACT_ID_AFTER:-}" ]] && id="$FIXTURE_ARTIFACT_ID_AFTER"
+            digest="${FIXTURE_DIGEST:-sha256:$(shasum -a 256 "$FIXTURE_DIR/artifact.zip" | awk '{print $1}')}"
+            [[ "$n" -ge 2 && -n "${FIXTURE_DIGEST_AFTER:-}" ]] && digest="$FIXTURE_DIGEST_AFTER"
+            body="$(jq -n --argjson id "$id" --arg d "$digest" --arg c "${FIXTURE_ARTIFACT_SHA:-$FIXTURE_COMMIT}" \
+                --argjson e "${FIXTURE_EXPIRED:-false}" \
+                '{total_count: 1, artifacts: [{id: $id, name: "release-packages-v1.2.3", expired: $e, digest: $d,
+                  workflow_run: {id: 11, head_sha: $c}}]}')"
+        fi
+        ;;
+    */artifacts/*/zip)
+        [[ "$path" == */artifacts/"${FIXTURE_ARTIFACT_ID:-501}"/zip ]] || exit 1
+        cat "${FIXTURE_SERVED_ZIP:-$FIXTURE_DIR/artifact.zip}"
+        exit 0
+        ;;
+    *)
+        m="$(($(cat "$FIXTURE_DIR/runs" 2> /dev/null || echo 0) + 1))"
+        printf '%s\n' "$m" > "$FIXTURE_DIR/runs"
+        latest="${FIXTURE_LATEST:-1}"
+        [[ "$m" -ge 2 && -n "${FIXTURE_LATEST_AFTER:-}" ]] && latest="$FIXTURE_LATEST_AFTER"
+        body="{\"run_attempt\":$latest}"
+        ;;
     esac
     [[ -n "$body" ]] || exit 1
-    jq -c "$jq_filter" <<< "$body"
+    if [[ -n "$jq_filter" ]]; then jq -c "$jq_filter" <<< "$body"; else printf '%s\n' "$body"; fi
     ;;
-"run download")
-    dir=""
-    name=""
-    while [[ $# -gt 0 ]]; do
-        [[ "$1" == --dir ]] && dir="$2"
-        [[ "$1" == --name ]] && name="$2"
-        shift
-    done
-    [[ "$name" == "release-packages-v1.2.3" ]] || exit 1
-    printf 'pkg\n' > "$dir/spanwit_1.2.3_linux_amd64.tar.gz"
-    ;;
+"run download") exit 1 ;;
 "release view") [[ "${FIXTURE_RELEASE_EXISTS:-0}" == 1 ]] ;;
 "release create") exit 0 ;;
 *) exit 1 ;;
 esac
 SH
 chmod +x "$scratch/bin/gh"
-export PATH="$scratch/bin:$PATH" FIXTURE_LOG="$scratch/gh.log"
+export PATH="$scratch/bin:$PATH" FIXTURE_LOG="$scratch/gh.log" FIXTURE_DIR="$scratch/fx" FIXTURE_COMMIT="$commit"
+mkdir -p "$FIXTURE_DIR"
+# make_zip OUT NAME=CONTENT... ; a NAME of @link:TARGET adds a symlink entry.
+make_zip() {
+    python3 -I - "$@" << 'PY'
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1], 'w') as z:
+    for spec in sys.argv[2:]:
+        name, _, body = spec.partition('=')
+        if name.startswith('@link:'):
+            info = zipfile.ZipInfo(name[len('@link:'):])
+            info.external_attr = (0o120777 << 16)
+            z.writestr(info, body)
+        else:
+            z.writestr(name, body)
+PY
+}
+# The CI artifact: a zip holding one release package.
+make_zip "$FIXTURE_DIR/artifact.zip" 'spanwit_1.2.3_linux_amd64.tar.gz=pkg'
+reset_listings() { rm -f "$FIXTURE_DIR/listings" "$FIXTURE_DIR/runs"; }
 
 fail() {
     local reason="$1"
@@ -117,15 +155,109 @@ for bad in \
 done
 FIXTURE_ATTEMPT="$good" FIXTURE_LATEST=3 fail 'has a later attempt' \
     ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/d1"
+
+# Artifact identity. Every refusal below must leave no anchor and no package.
+fetch_refuses() {
+    local reason="$1" dir="$scratch/dA"
+    shift
+    rm -rf "$dir" "$dir.anchor"
+    reset_listings
+    (cd "$repo" && env FIXTURE_ATTEMPT="$good" "$@" ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$dir") \
+        > "$scratch/out" 2>&1 && {
+        echo "error: expected rejection: $reason" >&2
+        exit 1
+    }
+    grep -q "$reason" "$scratch/out" || {
+        echo "error: missing named rejection: $reason" >&2
+        cat "$scratch/out" >&2
+        exit 1
+    }
+    [[ ! -e "$dir.anchor" ]] || {
+        echo "error: anchor written despite: $reason" >&2
+        exit 1
+    }
+    [[ -z "$(find "$dir" -mindepth 1 2> /dev/null)" ]] || {
+        echo "error: files staged despite: $reason" >&2
+        exit 1
+    }
+}
+listing() { # one JSON artifact object per argument, wrapped as a complete listing
+    local IFS=,
+    printf '{"total_count":%s,"artifacts":[%s]}' "$#" "$*"
+}
+artifact() { # id head_sha [expired] [name] [run]
+    printf '{"id":%s,"name":"%s","expired":%s,"digest":"sha256:%s","workflow_run":{"id":%s,"head_sha":"%s"}}' \
+        "$1" "${4:-release-packages-v1.2.3}" "${3:-false}" \
+        "$(shasum -a 256 "$FIXTURE_DIR/artifact.zip" | awk '{print $1}')" "${5:-11}" "$2"
+}
+# A re-run attempt appears while the artifact downloads.
+fetch_refuses 'has a later attempt' FIXTURE_LATEST_AFTER=3
+# The artifact is replaced by another of the same name mid-download.
+fetch_refuses 'changed during download' FIXTURE_ARTIFACT_ID_AFTER=502
+fetch_refuses 'changed during download' FIXTURE_DIGEST_AFTER="sha256:$(printf '%064d' 7)"
+# The bytes served are not the bytes the listing's digest names.
+make_zip "$scratch/other.zip" 'spanwit_1.2.3_linux_amd64.tar.gz=other'
+fetch_refuses 'do not match its recorded digest' FIXTURE_SERVED_ZIP="$scratch/other.zip"
+fetch_refuses 'do not match its recorded digest' FIXTURE_DIGEST="sha256:$(printf '%064d' 9)"
+# No digest, or a malformed one.
+fetch_refuses 'has no sha256 digest' FIXTURE_LISTING="$(listing "$(artifact 501 "$commit" | sed 's/"digest":"[^"]*"/"digest":null/')")"
+fetch_refuses 'has no sha256 digest' FIXTURE_LISTING="$(listing "$(artifact 501 "$commit" | sed 's/sha256:/md5:/')")"
+# Built from another commit, by another run, expired, absent, or ambiguous.
+fetch_refuses 'does not hold exactly one unexpired' FIXTURE_ARTIFACT_SHA="$(printf '%040d' 3)"
+fetch_refuses 'does not hold exactly one unexpired' FIXTURE_LISTING="$(listing "$(artifact 501 "$commit" false release-packages-v1.2.3 12)")"
+fetch_refuses 'does not hold exactly one unexpired' FIXTURE_EXPIRED=true
+fetch_refuses 'does not hold exactly one unexpired' FIXTURE_LISTING='{"total_count":0,"artifacts":[]}'
+# A run whose artifacts span more than the one page read is refused.
+fetch_refuses 'artifact list for run 11 is incomplete' \
+    FIXTURE_LISTING="$(listing "$(artifact 501 "$commit")" | sed 's/"total_count":1/"total_count":31/')"
+fetch_refuses 'does not hold exactly one unexpired' FIXTURE_LISTING="$(listing "$(artifact 501 "$commit")" "$(artifact 502 "$commit")")"
+# An expired twin does not make a live artifact ambiguous; a differently named
+# one is ignored.
+FIXTURE_LISTING="$(listing "$(artifact 501 "$commit")" "$(artifact 499 "$commit" true)" "$(artifact 498 "$commit" false release-packages-v1.2.2)")"
+reset_listings
+rm -rf "$scratch/dB" "$scratch/dB.anchor"
+(cd "$repo" && FIXTURE_ATTEMPT="$good" FIXTURE_LISTING="$FIXTURE_LISTING" ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/dB") > /dev/null
+[[ -f "$scratch/dB/spanwit_1.2.3_linux_amd64.tar.gz" && -f "$scratch/dB.anchor" ]]
+# Zip layouts that are not flat, unique, plain files refuse before staging.
+cp "$FIXTURE_DIR/artifact.zip" "$scratch/good.zip"
+for layout in \
+    'nested/spanwit_1.2.3_linux_amd64.tar.gz=pkg' \
+    '../spanwit_1.2.3_linux_amd64.tar.gz=pkg' \
+    '.hidden=pkg' \
+    '@link:spanwit_1.2.3_linux_amd64.tar.gz=/etc/passwd'; do
+    make_zip "$FIXTURE_DIR/artifact.zip" 'spanwit_1.2.3_darwin_arm64.tar.gz=ok' "$layout"
+    fetch_refuses 'unexpected layout'
+done
+make_zip "$FIXTURE_DIR/artifact.zip" 'spanwit_1.2.3_linux_amd64.tar.gz=a' 'spanwit_1.2.3_linux_amd64.tar.gz=b' 2> /dev/null
+fetch_refuses 'unexpected layout'
+make_zip "$FIXTURE_DIR/artifact.zip"
+fetch_refuses 'unexpected layout'
+# Names that differ only in case alias on a case-insensitive filesystem; on a
+# case-sensitive one both land, and the draft's exact-set check refuses the
+# extra file. Either way nothing is silently overwritten.
+make_zip "$FIXTURE_DIR/artifact.zip" 'SHA256SUMS=real' 'sha256sums=shadow'
+probe="$scratch/case-probe"
+mkdir -p "$probe"
+printf 'a' > "$probe/CaseProbe"
+if [[ -e "$probe/caseprobe" ]]; then
+    fetch_refuses 'unexpected layout'
+fi
+cp "$scratch/good.zip" "$FIXTURE_DIR/artifact.zip"
+reset_listings
 # Refuses a non-empty destination.
 mkdir -p "$scratch/full"
 printf 'stale\n' > "$scratch/full/stale"
 FIXTURE_ATTEMPT="$good" fail 'is not empty' ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/full"
-# Downloads only the named artifact from the named, verified attempt.
+# Downloads exactly the bound artifact id from the named, verified attempt, and
+# re-reads the run and the listing after the download.
 : > "$FIXTURE_LOG"
 (cd "$repo" && FIXTURE_ATTEMPT="$good" ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/d2") > /dev/null
-grep -q '^run download 11 --repo 3leaps/spanwit --name release-packages-v1.2.3 ' "$FIXTURE_LOG"
-[[ "$(cat "$scratch/d2.anchor")" == "$(printf 'tag=v1.2.3\nobject=%s\ncommit=%s\nrun=11\nattempt=2' "$object" "$commit")" ]]
+grep -q '^api repos/3leaps/spanwit/actions/artifacts/501/zip$' "$FIXTURE_LOG"
+if grep -q '^run download' "$FIXTURE_LOG"; then exit 1; fi
+[[ "$(grep -c '^api repos/3leaps/spanwit/actions/runs/11/artifacts$' "$FIXTURE_LOG")" == 2 ]]
+[[ "$(grep -n '' "$FIXTURE_LOG" | grep -E 'artifacts(/501/zip)?$' | tail -1)" == *'/runs/11/artifacts' ]]
+digest="sha256:$(shasum -a 256 "$FIXTURE_DIR/artifact.zip" | awk '{print $1}')"
+[[ "$(cat "$scratch/d2.anchor")" == "$(printf 'tag=v1.2.3\nobject=%s\ncommit=%s\nrun=11\nattempt=2\nartifact=501\ndigest=%s' "$object" "$commit" "$digest")" ]]
 [[ -f "$scratch/d2/spanwit_1.2.3_linux_amd64.tar.gz" ]]
 
 # Draft. Packages are staged against the anchor that fetch recorded.
