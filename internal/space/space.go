@@ -257,6 +257,7 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 	for i := range recipes {
 		AnnotateRecipeTaxonomy(&recipes[i])
 	}
+	linkHotspotRecipes(hotspotsFull, recipes)
 
 	// Deliver early triage (display-truncated, already class/domain projected)
 	// before deep root walks. Pressure always streams; listing surfaces filter.

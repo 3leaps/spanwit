@@ -541,7 +541,9 @@ func validateHandoffInvariants(report Report) error {
 
 	total := 0
 	for i, ep := range plans {
-		isTemp := !(h.ExactPlan != nil && i == 0)
+		// The home plan, when present, is first; every other plan is a temp root.
+		homePlan := h.ExactPlan != nil && i == 0
+		isTemp := !homePlan
 		if err := validateOneExactPlan(report, ep, isTemp, handoffPaths); err != nil {
 			return err
 		}
@@ -604,7 +606,8 @@ func validateOneExactPlan(report Report, ep *ExactPlan, isTemp bool, handoffPath
 		if err := validateExactCandidateScope(ec, ep.ReclaimScope); err != nil {
 			return err
 		}
-		if isTemp && !(ec.Path == ep.AnalysisRoot || strings.HasPrefix(ec.Path, ep.AnalysisRoot+string(filepath.Separator))) {
+		withinRoot := ec.Path == ep.AnalysisRoot || strings.HasPrefix(ec.Path, ep.AnalysisRoot+string(filepath.Separator))
+		if isTemp && !withinRoot {
 			return fmt.Errorf("temp exact plan candidate %s is outside its analysis_root %s", ec.Path, ep.AnalysisRoot)
 		}
 		hc, ok := handoffPaths[ec.Path]

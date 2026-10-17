@@ -171,3 +171,33 @@ func TestCollectHotspots_DeniedRootIsCoverageNotZero(t *testing.T) {
 		}
 	}
 }
+
+func TestLinkHotspotRecipes_OnlyEmittedSameCatalog(t *testing.T) {
+	hotspots := []Entry{
+		{Path: "/h/go-build", CatalogID: "development.go.go-build"},
+		{Path: "/h/grok", CatalogID: "development.agent.grok-home"},
+		{Path: "/h/none"},
+	}
+	recipes := []Recipe{
+		{ID: "go-build-cache", CatalogID: "development.go.go-build"},
+		{ID: "cargo-target-placement", CatalogID: "development.rust.cargo-target"},
+		{ID: "orphan"},
+	}
+	linkHotspotRecipes(hotspots, recipes)
+	if got := hotspots[0].RecipeIDs; len(got) != 1 || got[0] != "go-build-cache" {
+		t.Fatalf("go-build: %v", got)
+	}
+	if hotspots[1].RecipeIDs != nil {
+		t.Fatalf("grok has no emitted recipe: %v", hotspots[1].RecipeIDs)
+	}
+	if hotspots[2].RecipeIDs != nil {
+		t.Fatalf("entry without catalog id: %v", hotspots[2].RecipeIDs)
+	}
+
+	// An empty catalog id never links, even when a recipe also lacks one.
+	blank := []Entry{{Path: "/h/blank"}}
+	linkHotspotRecipes(blank, []Recipe{{ID: "untagged"}})
+	if blank[0].RecipeIDs != nil {
+		t.Fatalf("empty catalog id linked: %v", blank[0].RecipeIDs)
+	}
+}
