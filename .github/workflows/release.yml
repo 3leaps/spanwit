@@ -60,7 +60,7 @@ jobs:
       contents: read
     # Same runner image as CI; bundles Go + tooling. No tool installs.
     container:
-      image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.10@sha256:42e95c5d7aa961010454b0c29c07e676b220d1cde71dd2fc71c338d1ca2adbe8
+      image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.11@sha256:2c31a048762e16abbc9909a4c707e416f612858caa8edee74f0f96f919b54252
       options: --user root
     env:
       FULMEN_WORKSPACE_ROOT: ${{ github.workspace }}

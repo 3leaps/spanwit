@@ -156,6 +156,7 @@ func codexReleaseLayout(pkgDir string) (keep, superseded []string) {
 // plainDir reports whether path is a directory reached without following a
 // symlink at its last component.
 func plainDir(path string) bool {
+	// #nosec G703 -- a catalog-resolved location (or a child of one), only lstat'ed; the result decides whether a print-only recipe is offered.
 	info, err := os.Lstat(path)
 	return err == nil && info.IsDir()
 }

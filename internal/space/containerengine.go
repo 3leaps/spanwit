@@ -84,7 +84,8 @@ func resolveDockerHost(env EngineEnv) (string, error) {
 }
 
 func currentContext(configDir string) string {
-	raw, err := os.ReadFile(filepath.Join(configDir, "config.json")) // #nosec G304 -- docker CLI config under the user's own config dir
+	// #nosec G304 G703 -- the docker CLI config the docker CLI itself reads (DOCKER_CONFIG or ~/.docker); read only for currentContext.
+	raw, err := os.ReadFile(filepath.Join(configDir, "config.json"))
 	if err != nil {
 		return ""
 	}
