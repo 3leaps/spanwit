@@ -288,6 +288,7 @@ func entryHotspotPath(opts RecipeOptions, e catalog.Entry) (string, bool) {
 }
 
 func dirExists(path string) bool {
+	// #nosec G703 -- a catalog-resolved location, only stat'ed; the result decides whether a print-only recipe is offered.
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
 }
