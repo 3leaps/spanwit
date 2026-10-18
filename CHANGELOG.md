@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-17
+
 ### Security
 
 - **Release publish trusts only the tagged commit's pins.** `make release-publish`
@@ -119,16 +121,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The colima/lima VM disk recipe now starts with
   `spanwit space --capacity-only --containers --probe-vm` and no longer
   suggests `docker image prune -a` as an early step.
-- CI and release builds run on `goneat-tools-runner-glibc` v0.5.9 pinned by
-  index digest; bootstrap installs goneat v0.6.3.
+- CI and release builds run on `goneat-tools-runner-glibc` v0.5.10 pinned by
+  index digest; bootstrap installs goneat v0.6.4.
 - `space --compare` records each input as its file name only; the directory
   is no longer written to the compare report.
 - Space report hotspot rows carry `recipe_ids` naming the guided recipes in
   the same report for that catalog entry (for example the Go build cache
   hotspot links `go-build-cache`). A hotspot never names a recipe the report
   does not contain.
-- An exact plan whose candidate is not inside its `analysis_root` now fails
-  to load, rather than at revalidation.
+- A temp-root exact plan whose candidate is not inside its `analysis_root`
+  now fails to load, rather than at revalidation. A home plan with such a
+  candidate still fails as a whole when it is revalidated.
 
 ### Fixed
 
@@ -429,6 +432,7 @@ than by pattern alone.
 - App identity via `.fulmen/app.yaml` (binary `spanwit`, env prefix `SPANWIT_`).
 - goneat-based quality gates (`make pr-final`, `make prepush`), GitHub Actions CI, and a tag-triggered release workflow.
 
-[Unreleased]: https://github.com/3leaps/spanwit/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/3leaps/spanwit/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/3leaps/spanwit/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/3leaps/spanwit/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/3leaps/spanwit/releases/tag/v0.2.0

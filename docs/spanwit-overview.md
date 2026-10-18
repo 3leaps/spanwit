@@ -64,7 +64,10 @@ spanwit prune --format json | jq .                  # machine-readable plan
   superseded Codex releases) print
   argv-safe external commands — never auto-run. Under warn/critical pressure,
   `temp_plane_coverage` lists the temp roots it did not walk, with a name-free
-  `residue` summary by fixed family.
+  `residue` summary by fixed family. `--include-temp` opts in to walking the
+  per-user temp directory as a verified root (strict admission; an hour of
+  inactivity before any temp candidate is prunable). Hotspot rows name their
+  guided recipes in `recipe_ids`.
 
 Hotspot, unverified, and unknown observation use the bounded inventory walker
 with depth-limited discovery/sizing and `--workers`, `--backend`,
