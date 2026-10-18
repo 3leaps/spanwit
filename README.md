@@ -55,6 +55,7 @@ spanwit diagnose ~/Downloads
 
 # Why is the disk full? (read-only; never deletes)
 spanwit space ~/dev
+spanwit space ~/dev --capacity-only --containers --probe-vm
 spanwit space ~/dev --format json | jq .
 
 # Tune observation walks (verified discovery and prune handoff are independent)
@@ -250,7 +251,8 @@ farms.
 
 ## Status
 
-v0.2.2 — alpha. Dry-run by default. `space`, `inventory` and `diagnose` are
+v0.2.2 — alpha. Notes: [docs/releases/v0.2.2.md](docs/releases/v0.2.2.md).
+Dry-run by default. `space`, `inventory` and `diagnose` are
 read-only (`--coverage-attest` additionally writes a separate attestation
 file). `observe` keeps local state and is propose-only: it never deletes, but
 it writes, so `--read-only` rejects it.
