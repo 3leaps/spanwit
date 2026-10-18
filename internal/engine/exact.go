@@ -180,9 +180,10 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 			evidence = append(append([]string{}, evidence...), "reclaim_scope:incremental", "parent:"+parentAbs)
 		} else if e.Signature != "" {
 			// Revalidate against the *same* signature identity only. Patterns
-			// match the path relative to the carried analysis_root, as in
-			// BuildPrunePlan, so path-anchored patterns revalidate correctly.
-			parent := filepath.Dir(abs)
+			// match the path relative to the carried analysis_root, and evidence
+			// is gathered under that same root, exactly as in BuildPrunePlan: a
+			// required ancestor two levels up still counts, and the walk never
+			// ascends past the root (containment was checked above).
 			rel := exactRel(analysisRoot, abs)
 			sig, found := signatures.Lookup(e.Signature)
 			if !found {
@@ -191,7 +192,7 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 				continue
 			}
 			target = config.Target{Signature: e.Signature}
-			target, signature, evidence, ok = matchingTarget(parent, abs, rel, []config.Target{target}, signatures)
+			target, signature, evidence, ok = matchingTarget(analysisRoot, abs, rel, []config.Target{target}, signatures)
 			if !ok {
 				_ = sig
 				plan.Warnings = append(plan.Warnings, fmt.Errorf(
@@ -199,7 +200,6 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 				continue
 			}
 		} else if e.Pattern != "" {
-			parent := filepath.Dir(abs)
 			rel := exactRel(analysisRoot, abs)
 			// A pattern-only entry carries no signature evidence. If its path
 			// matches a signature that declares an age floor, refuse it rather
@@ -210,7 +210,7 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 				continue
 			}
 			target = config.Target{Pattern: e.Pattern}
-			target, signature, evidence, ok = matchingTarget(parent, abs, rel, []config.Target{target}, signatures)
+			target, signature, evidence, ok = matchingTarget(analysisRoot, abs, rel, []config.Target{target}, signatures)
 			if !ok {
 				plan.Warnings = append(plan.Warnings, fmt.Errorf(
 					"exact-plan path %s: no longer matches pattern %q (not included)", abs, e.Pattern))

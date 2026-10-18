@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"testing"
 
 	"github.com/fulmenhq/gofulmen/appidentity"
+	"github.com/fulmenhq/gofulmen/logging"
 )
 
 func TestVersionCommand_Default(t *testing.T) {
@@ -71,4 +73,29 @@ func captureStdout(t *testing.T, fn func()) string {
 	_, _ = io.Copy(&buf, r)
 	_ = r.Close()
 	return buf.String()
+}
+
+// spanwit --version prints the same line as `spanwit version`.
+func TestRootVersionFlag(t *testing.T) {
+	SetVersionInfo("1.2.3", "abc123", "2025-01-01T00:00:00Z")
+	identity := &appidentity.Identity{
+		BinaryName: "spanwit", Vendor: "fulmenhq", EnvPrefix: "SPANWIT_",
+		ConfigName: "spanwit", Description: "Test tool",
+	}
+	logger, err := logging.NewCLI(identity.BinaryName)
+	if err != nil {
+		t.Fatalf("logger init failed: %v", err)
+	}
+	Initialize(context.Background(), identity, logger)
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetErr(&buf)
+	rootCmd.SetArgs([]string{"--version"})
+	defer rootCmd.SetArgs(nil)
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("--version returned error: %v", err)
+	}
+	if got := buf.String(); got != "spanwit 1.2.3\n" {
+		t.Fatalf("--version output %q", got)
+	}
 }
