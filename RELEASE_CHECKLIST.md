@@ -143,36 +143,66 @@ consumers never see an unsigned release window.
   source <operator-private-release-env>
   ```
 
-- [ ] Set the release tag once for the whole ceremony (resolves `SPANWIT_RELEASE_TAG` → `RELEASE_TAG`; never auto-defaults to `v<VERSION>`):
+- [ ] Set the release inputs once for the whole ceremony. Every input carries the
+      `SPANWIT_` prefix. The generic `RELEASE_TAG`, `RELEASE_RUN_ID` and
+      `RELEASE_RUN_ATTEMPT` are **refused** if set, because a value left in the shell
+      from an earlier release would silently name the wrong tag or run. Unset them
+      first:
 
   ```bash
+  unset RELEASE_TAG RELEASE_RUN_ID RELEASE_RUN_ATTEMPT
   export SPANWIT_RELEASE_TAG=v<version>
+  export SPANWIT_RELEASE_RUN_ID=<Release workflow run id for this tag> SPANWIT_RELEASE_RUN_ATTEMPT=<its successful attempt>
   ```
 
-- [ ] Download the CI-built packages for the verified tag, regenerate and verify manifests, then create the draft release:
+  Take the run id from the Release workflow run whose branch is this tag, never
+  from the previous release: `gh run list --workflow release.yml`.
+
+- [ ] Run the ceremony **in exactly this order**. ⚠️ **The draft is created before
+      signing and before release notes.** `make release-create-draft` accepts only the
+      packages and the two manifests in `dist/release`; a signature, key or notes file
+      staged first makes it refuse. Signatures, keys and notes are uploaded to the
+      draft afterwards by `make release-upload`.
 
   ```bash
+  # 1. Stage and verify the CI packages, then create the draft (packages + manifests only)
   make release-clean
-  export RELEASE_RUN_ID=<release run id> RELEASE_RUN_ATTEMPT=<successful attempt>
-  make release-download        # verifies the tag and the named run attempt, binds one artifact by id and digest, re-checks the run, records the anchor (artifact= and digest= lines)
+  make release-download          # verifies the tag and the named run attempt, binds one artifact by id and digest, re-checks the run, records the anchor
   make release-checksums
   make release-verify-checksums
-  make release-create-draft    # re-verifies against that anchor; exact manifest-verified packages only
+  make release-create-draft      # re-verifies against the anchor; refuses anything besides packages and manifests
+
+  # 2. Sign and check provenance (only after the draft exists)
+  make release-sign              # minisign + PGP over both manifests; publish refuses either missing
+  make release-export-keys
+  make release-verify-keys       # exported keys are public-only
+  make release-verify-signatures # fails closed: all four signatures and both keys; keys must match keys/expected-fingerprints.txt; isolated keyring
+
+  # 3. Notes, upload, review, publish
+  make release-notes
+  make release-upload            # manifests + signatures + keys + notes onto the draft
+  #    Review the draft on GitHub: packages present, notes accurate, signatures and keys attached
+  make release-publish           # the authorization step; see below
   ```
 
-- [ ] Sign manifests with minisign and PGP (publish refuses either missing): `make release-sign`
-- [ ] Export public keys: `make release-export-keys`
-- [ ] Verify exported keys are public-only: `make release-verify-keys`
-- [ ] Verify signatures: `make release-verify-signatures` (fails closed: all four signatures and both exported keys required; keys must match `keys/expected-fingerprints.txt`; PGP checked in an isolated keyring, never the ambient one)
-- [ ] Copy release notes: `make release-notes`
-- [ ] Upload provenance assets (manifests + sigs + keys + notes): `make release-upload`
-- [ ] **Review the draft** (devlead): binaries present, notes accurate, signatures + keys attached
-- [ ] **Promote draft → public** (final step, the authorization step): `make release-publish` re-verifies the published tag, the manifests, both signatures against the pins committed in the tagged commit (never the working tree), and downloads the draft to confirm every asset is byte-identical to the verified local set before promoting
+  If `make release-create-draft` refuses with "unexpected file", you signed or
+  staged notes too early: move `*.asc`, `*.minisig`, the exported keys and
+  `release-notes-*` aside (or `make release-clean` and restage), create the draft,
+  then sign. The signatures stay valid, because the draft step does not rewrite
+  the manifests.
 
-For one-off invocations without sourcing the env file, pass `RELEASE_TAG=v<version>`
-to each `make` invocation. The guard target `release-guard-tag-version` (wired as a dep
-of the release targets) fails loud if neither is set, or if the tag is not a
-canonical `vX.Y.Z` equal to `v` + `VERSION`.
+- [ ] **Promote draft → public** (final step, the authorization step): `make release-publish`
+      re-verifies the published tag, the manifests, and both signatures against the
+      pins committed in the tagged commit (never the working tree), and downloads the
+      draft to confirm every asset is byte-identical to the verified local set before
+      promoting.
+
+Every release target that reads the tag depends on `release-guard-tag-name`
+or `release-guard-tag-version`. Both fail if the generic `RELEASE_TAG` is set,
+whether exported or passed on the `make` command line (a stale value would
+otherwise override `SPANWIT_RELEASE_TAG`), or if `SPANWIT_RELEASE_TAG` is unset
+or not a canonical `vX.Y.Z`. `release-guard-tag-version` also requires it to
+equal `v` + `VERSION`.
 
 ### One-time: public pin and fingerprints
 
@@ -240,7 +270,7 @@ On the maintainer machine, with `SPANWIT_GPG_HOMEDIR`, `SPANWIT_PGP_KEY_ID`
 
 - **The Release workflow failed, and the tag and source are correct** (for example a
   transient runner failure, or the repository was private): re-run the failed
-  workflow on the unchanged tag, then pass the new attempt as `RELEASE_RUN_ATTEMPT`.
+  workflow on the unchanged tag, then pass the new attempt as `SPANWIT_RELEASE_RUN_ATTEMPT`.
   Do not delete or re-sign the tag.
 - **The tag points at a commit that needs a source fix:** fix forward. Merge the fix
   and cut the next patch version. A pushed release tag is never moved, re-signed or

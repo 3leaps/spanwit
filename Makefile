@@ -316,17 +316,25 @@ release-clean:  ## Reset dist/release staging to avoid stale artifacts
 
 # Post-tag operations bind to the published, verified tag rather than to the
 # checked-out VERSION, so a version bump on main cannot strand a release.
-release-guard-tag-name:  ## Guard: RELEASE_TAG set and canonical vX.Y.Z (no VERSION check)
+release-guard-tag-name:  ## Guard: SPANWIT_RELEASE_TAG set and canonical vX.Y.Z (no VERSION check); generic RELEASE_TAG refused
+	@case "$(origin RELEASE_TAG)" in environment*|command\ line) \
+		echo "❌ generic RELEASE_TAG is set; unset it and use SPANWIT_RELEASE_TAG (a stale value would override it)" >&2; \
+		exit 1;; \
+	esac
 	@if [ -z "$(RELEASE_TAG)" ]; then \
-		echo "❌ RELEASE_TAG not set. Set SPANWIT_RELEASE_TAG in your shell, or pass RELEASE_TAG=vX.Y.Z." >&2; \
+		echo "❌ SPANWIT_RELEASE_TAG not set. Export SPANWIT_RELEASE_TAG=vX.Y.Z in your shell." >&2; \
 		exit 1; \
 	fi
 	@printf '%s\n' "$(RELEASE_TAG)" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$$' || { \
 		echo "❌ RELEASE_TAG must be canonical vX.Y.Z" >&2; exit 1; }
 
-release-guard-tag-version:  ## Guard: RELEASE_TAG set (SPANWIT_RELEASE_TAG or arg), canonical vX.Y.Z, matches VERSION
+release-guard-tag-version:  ## Guard: SPANWIT_RELEASE_TAG set, canonical vX.Y.Z, matches VERSION; generic RELEASE_TAG refused
+	@case "$(origin RELEASE_TAG)" in environment*|command\ line) \
+		echo "❌ generic RELEASE_TAG is set; unset it and use SPANWIT_RELEASE_TAG (a stale value would override it)" >&2; \
+		exit 1;; \
+	esac
 	@if [ -z "$(RELEASE_TAG)" ]; then \
-		echo "❌ RELEASE_TAG not set. Set SPANWIT_RELEASE_TAG in your shell, or pass RELEASE_TAG=v$(VERSION)." >&2; \
+		echo "❌ SPANWIT_RELEASE_TAG not set. Export SPANWIT_RELEASE_TAG=v$(VERSION) in your shell." >&2; \
 		exit 1; \
 	fi
 	@env -u RELEASE_TAG SPANWIT_RELEASE_TAG="$(RELEASE_TAG)" ./scripts/release-guard-tag-version.sh
@@ -376,6 +384,7 @@ release-tag-tests:  ## Signed-tag tooling tests (throwaway keys only; needs gpg,
 	@./scripts/release-ci-artifact-draft.test.sh
 	@./scripts/release-publish.test.sh
 	@./scripts/release-verify-signatures.test.sh
+	@./scripts/release-make-tag-guards.test.sh
 	@./scripts/release-pin-precursors.test.sh
 	@./scripts/sign-release-manifests.test.sh
 	@echo "✅ Signed-tag tooling tests passed"

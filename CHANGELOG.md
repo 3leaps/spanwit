@@ -24,6 +24,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The release ceremony names its Release workflow run with
+  `SPANWIT_RELEASE_RUN_ID` and `SPANWIT_RELEASE_RUN_ATTEMPT`. The generic
+  `RELEASE_RUN_ID` and `RELEASE_RUN_ATTEMPT` are refused when set, before the
+  tag is verified, so a value left from an earlier release cannot name the
+  wrong run.
+- The release Make targets refuse a generic `RELEASE_TAG`, whether exported or
+  passed on the command line. Previously an exported value overrode
+  `SPANWIT_RELEASE_TAG` for most ceremony targets.
+- `RELEASE_CHECKLIST.md` gives the signing ceremony as one ordered command
+  sequence and states that the draft is created before signing and release
+  notes. `make release-create-draft` now says so when it finds a signature, key
+  or notes file.
 - **Dependencies.** `github.com/bmatcuk/doublestar/v4` v4.10.1 → v4.10.3 and
   `golang.org/x/sys` v0.47.0 → v0.49.0. The bootstrap goneat version is v0.6.6,
   matching the runner.

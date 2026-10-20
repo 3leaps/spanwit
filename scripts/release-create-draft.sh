@@ -44,7 +44,7 @@ while IFS= read -r -d '' entry; do
     for want in "${expected[@]}" "${manifests[@]}"; do
         [[ "$name" == "$want" ]] && allowed=1
     done
-    [[ "$allowed" == 1 ]] || die "unexpected file in $src: $name (run make release-clean and restage)"
+    [[ "$allowed" == 1 ]] || die "unexpected file in $src: $name. The draft is created from packages and manifests only, BEFORE signing and notes: move *.asc, *.minisig, keys and release-notes-* aside (or make release-clean and restage), run make release-create-draft, then sign"
     [[ -f "$entry" && ! -L "$entry" ]] || die "not a regular file: $name"
 done < <(find "$src" -mindepth 1 -maxdepth 1 -print0)
 for want in "${expected[@]}" "${manifests[@]}"; do
