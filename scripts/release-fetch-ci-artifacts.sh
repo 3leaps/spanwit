@@ -17,6 +17,14 @@ done
 root="$(cd "$(dirname "$0")/.." && pwd -P)"
 mkdir -p "$dest"
 [[ -z "$(find "$dest" -mindepth 1 -maxdepth 1 2> /dev/null)" ]] || die "$dest is not empty; run make release-clean first"
+# The run is named with the SPANWIT_ prefix, like every other ceremony input.
+# A generic RELEASE_RUN_ID/ATTEMPT left in the shell from an earlier release
+# would silently name the wrong run, so its presence is refused outright, before
+# any network call.
+for generic in RELEASE_RUN_ID RELEASE_RUN_ATTEMPT; do
+    [[ -z "${!generic+x}" ]] ||
+        die "generic $generic is set; unset it and use SPANWIT_$generic (it may be left over from an earlier release)"
+done
 # Verify the published tag now and record the verified object and commit. Every
 # later step, including draft creation, is bound to this anchor.
 anchor="$(mktemp)"
@@ -29,10 +37,10 @@ object="$(awk -F= '$1=="object" {print $2}' "$anchor")"
 # The maintainer names the exact run and attempt (re-runs share a run id). The
 # named attempt must be a successful push-triggered release.yml run for this tag
 # on the tagged commit.
-run_id="${RELEASE_RUN_ID:-}"
-run_attempt="${RELEASE_RUN_ATTEMPT:-}"
-[[ "$run_id" =~ ^[1-9][0-9]*$ ]] || die 'RELEASE_RUN_ID required (the Release workflow run for this tag)'
-[[ "$run_attempt" =~ ^[1-9][0-9]*$ ]] || die 'RELEASE_RUN_ATTEMPT required (the successful attempt of that run)'
+run_id="${SPANWIT_RELEASE_RUN_ID:-}"
+run_attempt="${SPANWIT_RELEASE_RUN_ATTEMPT:-}"
+[[ "$run_id" =~ ^[1-9][0-9]*$ ]] || die 'SPANWIT_RELEASE_RUN_ID required (the Release workflow run for this tag)'
+[[ "$run_attempt" =~ ^[1-9][0-9]*$ ]] || die 'SPANWIT_RELEASE_RUN_ATTEMPT required (the successful attempt of that run)'
 run="$(gh api "repos/3leaps/spanwit/actions/runs/$run_id/attempts/$run_attempt" \
     --jq '{path, event, head_branch, head_sha, status, conclusion, run_attempt}')" ||
     die "could not read run $run_id attempt $run_attempt"
