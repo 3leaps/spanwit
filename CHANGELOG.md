@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The release ceremony names its Release workflow run with
+  `SPANWIT_RELEASE_RUN_ID` and `SPANWIT_RELEASE_RUN_ATTEMPT`. The generic
+  `RELEASE_RUN_ID` and `RELEASE_RUN_ATTEMPT` are refused when set, before the
+  tag is verified, so a value left from an earlier release cannot name the
+  wrong run.
+- The release Make targets refuse a generic `RELEASE_TAG`, whether exported or
+  passed on the command line. Previously an exported value overrode
+  `SPANWIT_RELEASE_TAG` for most ceremony targets.
+- `RELEASE_CHECKLIST.md` gives the signing ceremony as one ordered command
+  sequence and states that the draft is created before signing and release
+  notes. `make release-create-draft` now says so when it finds a signature, key
+  or notes file.
+
 ## [0.2.2] - 2026-10-17
 
 ### Security
