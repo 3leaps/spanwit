@@ -43,6 +43,7 @@ func recipeBuilders() map[string]recipeBuilder {
 			return rustupRecipe(ctx, opts)
 		},
 		catalog.RecipeGoBuildCache:   goBuildCacheRecipe,
+		catalog.RecipeGoModCache:     goModCacheRecipe,
 		catalog.RecipeCargoCache:     cargoCacheRecipe,
 		catalog.RecipeBrewCleanup:    brewCleanupRecipe,
 		catalog.RecipeUVCachePrune:   uvCachePruneRecipe,
@@ -162,6 +163,36 @@ func goBuildCacheRecipe(ctx context.Context, opts RecipeOptions, e catalog.Entry
 			"Go build cache is diagnostic-only: spanwit never deletes it.",
 			"go clean -cache frees the compiled build cache; it refills on the next build.",
 			"High refill, low regret — a safe first cache to clear when reclaiming space.",
+		},
+		CatalogID: e.ID,
+	}
+	AnnotateRecipeTaxonomy(&r)
+	return r, true
+}
+
+// goModCacheRecipe suggests clearing the Go module download cache. High
+// refill, low regret, but a real offline-build cost; inert suggestion. The
+// command acts on `go env GOMODCACHE`, which is GOPATH/pkg/mod by default.
+func goModCacheRecipe(ctx context.Context, opts RecipeOptions, e catalog.Entry) (Recipe, bool) {
+	if err := ctx.Err(); err != nil {
+		return Recipe{}, false
+	}
+	path, ok := entryHotspotPath(opts, e)
+	if !ok || !dirExists(path) {
+		return Recipe{}, false
+	}
+	r := Recipe{
+		ID:                 catalog.RecipeGoModCache,
+		Title:              "Go module cache",
+		State:              StateDiagnosticOnly,
+		RebuildExpectation: rebuildOr(e, RebuildHigh),
+		Path:               path,
+		SuggestedCommands:  []SuggestedCommand{FormatCommand("go", "clean", "-modcache")},
+		Rationale: []string{
+			"Go module cache is diagnostic-only: spanwit never deletes it.",
+			"go clean -modcache removes downloaded modules; the next build that needs a module downloads it again.",
+			"Offline builds and warm concurrent builds pay that re-download cost immediately.",
+			"The command clears go env GOMODCACHE. If GOMODCACHE or GOPATH points elsewhere, it will not free this directory.",
 		},
 		CatalogID: e.ID,
 	}

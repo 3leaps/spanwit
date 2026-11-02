@@ -106,6 +106,7 @@ func rustupRecipe(ctx context.Context, opts RecipeOptions) (Recipe, bool) {
 	rationale := []string{
 		"Rustup toolchains are diagnostic-only: spanwit never deletes them.",
 		"Keep stable + nightly + required MSRV pins; drop near-duplicate channel aliases only.",
+		"The keep-list is the reclaim: the remaining toolchain stack is slow to refill and is not a bulk-purge candidate.",
 		"Commands use argv form; review before running. Multi-host installs of a kept channel are retained.",
 	}
 	for _, d := range rejected {
