@@ -60,7 +60,7 @@ jobs:
       contents: read
     # Same runner image as CI; bundles Go + tooling. No tool installs.
     container:
-      image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.11@sha256:2c31a048762e16abbc9909a4c707e416f612858caa8edee74f0f96f919b54252
+      image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.14@sha256:2a98d8e9169d0b55f88ef7dbf3d26b05ec4780f1be8fc6672887d64831b60a13
       options: --user root
     env:
       FULMEN_WORKSPACE_ROOT: ${{ github.workspace }}
@@ -83,7 +83,7 @@ jobs:
           set -euo pipefail
           echo "Go: $(go version)"
           actual=$(go env GOVERSION | sed 's/^go//')
-          minimum=1.26.9
+          minimum=1.26.10
           if [ "$(printf '%s\n' "$minimum" "$actual" | sort -V | head -n1)" != "$minimum" ]; then
             echo "ERROR: Go $actual is below required $minimum"
             exit 1

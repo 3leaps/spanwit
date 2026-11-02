@@ -1,13 +1,13 @@
 module github.com/3leaps/spanwit
 
-go 1.26.9
+go 1.26.10
 
 require (
-	github.com/bmatcuk/doublestar/v4 v4.10.1
+	github.com/bmatcuk/doublestar/v4 v4.10.3
 	github.com/fulmenhq/gofulmen v0.3.6
 	github.com/spf13/cobra v1.10.2
 	go.uber.org/zap v1.28.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.49.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

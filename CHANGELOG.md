@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+
+- **Go 1.26.10 minimum.** `go.mod`, the CI and release toolchain checks, and the
+  runner image (`goneat-tools-runner-glibc` v0.5.14, digest-pinned, which ships
+  Go 1.26.10) move from 1.26.9. Go 1.26.10 fixes GO-2026-6809 in `crypto/x509`.
+
+### Changed
+
+- **Dependencies.** `github.com/bmatcuk/doublestar/v4` v4.10.1 → v4.10.3 and
+  `golang.org/x/sys` v0.47.0 → v0.49.0. The bootstrap goneat version is v0.6.6,
+  matching the runner.
+
 ## [0.2.2] - 2026-10-17
 
 ### Security
