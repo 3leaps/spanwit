@@ -4,7 +4,7 @@ This document explains the CI/CD setup for this repository.
 
 ## Container-Based CI Pattern
 
-This repository uses the **goneat-tools-runner** container (`ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.11`) for CI jobs. This is the recommended "low friction" approach from goneat v0.3.14+. The workflows pin it by index digest (`v0.5.11@sha256:…`) so a retag cannot change the toolchain under a release.
+This repository uses the **goneat-tools-runner** container (`ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.14`) for CI jobs. This is the recommended "low friction" approach from goneat v0.3.14+. The workflows pin it by index digest (`v0.5.14@sha256:…`) so a retag cannot change the toolchain under a release.
 
 ### Why Containers?
 
@@ -24,7 +24,7 @@ We run container jobs as `root` and fix temp directory permissions after checkou
 
 ```yaml
 container:
-  image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.11
+  image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.14
   # actions/checkout writes to /__w/_temp/_runner_file_commands/ in containers.
   options: --user root
 
@@ -58,7 +58,7 @@ For local development, you have two options:
 
    ```bash
    docker run --rm -v "$(pwd)":/work -w /work --entrypoint "" \
-     ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.11 yamlfmt -lint .
+     ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.14 yamlfmt -lint .
    ```
 
 2. **Install tools locally (sfetch → goneat)**:
@@ -70,6 +70,11 @@ For local development, you have two options:
    # Install goneat + required tools
    make bootstrap
    ```
+
+The minimum Go version is 1.26.10 (`go.mod`). gosec can fail to load packages
+under a newer host toolchain, so run the hooks and any target that triggers them
+on the minimum: `GOTOOLCHAIN=go1.26.10 make prepush`, and likewise for
+`git commit`, `git push` and `make release-push-tag`.
 
 ## Action and Runner Pins
 
