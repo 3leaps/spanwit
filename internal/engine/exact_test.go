@@ -30,7 +30,9 @@ func TestPlanFromExact_CustomSignature(t *testing.T) {
 	}
 	path := filepath.Join(tmp, "proj", "build-out")
 	plan, err := PlanFromExact(context.Background(), ExactPlanInput{
-		AnalysisRoot: tmp,
+		// Not an age test: opt out of the 1h handoff floor (fresh fixture).
+		RequestedMinAge: RequestedMinAgeNone,
+		AnalysisRoot:    tmp,
 		Entries: []ExactEntry{{
 			Path: path, Signature: "development.custom.build",
 			EffectiveMinSize: FilterDisplayNone, EffectiveMinAge: FilterDisplayNone, EffectiveMaxAge: FilterDisplayNone,
@@ -69,7 +71,9 @@ func TestPlanFromExact_FilterMinSizeWithholds(t *testing.T) {
 	writeFile(t, filepath.Join(tmp, "app", "target", "debug", "a"), 100) // tiny
 	path := filepath.Join(tmp, "app", "target")
 	plan, err := PlanFromExact(context.Background(), ExactPlanInput{
-		AnalysisRoot: tmp,
+		// Not an age test: opt out of the 1h handoff floor (fresh fixture).
+		RequestedMinAge: RequestedMinAgeNone,
+		AnalysisRoot:    tmp,
 		Entries: []ExactEntry{{
 			Path: path, Signature: "development.rust.cargo-target",
 			EffectiveMinSize: "1G", // filter from report
@@ -280,7 +284,9 @@ func TestPlanFromExact_NestedAncestorEvidenceUsesAnalysisRoot(t *testing.T) {
 	}
 	// ... and exact-plan revalidation under the same analysis_root keeps it.
 	plan, err := PlanFromExact(context.Background(), ExactPlanInput{
-		AnalysisRoot: tmp, Entries: []ExactEntry{entry}, Signatures: custom,
+		// Not an age test: opt out of the 1h handoff floor (fresh fixture).
+		RequestedMinAge: RequestedMinAgeNone,
+		AnalysisRoot:    tmp, Entries: []ExactEntry{entry}, Signatures: custom,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -293,7 +299,9 @@ func TestPlanFromExact_NestedAncestorEvidenceUsesAnalysisRoot(t *testing.T) {
 	// below the marker, the same candidate is refused.
 	inner := filepath.Join(tmp, "proj", "scratch")
 	plan, err = PlanFromExact(context.Background(), ExactPlanInput{
-		AnalysisRoot: inner, Entries: []ExactEntry{entry}, Signatures: custom,
+		// Not an age test: opt out of the 1h handoff floor (fresh fixture).
+		RequestedMinAge: RequestedMinAgeNone,
+		AnalysisRoot:    inner, Entries: []ExactEntry{entry}, Signatures: custom,
 	})
 	if err != nil {
 		t.Fatal(err)

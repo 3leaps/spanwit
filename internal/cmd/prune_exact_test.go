@@ -92,8 +92,9 @@ paths:
 		t.Fatalf("bare allowlist should miss custom: %+v", bare.Candidates)
 	}
 
-	// from-space-report preserves custom signature
-	plan, err := buildPrunePlanFromSpaceReport(context.Background(), reportPath)
+	// from-space-report preserves custom signature (not an age test: the
+	// fixture is seconds old, so opt out of the 1h handoff floor).
+	plan, err := buildPrunePlanFromSpaceReport(context.Background(), reportPath, engine.RequestedMinAgeNone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +182,7 @@ func TestPruneFromSpaceReport_JSONRoundTrip(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path)
+	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path, "")
 	if err != nil {
 		t.Fatal(err)
 	}

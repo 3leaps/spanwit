@@ -24,6 +24,9 @@ type ExactEntry struct {
 	ReclaimScope string
 	// ParentPath is required when ReclaimScope is incremental (verified cargo target).
 	ParentPath string
+	// Baseline is the planned observation the operator reviewed. Drift is
+	// measured against it; nil means drift is unknown.
+	Baseline *ExactBaseline
 }
 
 // ExactPlanInput revalidates a closed set of handoff candidates under the same
@@ -40,17 +43,33 @@ type ExactPlanInput struct {
 	// temp age floor and refuses candidates under a group- or other-writable
 	// directory, matching the space walk.
 	TempRoot bool
+	// RequestedMinAge is the prune --min-age value: "" (not given),
+	// RequestedMinAgeNone (drop only the handoff floor), or a positive
+	// duration that raises every candidate's floor (never lowers it).
+	RequestedMinAge string
 }
 
 // PlanFromExact revalidates each entry in isolation. It never walks sibling
 // trees, never invents new candidates, and applies the carried min_size / age
 // window. Symlink path components are rejected. Ranking fields are remeasured
 // at plan time (stale activity snapshots are never deletion authorization).
+//
+// Freshness: every candidate's min_age is raised to HandoffAgeFloor (unless
+// RequestedMinAge is none) and to RequestedMinAge, then each sized row is
+// compared against its carried baseline. Activity after the plan or a size
+// change withholds the row. Remeasurement is not a lock through deletion.
 func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) (PrunePlan, error) {
 	var plan PrunePlan
 	if len(in.Entries) == 0 {
 		return plan, fmt.Errorf("exact plan requires at least one candidate")
 	}
+	if in.RequestedMinAge != "" {
+		if err := ValidateRequestedMinAge(in.RequestedMinAge); err != nil {
+			return plan, err
+		}
+	}
+	plan.Freshness = NewFreshness(in.RequestedMinAge)
+	baselines := make(map[string]*ExactBaseline)
 	merged := MergePlanOptions(opts...)
 	sizeMaxDepth := -1
 	if merged.sizeMaxDepthSet {
@@ -240,6 +259,16 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 			effMinAge = raiseMinAge(effMinAge, tempRootAgeFloor)
 			floored = true
 		}
+		if in.RequestedMinAge != RequestedMinAgeNone {
+			effMinAge = raiseMinAge(effMinAge, HandoffAgeFloor)
+		}
+		if in.RequestedMinAge != "" && in.RequestedMinAge != RequestedMinAgeNone {
+			if minAgeBelow(in.RequestedMinAge, effMinAge) {
+				plan.Freshness.RequestedBelowFloor++
+			}
+			effMinAge = raiseMinAge(effMinAge, in.RequestedMinAge)
+		}
+		baselines[key] = e.Baseline
 		effMaxAge := e.EffectiveMaxAge
 		minSize, err := ParseSize(displayFilterRaw(effMinSize))
 		if err != nil {
@@ -308,6 +337,12 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 
 	plan.EffectiveFilters = aggregateEffectiveFilters(jobs, config.Defaults{})
 	candidates, warnings := sizeCandidateJobs(ctx, jobs, sizeMaxDepth)
+	applyDrift(candidates, baselines, plan.Freshness)
+	if n := plan.Freshness.RequestedBelowFloor; n > 0 {
+		warnings = append(warnings, fmt.Errorf(
+			"--min-age %s is below the floor already in force for %d candidate(s); the higher floor was kept (raise-only)",
+			in.RequestedMinAge, n))
+	}
 	plan.Candidates = candidates
 	plan.Warnings = append(plan.Warnings, warnings...)
 	for _, c := range plan.Candidates {

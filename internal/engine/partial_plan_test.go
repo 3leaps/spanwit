@@ -86,7 +86,9 @@ func TestPlanFromExact_IncrementalRevalidatesParent(t *testing.T) {
 	}
 
 	plan, err := PlanFromExact(context.Background(), ExactPlanInput{
-		AnalysisRoot: root,
+		// Not an age test: opt out of the 1h handoff floor (fresh fixture).
+		RequestedMinAge: RequestedMinAgeNone,
+		AnalysisRoot:    root,
 		Entries: []ExactEntry{{
 			Path:             inc,
 			Signature:        "development.rust.cargo-target",

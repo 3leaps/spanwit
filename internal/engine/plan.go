@@ -77,6 +77,8 @@ type PrunePlan struct {
 	SortMode string
 	// ReclaimScope is the plan-wide reclaim granularity (whole|incremental).
 	ReclaimScope string
+	// Freshness is set on exact-plan revalidation only (nil otherwise).
+	Freshness *Freshness
 }
 
 type PruneCandidate struct {
@@ -120,7 +122,10 @@ type PruneCandidate struct {
 	// ProvenanceKind names the authorization source; empty/unknown fails closed
 	// at execute (see engine.Provenance* constants).
 	ProvenanceKind string
-	Deleted        bool
+	// Drift compares the row with its carried exact-plan baseline (nil
+	// outside exact-plan revalidation).
+	Drift   *CandidateDrift
+	Deleted bool
 }
 
 // PlanOptions tunes plan construction. Zero value preserves historical prune

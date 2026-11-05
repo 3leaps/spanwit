@@ -24,7 +24,7 @@ func TestPruneFromSpaceReport_CapacityOnlyFailsNotCarrier(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := buildPrunePlanFromSpaceReport(context.Background(), path); !errors.Is(err, space.ErrCapacityOnlyNotPruneCarrier) {
+	if _, err := buildPrunePlanFromSpaceReport(context.Background(), path, ""); !errors.Is(err, space.ErrCapacityOnlyNotPruneCarrier) {
 		t.Fatalf("loader err=%v", err)
 	}
 
@@ -63,7 +63,7 @@ func TestPruneFromSpaceReport_RejectsTruncatedJSON(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := buildPrunePlanFromSpaceReport(context.Background(), path)
+	_, err := buildPrunePlanFromSpaceReport(context.Background(), path, "")
 	if err == nil {
 		t.Fatal("expected rejection")
 	}
@@ -100,7 +100,7 @@ func TestPruneFromSpaceReport_ValidStillWorks(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path)
+	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path, "")
 	if err != nil {
 		t.Fatal(err)
 	}

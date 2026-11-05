@@ -262,6 +262,15 @@ func ExactPlanToEngine(p *ExactPlan) engine.ExactPlanInput {
 			Evidence:         c.Evidence,
 			ReclaimScope:     c.ReclaimScope,
 			ParentPath:       c.ParentPath,
+			// The reviewed observation: prune withholds rows that drifted
+			// from it (size or activity) since the plan was written.
+			Baseline: &engine.ExactBaseline{
+				SizeBytes:          c.SizeBytes,
+				SizeIncomplete:     c.SizeIncomplete,
+				LastActivityAt:     c.LastActivityAt,
+				ActivityBasis:      c.ActivityBasis,
+				ActivityIncomplete: c.ActivityIncomplete,
+			},
 		})
 	}
 	return engine.ExactPlanInput{

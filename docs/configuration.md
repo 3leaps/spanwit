@@ -112,6 +112,46 @@ cp /path/to/spanwit/docs/examples/configs/crisis-dev.yaml ~/.config/spanwit/
 spanwit prune --config ~/.config/spanwit/crisis-dev.yaml
 ```
 
+### Freshness at replay
+
+`prune --from-space-report` and `prune --from-exact-plan` re-measure every
+candidate before anything is deleted, and they apply two checks that the report
+cannot turn off:
+
+- **Age floor.** No file or nested directory beneath a candidate may have
+  been modified in the last **1h**, even when the report carries
+  `min_age: none`. The floor is raised by the report's own `min_age` and by
+  signature and temp floors, and never lowered. `--min-age DUR` (for example
+  `48h` or `7d`) raises it further
+  for one run; a value below a floor already in force is kept at the higher
+  floor and noted in a warning. `--min-age none` drops only the 1h floor for
+  that run. Zero, negative and fractional values are refused.
+- **Drift since the report.** Each row is compared with what the report
+  recorded. A newer descendant mtime than the report's `last_activity_at`
+  withholds the row as `activity_after_plan`. Any change in a complete size,
+  up or down, withholds it as `size_drift`; this catches copies that preserve
+  timestamps. When either side is incomplete the comparison is `unknown`,
+  which does not withhold by itself. The common unknown case is a tree deeper
+  than the sizing walk: only the age floor guards it, and `--min-age none`
+  leaves it unguarded. Drift is reported on every row, including rows
+  withheld for another reason, and totalled in the JSON `freshness` block. A
+  drifted row needs a new `space` report to be reviewed again.
+
+Reports now record `last_activity_at` with sub-second precision. Reports
+written before that record whole seconds; for those, the re-measured time is
+compared to the second, so a write within the same second as the recorded
+activity cannot be detected.
+
+Limits: the report is not signed, so an edited report can hide drift (though it
+cannot lower the age floor). The newest mtime is an activity signal, not proof
+that nothing changed: the candidate directory's own mtime is not read, so an
+entry created and removed directly inside it leaves no trace. Re-measurement
+is not a lock held until deletion finishes.
+
+Replay takes its policy from the report, so `--config`/`-c` is refused in
+these modes. A `SPANWIT_CONFIG_PATH` set in the environment is noted on stderr
+and not used.
+
 **Temp planes.** `temp_plane_coverage` appears only under warn/critical
 pressure. Each plane carries a canonical root, `size_status`
 (`measured` | `partial` lower bound | `unavailable`), and a root-level

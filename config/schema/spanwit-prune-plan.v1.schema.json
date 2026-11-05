@@ -166,6 +166,49 @@
         }
       }
     },
+    "freshness": {
+      "type": "object",
+      "description": "Exact-plan revalidation only (--from-space-report / --from-exact-plan): execute-time age policy and drift totals. Present even with zero candidates.",
+      "required": [
+        "handoff_floor",
+        "handoff_floor_applied",
+        "requested_below_floor",
+        "size_drift",
+        "activity_after_plan",
+        "drift_unknown"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "handoff_floor": {
+          "type": "string",
+          "description": "Minimum idle age applied to every exact-plan candidate unless dropped by --min-age none."
+        },
+        "handoff_floor_applied": {
+          "type": "boolean"
+        },
+        "requested_min_age": {
+          "type": "string",
+          "description": "The --min-age value as given (absent when not given). Raise-only."
+        },
+        "requested_below_floor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Candidates where --min-age was below a floor already in force (the higher floor was kept)."
+        },
+        "size_drift": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activity_after_plan": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "drift_unknown": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
     "candidates": {
       "type": "array",
       "items": {
@@ -209,9 +252,11 @@
               "age",
               "min_size",
               "indeterminate",
-              "domain_disabled"
+              "domain_disabled",
+              "activity_after_plan",
+              "size_drift"
             ],
-            "description": "Why the match is withheld. age = failed age window (min_age floor and/or max_age ceiling); min_size = complete measurement below size floor; indeterminate = depth-bounded lower bound below size floor so the threshold cannot be decided; safe_to_prune = signature not marked safe; domain_disabled = use domain not in an explicitly configured domains.enabled set."
+            "description": "Why the match is withheld. age = failed age window (min_age floor and/or max_age ceiling); min_size = complete measurement below size floor; indeterminate = depth-bounded lower bound below size floor so the threshold cannot be decided; safe_to_prune = signature not marked safe; domain_disabled = use domain not in an explicitly configured domains.enabled set. activity_after_plan = exact-plan revalidation saw activity newer than the plan baseline; size_drift = exact-plan revalidation measured a complete size different from the complete plan baseline. A drift reason is primary only when no other gate withheld the row; drift facts are always in drift."
           },
           "effective_min_size": {
             "type": "string",
@@ -289,6 +334,38 @@
             "type": "string",
             "minLength": 1,
             "description": "Verified cargo-target parent when reclaim_scope is incremental."
+          },
+          "drift": {
+            "type": "object",
+            "description": "Exact-plan revalidation only: this row compared with the plan baseline it was reviewed as. unknown = either side incomplete, missing or unparseable.",
+            "required": [
+              "size",
+              "activity"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "size": {
+                "type": "string",
+                "enum": [
+                  "changed",
+                  "unchanged",
+                  "unknown"
+                ]
+              },
+              "size_delta_bytes": {
+                "type": "integer",
+                "description": "Remeasured minus planned bytes; present only when both sides are complete."
+              },
+              "activity": {
+                "type": "string",
+                "enum": [
+                  "changed",
+                  "unchanged",
+                  "unknown"
+                ],
+                "description": "changed = newest remeasured descendant mtime is later than the plan last_activity_at, compared at the precision the plan retained."
+              }
+            }
           }
         },
         "allOf": [

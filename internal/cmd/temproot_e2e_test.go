@@ -124,7 +124,7 @@ func TestS4bE2E_OnePlanPerRootRevalidatesBoth(t *testing.T) {
 	if h.TempExactPlans[0].AnalysisRoot != temp {
 		t.Fatalf("temp plan root = %q, want %q", h.TempExactPlans[0].AnalysisRoot, temp)
 	}
-	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path)
+	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path, "")
 	if err != nil {
 		t.Fatalf("prune: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestS4bE2E_ReadmissionAtPruneTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(temp, 0o700) })
-	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path)
+	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path, "")
 	if err != nil {
 		t.Fatalf("prune: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestS4bE2E_CarriedSharedBoundaryRefused(t *testing.T) {
 	if err := os.WriteFile(path, tampered, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path)
+	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path, "")
 	if err != nil {
 		t.Fatalf("the tampered report should still load so re-admission decides: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestS4bE2E_WritableDirAtRevalidationRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(mid, 0o700) })
-	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path)
+	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path, "")
 	if err != nil {
 		t.Fatalf("prune: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestS4bE2E_WritableCandidateAtRevalidationRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(inTemp, 0o700) })
-	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path)
+	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path, "")
 	if err != nil {
 		t.Fatalf("prune: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestS4bE2E_RewrittenToOtherPrivateDirRefused(t *testing.T) {
 	if err := os.WriteFile(path, []byte(rewritten), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path)
+	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path, "")
 	if err != nil {
 		t.Fatalf("the rewritten report should still load so re-admission decides: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestS4bE2E_TempFloorAtRevalidation(t *testing.T) {
 	if err := os.Chtimes(filepath.Join(target, "debug", "x.o"), now, now); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path)
+	plan, err := buildPrunePlanFromSpaceReport(context.Background(), path, "")
 	if err != nil {
 		t.Fatalf("prune: %v", err)
 	}

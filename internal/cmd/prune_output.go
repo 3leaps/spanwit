@@ -33,6 +33,7 @@ type prunePlanOutput struct {
 	EffectiveFilters pruneEffectiveFilters  `json:"effective_filters"`
 	Summary          prunePlanSummary       `json:"summary"`
 	Execution        *pruneExecutionSummary `json:"execution,omitempty"`
+	Freshness        *pruneFreshnessOutput  `json:"freshness,omitempty"`
 	Candidates       []pruneCandidateOutput `json:"candidates"`
 	Warnings         []string               `json:"warnings,omitempty"`
 	Tool             *envelope.Tool         `json:"tool,omitempty"`
@@ -67,25 +68,46 @@ type prunePlanSummary struct {
 }
 
 type pruneCandidateOutput struct {
-	Path               string   `json:"path"`
-	SizeBytes          int64    `json:"size_bytes"`
-	SizeHuman          string   `json:"size_human"`
-	State              string   `json:"state"`
-	WithheldReason     string   `json:"withheld_reason,omitempty"`
-	EffectiveMinSize   string   `json:"effective_min_size"`
-	EffectiveMinAge    string   `json:"effective_min_age"`
-	EffectiveMaxAge    string   `json:"effective_max_age"`
-	Pattern            string   `json:"pattern,omitempty"`
-	Signature          string   `json:"signature,omitempty"`
-	Confidence         string   `json:"confidence"`
-	Evidence           []string `json:"evidence,omitempty"`
-	LastActivityAt     string   `json:"last_activity_at,omitempty"`
-	ActivityBasis      string   `json:"activity_basis,omitempty"`
-	ActivityIncomplete bool     `json:"activity_incomplete,omitempty"`
-	RebuildExpectation string   `json:"rebuild_expectation,omitempty"`
-	ReclaimScope       string   `json:"reclaim_scope"`
-	ParentPath         string   `json:"parent_path,omitempty"`
-	Deleted            *bool    `json:"deleted,omitempty"`
+	Path               string            `json:"path"`
+	SizeBytes          int64             `json:"size_bytes"`
+	SizeHuman          string            `json:"size_human"`
+	State              string            `json:"state"`
+	WithheldReason     string            `json:"withheld_reason,omitempty"`
+	EffectiveMinSize   string            `json:"effective_min_size"`
+	EffectiveMinAge    string            `json:"effective_min_age"`
+	EffectiveMaxAge    string            `json:"effective_max_age"`
+	Pattern            string            `json:"pattern,omitempty"`
+	Signature          string            `json:"signature,omitempty"`
+	Confidence         string            `json:"confidence"`
+	Evidence           []string          `json:"evidence,omitempty"`
+	LastActivityAt     string            `json:"last_activity_at,omitempty"`
+	ActivityBasis      string            `json:"activity_basis,omitempty"`
+	ActivityIncomplete bool              `json:"activity_incomplete,omitempty"`
+	RebuildExpectation string            `json:"rebuild_expectation,omitempty"`
+	ReclaimScope       string            `json:"reclaim_scope"`
+	ParentPath         string            `json:"parent_path,omitempty"`
+	Drift              *pruneDriftOutput `json:"drift,omitempty"`
+	Deleted            *bool             `json:"deleted,omitempty"`
+}
+
+// pruneFreshnessOutput is the execute-time age policy and drift totals for an
+// exact-plan revalidation (--from-space-report / --from-exact-plan). The
+// requested policy is shown apart from each candidate's effective floor.
+type pruneFreshnessOutput struct {
+	HandoffFloor        string `json:"handoff_floor"`
+	HandoffFloorApplied bool   `json:"handoff_floor_applied"`
+	RequestedMinAge     string `json:"requested_min_age,omitempty"`
+	RequestedBelowFloor int    `json:"requested_below_floor"`
+	SizeDrift           int    `json:"size_drift"`
+	ActivityAfterPlan   int    `json:"activity_after_plan"`
+	DriftUnknown        int    `json:"drift_unknown"`
+}
+
+// pruneDriftOutput compares a row with the plan baseline it was reviewed as.
+type pruneDriftOutput struct {
+	Size           string `json:"size"`
+	SizeDeltaBytes *int64 `json:"size_delta_bytes,omitempty"`
+	Activity       string `json:"activity"`
 }
 
 type pruneExecutionSummary struct {
@@ -135,6 +157,17 @@ func newPrunePlanOutput(plan PrunePlan, loadedPath string, execute bool, now tim
 		Candidates: make([]pruneCandidateOutput, 0, len(plan.Candidates)),
 		Warnings:   make([]string, 0, len(plan.Warnings)),
 	}
+	if f := plan.Freshness; f != nil {
+		out.Freshness = &pruneFreshnessOutput{
+			HandoffFloor:        f.HandoffFloor,
+			HandoffFloorApplied: f.HandoffFloorApplied,
+			RequestedMinAge:     f.RequestedMinAge,
+			RequestedBelowFloor: f.RequestedBelowFloor,
+			SizeDrift:           f.SizeDrift,
+			ActivityAfterPlan:   f.ActivityAfterPlan,
+			DriftUnknown:        f.DriftUnknown,
+		}
+	}
 	var deletedCandidates int
 	var deletedBytes int64
 	for _, candidate := range plan.Candidates {
@@ -181,6 +214,9 @@ func newPrunePlanOutput(plan PrunePlan, loadedPath string, execute bool, now tim
 		}
 		if !candidate.LastActivityAt.IsZero() {
 			po.LastActivityAt = candidate.LastActivityAt.UTC().Format(time.RFC3339)
+		}
+		if d := candidate.Drift; d != nil {
+			po.Drift = &pruneDriftOutput{Size: d.Size, SizeDeltaBytes: d.SizeDeltaBytes, Activity: d.Activity}
 		}
 		out.Candidates = append(out.Candidates, po)
 	}
@@ -239,6 +275,9 @@ func writePlanText(w io.Writer, plan PrunePlan) {
 		displayFilter(plan.EffectiveFilters.MaxAge))
 	_, _ = fmt.Fprintln(w, "(resolved per match: defaults → path → target; min_age=older-than floor, max_age=younger-than ceiling; mixed = more than one value among candidates)")
 	_, _ = fmt.Fprintf(w, "Ranking: sort_mode=%s (idle = oldest known activity first; unknown activity last; advisory only)\n", displaySortMode(plan.SortMode))
+	if line := formatFreshness(plan.Freshness); line != "" {
+		_, _ = fmt.Fprintln(w, line)
+	}
 	_, _ = fmt.Fprintln(w)
 
 	if len(prunable) == 0 && len(withheld) == 0 {
@@ -249,8 +288,8 @@ func writePlanText(w io.Writer, plan PrunePlan) {
 		_, _ = fmt.Fprintln(w, "Prune candidates:")
 		_, _ = fmt.Fprintln(w, rule)
 		for _, candidate := range prunable {
-			_, _ = fmt.Fprintf(w, "%-12s  %-36s  %-24s  %s  %s\n",
-				humanSize(candidate.Size), candidateLabel(candidate), formatActivity(candidate, now), candidate.Path, formatCandidateFilters(candidate))
+			_, _ = fmt.Fprintf(w, "%-12s  %-36s  %-24s  %s  %s%s\n",
+				humanSize(candidate.Size), candidateLabel(candidate), formatActivity(candidate, now), candidate.Path, formatCandidateFilters(candidate), formatDrift(candidate.Drift))
 		}
 		_, _ = fmt.Fprintln(w, rule)
 		_, _ = fmt.Fprintf(w, "Total reclaimable: %s\n", humanSize(prunableBytes))
@@ -262,8 +301,8 @@ func writePlanText(w io.Writer, plan PrunePlan) {
 		_, _ = fmt.Fprintln(w, "Withheld (matched but not eligible for deletion):")
 		_, _ = fmt.Fprintln(w, rule)
 		for _, candidate := range withheld {
-			_, _ = fmt.Fprintf(w, "%-12s  %-36s  %-24s  %s  [withheld: %s]  %s\n",
-				humanSize(candidate.Size), candidateLabel(candidate), formatActivity(candidate, now), candidate.Path, candidate.WithheldReason, formatCandidateFilters(candidate))
+			_, _ = fmt.Fprintf(w, "%-12s  %-36s  %-24s  %s  [withheld: %s]  %s%s\n",
+				humanSize(candidate.Size), candidateLabel(candidate), formatActivity(candidate, now), candidate.Path, candidate.WithheldReason, formatCandidateFilters(candidate), formatDrift(candidate.Drift))
 		}
 		_, _ = fmt.Fprintln(w, rule)
 		_, _ = fmt.Fprintf(w, "Withheld total: %s\n", humanSize(withheldBytes))
@@ -291,6 +330,41 @@ func formatActivity(c PruneCandidate, now time.Time) string {
 		days = 0
 	}
 	return fmt.Sprintf("last %s (%dd)", last.Format("2006-01-02"), days)
+}
+
+// formatFreshness renders the exact-plan freshness policy and drift totals.
+func formatFreshness(f *engine.Freshness) string {
+	if f == nil {
+		return ""
+	}
+	floor := fmt.Sprintf("handoff floor %s", f.HandoffFloor)
+	if !f.HandoffFloorApplied {
+		floor += " (dropped by --min-age none)"
+	}
+	req := "none given"
+	if f.RequestedMinAge != "" {
+		req = f.RequestedMinAge
+	}
+	return fmt.Sprintf("Freshness: %s; requested --min-age %s; drift since plan: %d activity_after_plan, %d size_drift, %d unknown",
+		floor, req, f.ActivityAfterPlan, f.SizeDrift, f.DriftUnknown)
+}
+
+// formatDrift tags a row whose comparison with its plan baseline is not a
+// clean "unchanged" on both dimensions.
+func formatDrift(d *engine.CandidateDrift) string {
+	if d == nil || (d.Size == engine.DriftUnchanged && d.Activity == engine.DriftUnchanged) {
+		return ""
+	}
+	size := d.Size
+	if d.Size == engine.DriftChanged && d.SizeDeltaBytes != nil {
+		delta := *d.SizeDeltaBytes
+		sign := "+"
+		if delta < 0 {
+			sign, delta = "-", -delta
+		}
+		size = fmt.Sprintf("changed(%s%s)", sign, humanSize(delta))
+	}
+	return fmt.Sprintf("  [drift size=%s activity=%s]", size, d.Activity)
 }
 
 func displaySortMode(mode string) string {
@@ -324,7 +398,7 @@ func formatWithheldByReason(byReason map[string]*reasonAgg) string {
 		return ""
 	}
 	// Prefer a stable, product-meaningful order.
-	order := []string{withheldReasonAge, withheldReasonMinSize, withheldReasonSafeToPrune}
+	order := []string{withheldReasonAge, engine.WithheldReasonActivityAfterPlan, engine.WithheldReasonSizeDrift, withheldReasonMinSize, withheldReasonSafeToPrune}
 	seen := map[string]bool{}
 	var parts []string
 	appendPart := func(reason string, agg *reasonAgg) {

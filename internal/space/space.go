@@ -372,7 +372,10 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 			ParentPath:         c.ParentPath,
 		}
 		if !c.LastActivityAt.IsZero() {
-			entry.LastActivityAt = c.LastActivityAt.UTC().Format(time.RFC3339)
+			// Full precision: prune compares remeasured activity against this
+			// baseline at the precision it retains (whole-second legacy values
+			// can only detect writes in a later second).
+			entry.LastActivityAt = c.LastActivityAt.UTC().Format(time.RFC3339Nano)
 		}
 		entry.ReclaimScope = NormalizeReclaimScope(c.ReclaimScope)
 		if entry.ReclaimScope == engine.ReclaimScopeWhole {
