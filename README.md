@@ -112,6 +112,11 @@ Bare `--allowlist` is a dry-run convenience against built-in signatures only and
 **refuses `--execute`** (no custom-signature/filter provenance). Prefer
 `--from-space-report` for policy-preserving reclaim.
 
+Replay withholds any candidate written to in the last hour, and any row whose
+size or activity has changed since the report was written (`size_drift`,
+`activity_after_plan`). Use `--min-age 48h` to raise the floor for one run. See
+[configuration](docs/configuration.md#freshness-at-replay).
+
 `inventory` requires at least one explicit root and creates no report, cache,
 index, or temporary file by default. Without `--top`, matches stream in
 unspecified traversal order. `--top N` scans the complete declared scope and

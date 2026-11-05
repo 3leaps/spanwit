@@ -24,6 +24,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Replay freshness gate.** `prune --from-space-report` and
+  `prune --from-exact-plan` apply a 1h minimum idle age to every candidate,
+  including reports that carry `min_age: none`. New `--min-age DUR` raises
+  the floor for one run (raise-only); `--min-age none` drops only the 1h
+  floor. Each row is compared with its report baseline: newer activity
+  withholds it as `activity_after_plan`, and any change in a complete size
+  withholds it as `size_drift`. Drift appears on every row and in a new
+  `freshness` block in prune JSON. `--config`/`-c` is refused in replay modes,
+  where it was previously ignored without notice.
+- `space` writes `last_activity_at` with sub-second precision. Whole-second
+  values from earlier reports are compared to the second.
 - The release ceremony names its Release workflow run with
   `SPANWIT_RELEASE_RUN_ID` and `SPANWIT_RELEASE_RUN_ATTEMPT`. The generic
   `RELEASE_RUN_ID` and `RELEASE_RUN_ATTEMPT` are refused when set, before the

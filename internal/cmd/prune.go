@@ -26,6 +26,7 @@ func newPruneCmd(identity *appidentity.Identity) *cobra.Command {
 		fromExactPlan   string
 		sortMode        string
 		reclaimScope    string
+		minAge          string
 	)
 
 	cmd := &cobra.Command{
@@ -49,6 +50,20 @@ Modes:
 Ranking: --sort size (default) or idle (cold complete activity first; advisory).
 Granularity: --reclaim-scope whole (default) or incremental (Cargo
 target/**/incremental only; mutually exclusive with whole-target for a tree).
+
+Freshness (--from-space-report / --from-exact-plan):
+  • Every candidate must be at least 1h idle at revalidation, even when the
+    plan carries min_age none. --min-age DUR raises that floor (never lowers
+    a carried, signature or temp floor). --min-age none drops only the 1h
+    handoff floor for this run.
+  • Each row is compared with the plan it came from. Activity newer than the
+    plan's last_activity_at, or any change in a complete size, withholds the
+    row (activity_after_plan / size_drift). Re-scan to review the new state.
+  • Limits: plan baselines are not authenticated (an edited plan can hide
+    drift, though never lower a floor). Newest mtime is an activity signal,
+    not proof that nothing changed, and revalidation is not a lock held
+    through deletion.
+  • --config / -c is refused in these modes: policy comes from the plan.
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if outputFormat != "text" && outputFormat != "json" {
@@ -83,6 +98,27 @@ target/**/incremental only; mutually exclusive with whole-target for a tree).
 			if len(allowlist) > 0 && cmd.Flags().Changed("reclaim-scope") {
 				return fmt.Errorf("--reclaim-scope is not supported with --allowlist (use config discovery or --from-space-report)")
 			}
+			replay := fromSpaceReport != "" || fromExactPlan != ""
+			if cmd.Flags().Changed("min-age") {
+				if !replay {
+					return fmt.Errorf("--min-age is only valid with --from-space-report or --from-exact-plan (config mode takes min_age from the config)")
+				}
+				if err := engine.ValidateRequestedMinAge(minAge); err != nil {
+					return err
+				}
+			}
+			if replay {
+				// Replay policy is carried by the plan. An explicitly supplied
+				// config would be silently ignored, so refuse it.
+				if cmd.Flags().Changed("config") || cmd.InheritedFlags().Changed("config") {
+					return fmt.Errorf("--config/-c is not valid with --from-space-report or --from-exact-plan (policy is carried by the plan; use --min-age to raise the age floor)")
+				}
+				if identity != nil {
+					if env := identity.EnvVar("CONFIG_PATH"); os.Getenv(env) != "" {
+						_, _ = fmt.Fprintf(os.Stderr, "Note: %s is set; config not used in replay mode (policy is carried by the plan).\n", env)
+					}
+				}
+			}
 
 			var (
 				plan       PrunePlan
@@ -103,7 +139,7 @@ target/**/incremental only; mutually exclusive with whole-target for a tree).
 				if cmd.Flags().Changed("sort") {
 					sortOpts = append(sortOpts, engine.WithSortMode(sortMode))
 				}
-				plan, err = buildPrunePlanFromSpaceReport(context.Background(), fromSpaceReport, sortOpts...)
+				plan, err = buildPrunePlanFromSpaceReport(context.Background(), fromSpaceReport, minAge, sortOpts...)
 				if err != nil {
 					return err
 				}
@@ -113,7 +149,7 @@ target/**/incremental only; mutually exclusive with whole-target for a tree).
 				if cmd.Flags().Changed("sort") {
 					sortOpts = append(sortOpts, engine.WithSortMode(sortMode))
 				}
-				plan, err = buildPrunePlanFromExactPlanFile(context.Background(), fromExactPlan, sortOpts...)
+				plan, err = buildPrunePlanFromExactPlanFile(context.Background(), fromExactPlan, minAge, sortOpts...)
 				if err != nil {
 					return err
 				}
@@ -199,6 +235,7 @@ target/**/incremental only; mutually exclusive with whole-target for a tree).
 	cmd.Flags().StringVar(&fromExactPlan, "from-exact-plan", "", "revalidate a standalone exact_plan JSON (e.g. structural recipe recipes[].exact_plan)")
 	cmd.Flags().StringVar(&sortMode, "sort", "size", "candidate ranking: size|idle (advisory; idle = cold complete activity first)")
 	cmd.Flags().StringVar(&reclaimScope, "reclaim-scope", "whole", "reclaim granularity: whole|incremental")
+	cmd.Flags().StringVar(&minAge, "min-age", "", "replay modes only: raise every candidate's min_age floor (e.g. 48h, 7d), or none to drop only the 1h handoff floor")
 
 	return cmd
 }
@@ -206,7 +243,7 @@ target/**/incremental only; mutually exclusive with whole-target for a tree).
 // buildPrunePlanFromExactPlanFile loads a standalone exact_plan JSON document
 // (same shape as prune_handoff.exact_plan / recipes[].exact_plan) through the
 // same fail-closed validator as report-carried plans.
-func buildPrunePlanFromExactPlanFile(ctx context.Context, path string, opts ...engine.PlanOptions) (PrunePlan, error) {
+func buildPrunePlanFromExactPlanFile(ctx context.Context, path, minAge string, opts ...engine.PlanOptions) (PrunePlan, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return PrunePlan{}, fmt.Errorf("read exact plan: %w", err)
@@ -216,6 +253,7 @@ func buildPrunePlanFromExactPlanFile(ctx context.Context, path string, opts ...e
 		return PrunePlan{}, err
 	}
 	in := space.ExactPlanToEngine(&ep)
+	in.RequestedMinAge = minAge
 	// Sort is plan-carried; explicit CLI --sort may override via opts.
 	merged := append([]engine.PlanOptions{engine.WithSortMode(ep.SortMode)}, opts...)
 	return buildPrunePlanFromExact(ctx, in, merged...)
@@ -228,7 +266,7 @@ func candidateLabel(candidate PruneCandidate) string {
 	return candidate.Pattern
 }
 
-func buildPrunePlanFromSpaceReport(ctx context.Context, path string, opts ...engine.PlanOptions) (PrunePlan, error) {
+func buildPrunePlanFromSpaceReport(ctx context.Context, path, minAge string, opts ...engine.PlanOptions) (PrunePlan, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return PrunePlan{}, fmt.Errorf("read space report: %w", err)
@@ -239,7 +277,7 @@ func buildPrunePlanFromSpaceReport(ctx context.Context, path string, opts ...eng
 	}
 	if report.PruneHandoff == nil || !report.PruneHandoff.Present {
 		// Zero-candidate carrier replay: still schema-valid and self-describing.
-		return emptyPlanFromSpaceReport(report, opts...), nil
+		return emptyPlanFromSpaceReport(report, minAge, opts...), nil
 	}
 	h := report.PruneHandoff
 	if h.ExactPlan == nil && len(h.TempExactPlans) == 0 {
@@ -268,9 +306,16 @@ func buildPrunePlanFromSpaceReport(ctx context.Context, path string, opts ...eng
 		out.TotalSize += p.TotalSize
 		out.SizeIncomplete = out.SizeIncomplete || p.SizeIncomplete
 		out.Warnings = append(out.Warnings, p.Warnings...)
+		if out.Freshness == nil {
+			out.Freshness = p.Freshness
+		} else {
+			out.Freshness.Merge(p.Freshness)
+		}
 	}
 	if h.ExactPlan != nil {
-		p, err := buildPrunePlanFromExact(ctx, space.ExactPlanToEngine(h.ExactPlan), merged...)
+		in := space.ExactPlanToEngine(h.ExactPlan)
+		in.RequestedMinAge = minAge
+		p, err := buildPrunePlanFromExact(ctx, in, merged...)
 		if err != nil {
 			return PrunePlan{}, err
 		}
@@ -294,11 +339,16 @@ func buildPrunePlanFromSpaceReport(ctx context.Context, path string, opts ...eng
 		}
 		in := space.ExactPlanToEngine(tp)
 		in.TempRoot = true
+		in.RequestedMinAge = minAge
 		p, err := buildPrunePlanFromExact(ctx, in, merged...)
 		if err != nil {
 			return PrunePlan{}, err
 		}
 		add(p)
+	}
+	// A dropped temp root contributes no revalidation; still report policy.
+	if out.Freshness == nil {
+		out.Freshness = engine.NewFreshness(minAge)
 	}
 	return out, nil
 }
@@ -306,7 +356,7 @@ func buildPrunePlanFromSpaceReport(ctx context.Context, path string, opts ...eng
 // emptyPlanFromSpaceReport builds a schema-valid empty prune plan that retains
 // the SpaceReport carrier policy (sort_mode / reclaim_scope) for zero-candidate
 // replay. Explicit CLI sort in opts overrides carrier ranking.
-func emptyPlanFromSpaceReport(report space.Report, opts ...engine.PlanOptions) PrunePlan {
+func emptyPlanFromSpaceReport(report space.Report, minAge string, opts ...engine.PlanOptions) PrunePlan {
 	sortMode := report.SortMode
 	if sortMode == "" {
 		sortMode = engine.SortIdle
@@ -328,5 +378,6 @@ func emptyPlanFromSpaceReport(report space.Report, opts ...engine.PlanOptions) P
 			MinAge:  filterDisplayNone,
 			MaxAge:  filterDisplayNone,
 		},
+		Freshness: engine.NewFreshness(minAge),
 	}
 }

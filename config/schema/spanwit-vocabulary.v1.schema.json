@@ -448,11 +448,22 @@
       "type": "string",
       "description": "Why a matched candidate is withheld.",
       "enum": [
+        "activity_after_plan",
         "age",
         "domain_disabled",
         "indeterminate",
         "min_size",
-        "safe_to_prune"
+        "safe_to_prune",
+        "size_drift"
+      ]
+    },
+    "drift_outcome": {
+      "type": "string",
+      "description": "Exact-plan replay comparison of a remeasured row with its plan baseline. unknown = either side incomplete, missing or unparseable.",
+      "enum": [
+        "changed",
+        "unchanged",
+        "unknown"
       ]
     },
     "disclosure_paths": {

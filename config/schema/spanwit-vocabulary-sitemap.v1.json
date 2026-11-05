@@ -16,6 +16,8 @@
   "prune-plan.v1#/$defs/disclosure/properties/paths": "disclosure_paths",
   "prune-plan.v1#/properties/candidates/items/properties/activity_basis": "activity_basis",
   "prune-plan.v1#/properties/candidates/items/properties/confidence": "confidence",
+  "prune-plan.v1#/properties/candidates/items/properties/drift/properties/activity": "drift_outcome",
+  "prune-plan.v1#/properties/candidates/items/properties/drift/properties/size": "drift_outcome",
   "prune-plan.v1#/properties/candidates/items/properties/rebuild_expectation": "rebuild_expectation",
   "prune-plan.v1#/properties/candidates/items/properties/reclaim_scope": "reclaim_scope",
   "prune-plan.v1#/properties/candidates/items/properties/state": "trust_state",
