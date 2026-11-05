@@ -76,6 +76,14 @@ func TestRustupRecipe_NearDupe(t *testing.T) {
 	if !strings.Contains(joined, "1.89") || strings.Contains(joined, "1.89.0") {
 		t.Fatalf("uninstall set: %v", uninstalls)
 	}
+	// The keep-list is the reclaim: only the near-duplicate alias is offered,
+	// never the rest of the installed stack (1.88.0, stable, nightly).
+	if len(uninstalls) != 1 || uninstalls[0] != "1.89" {
+		t.Fatalf("uninstall must be exactly the near-duplicate alias, got %v", uninstalls)
+	}
+	if !strings.Contains(strings.Join(r.Rationale, "\n"), "keep-list is the reclaim") {
+		t.Fatalf("rationale must say the keep-list is the reclaim: %v", r.Rationale)
+	}
 	for _, c := range r.SuggestedCommands {
 		if strings.Contains(c.Display, "spanwit prune") {
 			t.Fatalf("recipe must not suggest prune: %s", c.Display)

@@ -71,6 +71,8 @@ entries:
     label: Go module cache (GOPATH/pkg)
     class_ceiling: diagnostic-only
     rebuild_expectation: high
+    recipes:
+      - go-mod-cache
     locations:
       default:
         rel_home: go/pkg

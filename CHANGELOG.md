@@ -12,6 +12,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   runner image (`goneat-tools-runner-glibc` v0.5.14, digest-pinned, which ships
   Go 1.26.10) move from 1.26.9. Go 1.26.10 fixes GO-2026-6809 in `crypto/x509`.
 
+### Added
+
+- **Go module cache recipe.** When `~/go/pkg` exists, `space` offers a
+  print-only `go clean -modcache` (`go-mod-cache`) linked to the module cache
+  hotspot. The rationale names the re-download cost and that the command clears
+  `go env GOMODCACHE`, which may be a different directory. The entry stays
+  diagnostic-only.
+- The rustup toolchain recipe says that its keep-list is the reclaim, and that
+  the rest of the toolchain stack is not a bulk-purge candidate.
+
 ### Changed
 
 - **Dependencies.** `github.com/bmatcuk/doublestar/v4` v4.10.1 → v4.10.3 and

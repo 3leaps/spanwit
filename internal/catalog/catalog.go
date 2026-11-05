@@ -49,6 +49,7 @@ const (
 const (
 	RecipeRustupToolchains = "rustup-toolchains"
 	RecipeGoBuildCache     = "go-build-cache"
+	RecipeGoModCache       = "go-mod-cache"
 	RecipeCargoCache       = "cargo-cache"
 	RecipeBrewCleanup      = "brew-cleanup"
 	RecipeUVCachePrune     = "uv-cache-prune"
@@ -69,6 +70,7 @@ func RegisteredRecipeIDs() map[string]bool {
 	return map[string]bool{
 		RecipeRustupToolchains: true,
 		RecipeGoBuildCache:     true,
+		RecipeGoModCache:       true,
 		RecipeCargoCache:       true,
 		RecipeBrewCleanup:      true,
 		RecipeGrypeDBResidue:   true,
