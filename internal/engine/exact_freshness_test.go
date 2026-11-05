@@ -358,3 +358,22 @@ func TestPlanFromExact_InvalidRequestedMinAgeFailsClosed(t *testing.T) {
 		t.Fatal("want error for invalid requested min age")
 	}
 }
+
+// A fractional baseline compares at full precision; a whole-second baseline
+// compares the measurement truncated to the second.
+func TestCompareActivity_SubSecondPrecision(t *testing.T) {
+	sec := time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC)
+	measured := PruneCandidate{ActivityBasis: ActivityBasisDescendantMtime, LastActivityAt: sec.Add(700 * time.Millisecond)}
+	for _, tc := range []struct {
+		baseline, want string
+	}{
+		{"2026-01-02T03:04:00.5Z", DriftChanged},
+		{"2026-01-02T03:04:00.7Z", DriftUnchanged},
+		{"2026-01-02T03:04:00Z", DriftUnchanged},
+	} {
+		b := &ExactBaseline{LastActivityAt: tc.baseline, ActivityBasis: ActivityBasisDescendantMtime}
+		if got := compareActivity(measured, b); got != tc.want {
+			t.Errorf("baseline %s, measured %s: got %s want %s", tc.baseline, measured.LastActivityAt.Format(time.RFC3339Nano), got, tc.want)
+		}
+	}
+}

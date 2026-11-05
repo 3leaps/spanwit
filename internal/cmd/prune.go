@@ -61,8 +61,10 @@ Freshness (--from-space-report / --from-exact-plan):
     row (activity_after_plan / size_drift). Re-scan to review the new state.
   • Limits: plan baselines are not authenticated (an edited plan can hide
     drift, though never lower a floor). Newest mtime is an activity signal,
-    not proof that nothing changed, and revalidation is not a lock held
-    through deletion.
+    not proof that nothing changed (the candidate directory's own mtime is
+    not read), and revalidation is not a lock held through deletion. A tree
+    deeper than the sizing walk has unknown drift: only the age floor guards
+    it, so --min-age none leaves it unguarded.
   • --config / -c is refused in these modes: policy comes from the plan.
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
