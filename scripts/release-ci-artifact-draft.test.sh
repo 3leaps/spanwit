@@ -131,17 +131,40 @@ attempt_json() { # conclusion event head_sha attempt [path] [branch]
         "${5:-.github/workflows/release.yml}" "$2" "${6:-v1.2.3}" "$3" "$1" "$4"
 }
 good="$(attempt_json success push "$commit" 2)"
-export RELEASE_RUN_ID=11 RELEASE_RUN_ATTEMPT=2 FIXTURE_LATEST=2
+unset RELEASE_RUN_ID RELEASE_RUN_ATTEMPT
+export SPANWIT_RELEASE_RUN_ID=11 SPANWIT_RELEASE_RUN_ATTEMPT=2 FIXTURE_LATEST=2
 
 # Fetch: refuses a non-canonical tag, a missing local tag, a missing run id or
 # attempt, and any named attempt that is not a successful push-triggered
 # release run for this tag on the tagged commit or is not the latest attempt.
 fail 'usage' ./scripts/release-fetch-ci-artifacts.sh 1.2.3 "$scratch/d0"
 fail 'published tag v9.9.9 failed verification' ./scripts/release-fetch-ci-artifacts.sh v9.9.9 "$scratch/d0"
-RELEASE_RUN_ID='' FIXTURE_ATTEMPT="$good" fail 'RELEASE_RUN_ID required' \
+SPANWIT_RELEASE_RUN_ID='' FIXTURE_ATTEMPT="$good" fail 'SPANWIT_RELEASE_RUN_ID required' \
     ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/d1"
-RELEASE_RUN_ATTEMPT='' FIXTURE_ATTEMPT="$good" fail 'RELEASE_RUN_ATTEMPT required' \
+SPANWIT_RELEASE_RUN_ATTEMPT='' FIXTURE_ATTEMPT="$good" fail 'SPANWIT_RELEASE_RUN_ATTEMPT required' \
     ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/d1"
+# The generic names are refused whenever set, even empty or alongside a correct
+# SPANWIT_ value: a stale RELEASE_RUN_ID from an earlier release is the case
+# this exists for. Nothing is downloaded and no anchor is written.
+for generic in 'RELEASE_RUN_ID=38162227867' 'RELEASE_RUN_ID=' 'RELEASE_RUN_ATTEMPT=1' 'RELEASE_RUN_ATTEMPT='; do
+    rm -rf "$scratch/dG" "$scratch/dG.anchor"
+    : > "$FIXTURE_LOG"
+    (cd "$repo" && env "$generic" FIXTURE_ATTEMPT="$good" ./scripts/release-fetch-ci-artifacts.sh v1.2.3 "$scratch/dG") \
+        > "$scratch/out" 2>&1 && {
+        echo "error: generic $generic accepted" >&2
+        exit 1
+    }
+    grep -q "generic ${generic%%=*} is set; unset it and use SPANWIT_${generic%%=*}" "$scratch/out" || {
+        echo "error: missing named refusal for $generic" >&2
+        cat "$scratch/out" >&2
+        exit 1
+    }
+    # Refused before the published-tag check (reverify) and before any gh call.
+    if [[ -e "$scratch/dG.anchor" ]] || grep -qE '^(api |reverify)' "$FIXTURE_LOG"; then
+        echo "error: $generic reached tag verification, the API, or wrote an anchor" >&2
+        exit 1
+    fi
+done
 for bad in \
     "$(attempt_json failure push "$commit" 2)" \
     "$(attempt_json success workflow_dispatch "$commit" 2)" \
@@ -297,6 +320,10 @@ draft_fail 'unexpected file'
 stage "$d"
 printf 'tool\n' > "$d/goneat"
 draft_fail 'unexpected file'
+# A signature staged before the draft is refused with the ordering explained.
+stage "$d"
+printf 'sig\n' > "$d/SHA512SUMS.asc"
+draft_fail 'BEFORE signing and notes'
 # Hidden extra files, including names starting with "..", refuse.
 for hidden in .stale '..stale' '...x'; do
     stage "$d"
