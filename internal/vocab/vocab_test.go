@@ -189,7 +189,7 @@ func TestGoConstantsMatchRegistry(t *testing.T) {
 		{"runtime_bucket", false, []string{space.BucketImages, space.BucketBuildCache, space.BucketDanglingImages, space.BucketForeignPlatform, space.BucketSupersededTags, space.BucketVolumesUnreferenced}},
 		{"cost_class", false, []string{space.CostNone, space.CostRebuild, space.CostRePull, space.CostDataLossRisk}},
 		{"runtime_step", false, []string{space.StepDanglingImagePrune, space.StepBuildCachePrune, space.StepForeignPlatformRemove, space.StepSupersededTagRemove, space.StepImagePruneAll, space.StepVolumePrune, space.StepGuestTrim, space.StepDiskGrow}},
-		{"runtime_reason", false, []string{space.ReasonEndpointUnresolved, space.ReasonEngineUnreachable, space.ReasonEngineDisagreement, space.ReasonProbeFailed, space.ReasonTimeout, space.ReasonParseFailed, space.ReasonUnsupportedEngine, space.ReasonProbeNotRequested}},
+		{"runtime_reason", false, []string{space.ReasonEndpointUnresolved, space.ReasonEngineUnreachable, space.ReasonEngineError, space.ReasonEngineStopped, space.ReasonEngineDisagreement, space.ReasonProbeFailed, space.ReasonTimeout, space.ReasonParseFailed, space.ReasonUnsupportedEngine, space.ReasonProbeNotRequested}},
 		{"engine_arch", false, []string{space.ArchAMD64, space.ArchARM64, space.ArchOther}},
 		{"temp_family", false, []string{space.TempFamilyBunx, space.TempFamilyCodex, space.TempFamilyOpencode, space.TempFamilyTsx, space.TempFamilyOther}},
 		{"completion_lifecycle", false, []string{space.CompletionComplete, space.CompletionPartial}},

@@ -3401,6 +3401,8 @@
               "enum": [
                 "endpoint_unresolved",
                 "engine_unreachable",
+                "engine_error",
+                "engine_stopped",
                 "engine_disagreement",
                 "probe_failed",
                 "timeout",
@@ -3408,6 +3410,12 @@
                 "unsupported_engine",
                 "probe_not_requested"
               ]
+            },
+            "http_status": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599,
+              "description": "Engine HTTP status code accompanying reason engine_error, when the code is plausible. The response body is never recorded."
             }
           }
         },
@@ -3485,6 +3493,8 @@
               "enum": [
                 "endpoint_unresolved",
                 "engine_unreachable",
+                "engine_error",
+                "engine_stopped",
                 "engine_disagreement",
                 "probe_failed",
                 "timeout",
@@ -3562,6 +3572,78 @@
                     }
                   ]
                 }
+              }
+            }
+          ]
+        },
+        "host_disk": {
+          "type": "object",
+          "description": "The VM's disk files as the host sees them (colima): logical size and bytes actually allocated on the host. Measured from the host side, so present even when the engine is stopped. Absent when the engine has no VM disk on this host. Never names the VM or a path.",
+          "required": [
+            "status"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "measured",
+                "unavailable"
+              ]
+            },
+            "files": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "logical_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "allocated_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "bound": {
+              "type": "string",
+              "const": "exact",
+              "description": "Present when status is measured."
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "endpoint_unresolved",
+                "engine_unreachable",
+                "engine_error",
+                "engine_stopped",
+                "engine_disagreement",
+                "probe_failed",
+                "timeout",
+                "parse_failed",
+                "unsupported_engine",
+                "probe_not_requested"
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "measured"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "files",
+                  "logical_bytes",
+                  "allocated_bytes"
+                ]
+              },
+              "else": {
+                "required": [
+                  "reason"
+                ]
               }
             }
           ]
@@ -3733,6 +3815,8 @@
           "enum": [
             "endpoint_unresolved",
             "engine_unreachable",
+            "engine_error",
+            "engine_stopped",
             "engine_disagreement",
             "probe_failed",
             "timeout",
@@ -3740,6 +3824,12 @@
             "unsupported_engine",
             "probe_not_requested"
           ]
+        },
+        "http_status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599,
+          "description": "Engine HTTP status code accompanying reason engine_error, when the code is plausible. The response body is never recorded."
         }
       },
       "allOf": [
@@ -3866,6 +3956,8 @@
               "enum": [
                 "endpoint_unresolved",
                 "engine_unreachable",
+                "engine_error",
+                "engine_stopped",
                 "engine_disagreement",
                 "probe_failed",
                 "timeout",

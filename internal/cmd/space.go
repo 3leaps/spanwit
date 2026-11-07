@@ -1064,6 +1064,9 @@ func writeContainerRuntimeText(w io.Writer, rt *space.ContainerRuntime) {
 	if rt.Detection.Reason != "" {
 		detail += ", " + rt.Detection.Reason
 	}
+	if rt.Detection.HTTPStatus != nil {
+		detail += fmt.Sprintf(" HTTP %d", *rt.Detection.HTTPStatus)
+	}
 	line := fmt.Sprintf("Engine: %s (%s)", rt.Engine, detail)
 	if rt.EngineArch != "" {
 		line += "  arch=" + rt.EngineArch
@@ -1082,6 +1085,19 @@ func writeContainerRuntimeText(w io.Writer, rt *space.ContainerRuntime) {
 			hint = " — add --probe-vm to measure inside the VM"
 		}
 		_, _ = fmt.Fprintf(w, "Engine data disk: %s (%s)%s\n", g.Status, g.Reason, hint)
+	}
+	if h := rt.HostDisk; h != nil {
+		if h.Status == space.ProbeMeasured {
+			_, _ = fmt.Fprintf(w, "VM disk on the host: %s allocated, %s logical\n", measure(h.AllocatedBytes), measure(h.LogicalBytes))
+		} else {
+			_, _ = fmt.Fprintf(w, "VM disk on the host: %s (%s)\n", h.Status, h.Reason)
+		}
+	}
+	if rt.Detection.Reason == space.ReasonEngineStopped {
+		_, _ = fmt.Fprintln(w, "  The engine is not running. Start it and re-run with --containers --probe-vm for detail inside the VM.")
+	}
+	if status, failed := engineAccountingFailure(rt.Buckets); failed {
+		_, _ = fmt.Fprintf(w, "  The engine's disk-usage accounting failed%s. This usually means engine storage damage, not disk pressure; removing and re-pulling the affected images may be needed.\n", status)
 	}
 	for _, b := range rt.Buckets {
 		if b.Status != space.ProbeMeasured {
@@ -1122,6 +1138,21 @@ func writeContainerRuntimeText(w io.Writer, rt *space.ContainerRuntime) {
 		}
 	}
 	_, _ = fmt.Fprintln(w)
+}
+
+// engineAccountingFailure reports whether a bucket is unavailable because the
+// engine answered its disk-usage call with an error, with the status for
+// display. Engine error text is never shown: it can carry guest paths.
+func engineAccountingFailure(buckets []space.RuntimeBucket) (string, bool) {
+	for _, b := range buckets {
+		if b.Kind == space.BucketImages && b.Reason == space.ReasonEngineError {
+			if b.HTTPStatus != nil {
+				return fmt.Sprintf(" (HTTP %d)", *b.HTTPStatus), true
+			}
+			return "", true
+		}
+	}
+	return "", false
 }
 
 func derefInt(n *int64) int64 {

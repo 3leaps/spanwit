@@ -21,6 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   diagnostic-only.
 - The rustup toolchain recipe says that its keep-list is the reclaim, and that
   the rest of the toolchain stack is not a bulk-purge candidate.
+- **Container engine host disk.** For colima, `container_runtime.host_disk`
+  reports the VM disk's logical size and the bytes allocated on the host. It is
+  measured from the host side and is present even when the VM is stopped.
 
 ### Changed
 
@@ -33,6 +36,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   withholds it as `size_drift`. Drift appears on every row and in a new
   `freshness` block in prune JSON. `--config`/`-c` is refused in replay modes,
   where it was previously ignored without notice.
+- **Container engine failures are reported by kind.** An engine that answers
+  with an error status is `engine_error` (with `http_status` when it is between
+  100 and 599; the response body is never recorded), not `engine_unreachable`.
+  A failed disk-usage call now marks only the buckets derived from it as
+  `unavailable`; detection, the foreign-platform bucket and the guest probe
+  still run, where previously the whole section was blanked. A missing socket
+  or refused connection on a known local engine is `engine_stopped`. Text
+  output adds a print-only note when disk-usage accounting fails.
 - `space` writes `last_activity_at` with sub-second precision. Whole-second
   values from earlier reports are compared to the second.
 - The release ceremony names its Release workflow run with

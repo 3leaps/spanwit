@@ -110,7 +110,16 @@ never measured as local. Storage figures come from read-only Engine API GETs
 with exact integer bytes; per-platform manifests need API 1.47, and an older
 engine reports that bucket `unavailable`. Absent or negative figures make the
 bucket `unavailable`, never zero, and a section that fails its own contract is
-replaced by an `unknown` stub so the disk report survives. `--probe-vm` runs a
+replaced by an `unknown` stub so the disk report survives. Failures are
+reported by kind. An engine that answers with an error status is
+`engine_error`, with `http_status` when the code is between 100 and 599; the
+response body is never recorded. A failed disk-usage call marks only the
+buckets derived from it, so detection, the foreign-platform bucket and the
+guest probe still run. A missing socket or refused connection on a known local
+engine is `engine_stopped`; other connection failures are `engine_unreachable`
+and timeouts are `timeout`. For colima, `host_disk` gives the VM disk's logical
+size and the bytes allocated on the host, measured from the host side, so it is
+present even when the VM is stopped. `--probe-vm` runs a
 bounded `colima ssh -p <profile> -- df -P -B1 <data root>`, with the data root
 taken from engine info. Recipe steps carry a `cost_class` (`none`, `rebuild`,
 `re_pull`, `data_loss_risk`) and an upper-bound estimate, and their commands

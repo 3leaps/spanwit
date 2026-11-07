@@ -3,9 +3,13 @@ package space
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/3leaps/spanwit/internal/capacity"
@@ -57,20 +61,19 @@ func CollectContainerRuntime(ctx context.Context, opts ContainerRuntimeOptions) 
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 3*engineCallTimeout)
 	defer cancel()
+	// The VM's disk on the host is measured from the host side, so it is
+	// reported whether or not the engine answers (a stopped VM still holds it).
+	if ep.Engine == EngineColima {
+		rt.HostDisk = colimaHostDisk(opts.Env.Home, ep.Profile)
+	}
 	snap, err := readEngineSnapshot(callCtx, newAPI(ep.SocketPath))
 	if err != nil {
-		reason := ReasonEngineUnreachable
-		switch {
-		case errors.Is(err, errEngineParse), errors.Is(err, errEngineBodyTooLarge):
-			reason = ReasonParseFailed
-		case errors.Is(callCtx.Err(), context.DeadlineExceeded):
-			reason = ReasonTimeout
-		}
+		reason, status := engineConnectReason(err, callCtx, ep)
 		rt.Engine = EngineUnknown
 		if ep.Engine != EngineUnknown {
 			rt.Engine = ep.Engine
 		}
-		rt.Detection = EngineDetection{Status: DetectionUnidentified, Basis: []string{DetectionBasisEndpointPath}, Reason: reason}
+		rt.Detection = EngineDetection{Status: DetectionUnidentified, Basis: []string{DetectionBasisEndpointPath}, Reason: reason, HTTPStatus: status}
 		if rt.Engine == EngineNative {
 			// native without corroboration is not trusted for host statfs
 			rt.Engine = EngineUnknown
@@ -102,6 +105,73 @@ func CollectContainerRuntime(ctx context.Context, opts ContainerRuntimeOptions) 
 	rt.GuestFilesystem = probeGuest(ctx, rt.Engine, ep, snap.Info.DockerRootDir, opts)
 	rt.Recipe = buildRuntimeRecipe(rt, unusedImageUnique(snap.DF), opts.ProbeVM)
 	return rt
+}
+
+// engineConnectReason classifies a failed /version or /info call. A non-200
+// answer is engine_error (reached, but nothing to corroborate). A missing
+// socket or a refused connection is engine_stopped only when the endpoint
+// already names a known local engine; on an unknown endpoint the same errors
+// stay engine_unreachable, and so do permission errors and resets, for which
+// "start the VM" would be wrong advice.
+func engineConnectReason(err error, callCtx context.Context, ep EngineEndpoint) (string, *int) {
+	var se *engineStatusError
+	switch {
+	case errors.Is(err, errEngineParse), errors.Is(err, errEngineBodyTooLarge):
+		return ReasonParseFailed, nil
+	case errors.As(err, &se):
+		return ReasonEngineError, httpStatusOf(err)
+	case errors.Is(callCtx.Err(), context.DeadlineExceeded), isTimeout(err):
+		return ReasonTimeout, nil
+	case ep.Engine != EngineUnknown && (errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED)):
+		return ReasonEngineStopped, nil
+	}
+	return ReasonEngineUnreachable, nil
+}
+
+// colimaHostDisk measures the colima VM's disk files on the host: logical
+// size and the bytes actually allocated (the disk is sparse). Nil when the
+// disk directory does not exist; profile and paths never reach the report.
+func colimaHostDisk(home, profile string) *RuntimeHostDisk {
+	if home == "" || profile == "" || profile == "." || profile == ".." {
+		return nil
+	}
+	instance := "colima"
+	if profile != "default" {
+		instance = "colima-" + profile
+	}
+	dir := filepath.Join(home, ".colima", "_lima", "_disks", instance)
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return &RuntimeHostDisk{Status: ProbeUnavailable, Reason: ReasonProbeFailed}
+	}
+	var n, logicalTotal, allocatedTotal int64
+	for _, f := range files {
+		if !f.Type().IsRegular() {
+			continue
+		}
+		info, err := f.Info()
+		if err != nil {
+			return &RuntimeHostDisk{Status: ProbeUnavailable, Reason: ReasonProbeFailed}
+		}
+		logical, allocated, ok := fileAllocation(info)
+		if !ok {
+			return &RuntimeHostDisk{Status: ProbeUnavailable, Reason: ReasonUnsupportedEngine}
+		}
+		if logical == 0 {
+			continue
+		}
+		n++
+		logicalTotal += logical
+		allocatedTotal += allocated
+	}
+	if n == 0 {
+		return &RuntimeHostDisk{Status: ProbeUnavailable, Reason: ReasonProbeFailed}
+	}
+	return &RuntimeHostDisk{Status: ProbeMeasured, Files: i64p(n),
+		LogicalBytes: i64p(logicalTotal), AllocatedBytes: i64p(allocatedTotal)}
 }
 
 // ContainerRuntimeFallback replaces a section that failed its own contract
