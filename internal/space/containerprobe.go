@@ -108,9 +108,10 @@ func CollectContainerRuntime(ctx context.Context, opts ContainerRuntimeOptions) 
 }
 
 // engineConnectReason classifies a failed /version or /info call. A non-200
-// answer is engine_error (reached, but nothing to corroborate). A missing
-// socket or a refused connection is engine_stopped only when the endpoint
-// already names a known local engine; on an unknown endpoint the same errors
+// answer is engine_error (reached, but nothing to corroborate). A refused
+// connection is engine_stopped only when the endpoint already names a known
+// local engine, and so is a missing socket except for a native daemon; on an
+// unknown endpoint the same errors
 // stay engine_unreachable, and so do permission errors and resets, for which
 // "start the VM" would be wrong advice.
 func engineConnectReason(err error, callCtx context.Context, ep EngineEndpoint) (string, *int) {
@@ -122,7 +123,11 @@ func engineConnectReason(err error, callCtx context.Context, ep EngineEndpoint) 
 		return ReasonEngineError, httpStatusOf(err)
 	case errors.Is(callCtx.Err(), context.DeadlineExceeded), isTimeout(err):
 		return ReasonTimeout, nil
-	case ep.Engine != EngineUnknown && (errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED)):
+	case ep.Engine != EngineUnknown && errors.Is(err, syscall.ECONNREFUSED):
+		return ReasonEngineStopped, nil
+	case ep.Engine != EngineUnknown && ep.Engine != EngineNative && errors.Is(err, syscall.ENOENT):
+		// A VM or app engine removes its socket when it is down. A missing
+		// native socket is as likely "not installed" as "not running".
 		return ReasonEngineStopped, nil
 	}
 	return ReasonEngineUnreachable, nil

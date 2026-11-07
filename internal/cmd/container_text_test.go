@@ -44,10 +44,13 @@ func TestWriteContainerRuntimeText_DFFailureShowsRepairHint(t *testing.T) {
 	var buf bytes.Buffer
 	writeContainerRuntimeText(&buf, rt)
 	out := buf.String()
-	for _, want := range []string{"colima (identified)", "images                  unavailable (engine_error)", "disk-usage accounting failed (HTTP 500)", "not disk pressure"} {
+	for _, want := range []string{"colima (identified)", "images                  unavailable (engine_error)", "disk-usage accounting failed (HTTP 500); figures derived from it are unavailable", "If it persists"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "damage") || strings.Contains(out, "disk pressure") {
+		t.Fatalf("the body is never read, so the note must not diagnose a cause:\n%s", out)
 	}
 	if strings.Contains(out, "VM disk on the host") || strings.Contains(out, "not running") {
 		t.Fatalf("unexpected host-disk or stopped text:\n%s", out)

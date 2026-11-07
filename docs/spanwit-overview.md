@@ -116,7 +116,8 @@ reported by kind. An engine that answers with an error status is
 response body is never recorded. A failed disk-usage call marks only the
 buckets derived from it, so detection, the foreign-platform bucket and the
 guest probe still run. A missing socket or refused connection on a known local
-engine is `engine_stopped`; other connection failures are `engine_unreachable`
+engine is `engine_stopped` (for a native daemon, only a refused connection);
+other connection failures are `engine_unreachable`
 and timeouts are `timeout`. For colima, `host_disk` gives the VM disk's logical
 size and the bytes allocated on the host, measured from the host side, so it is
 present even when the VM is stopped. `--probe-vm` runs a

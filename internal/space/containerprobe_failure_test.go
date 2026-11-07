@@ -8,9 +8,11 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/3leaps/spanwit/internal/capacity"
@@ -322,4 +324,37 @@ func TestCollectContainerRuntime_HostDisk(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestEngineConnectReason_PerEngineKind(t *testing.T) {
+	dialErr := func(errno syscall.Errno) error {
+		return &url.Error{Op: "Get", URL: "http://engine/v1.44/version",
+			Err: &net.OpError{Op: "dial", Net: "unix", Err: os.NewSyscallError("connect", errno)}}
+	}
+	ctx := context.Background()
+	cases := []struct {
+		engine string
+		errno  syscall.Errno
+		want   string
+	}{
+		{EngineColima, syscall.ENOENT, ReasonEngineStopped},
+		{EngineOrbStack, syscall.ENOENT, ReasonEngineStopped},
+		{EngineDockerDesktop, syscall.ENOENT, ReasonEngineStopped},
+		{EnginePodman, syscall.ENOENT, ReasonEngineStopped},
+		// A missing native socket may mean Docker is not installed.
+		{EngineNative, syscall.ENOENT, ReasonEngineUnreachable},
+		{EngineNative, syscall.ECONNREFUSED, ReasonEngineStopped},
+		{EngineColima, syscall.ECONNREFUSED, ReasonEngineStopped},
+		{EngineColima, syscall.EACCES, ReasonEngineUnreachable},
+		{EngineNative, syscall.EACCES, ReasonEngineUnreachable},
+		{EngineColima, syscall.ECONNRESET, ReasonEngineUnreachable},
+		{EngineUnknown, syscall.ENOENT, ReasonEngineUnreachable},
+		{EngineUnknown, syscall.ECONNREFUSED, ReasonEngineUnreachable},
+	}
+	for _, c := range cases {
+		got, status := engineConnectReason(dialErr(c.errno), ctx, EngineEndpoint{Engine: c.engine})
+		if got != c.want || status != nil {
+			t.Errorf("%s/%v: got %s (status %v), want %s", c.engine, c.errno, got, status, c.want)
+		}
+	}
 }

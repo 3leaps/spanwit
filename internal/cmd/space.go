@@ -1097,7 +1097,7 @@ func writeContainerRuntimeText(w io.Writer, rt *space.ContainerRuntime) {
 		_, _ = fmt.Fprintln(w, "  The engine is not running. Start it and re-run with --containers --probe-vm for detail inside the VM.")
 	}
 	if status, failed := engineAccountingFailure(rt.Buckets); failed {
-		_, _ = fmt.Fprintf(w, "  The engine's disk-usage accounting failed%s. This usually means engine storage damage, not disk pressure; removing and re-pulling the affected images may be needed.\n", status)
+		_, _ = fmt.Fprintf(w, "  The engine's disk-usage accounting failed%s; figures derived from it are unavailable. If it persists, removing and re-pulling images may help.\n", status)
 	}
 	for _, b := range rt.Buckets {
 		if b.Status != space.ProbeMeasured {

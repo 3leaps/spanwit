@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Container engine host disk.** For colima, `container_runtime.host_disk`
   reports the VM disk's logical size and the bytes allocated on the host. It is
   measured from the host side and is present even when the VM is stopped.
+  Other engines show no `host_disk`.
 
 ### Changed
 
@@ -42,8 +43,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   A failed disk-usage call now marks only the buckets derived from it as
   `unavailable`; detection, the foreign-platform bucket and the guest probe
   still run, where previously the whole section was blanked. A missing socket
-  or refused connection on a known local engine is `engine_stopped`. Text
-  output adds a print-only note when disk-usage accounting fails.
+  or refused connection on a known local engine is `engine_stopped`; for a
+  native daemon only a refused connection is, since a missing socket may mean
+  Docker is not installed. A failed image-list call for the foreign-platform
+  bucket is now `engine_error` or `timeout` where it applies, instead of always
+  `probe_failed`. Text output adds a print-only note when disk-usage accounting
+  fails.
 - `space` writes `last_activity_at` with sub-second precision. Whole-second
   values from earlier reports are compared to the second.
 - The release ceremony names its Release workflow run with
