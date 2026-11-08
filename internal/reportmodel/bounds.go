@@ -111,6 +111,14 @@ func (g GuestFilesystem) MarshalJSON() ([]byte, error) {
 	return json.Marshal(p)
 }
 
+// MarshalJSON emits bound exact when the host disk was measured.
+func (h RuntimeHostDisk) MarshalJSON() ([]byte, error) {
+	type plain RuntimeHostDisk
+	p := plain(h)
+	p.Bound = measuredBound(h.Status)
+	return json.Marshal(p)
+}
+
 // MarshalJSON emits bound exact when the bucket was measured.
 func (b RuntimeBucket) MarshalJSON() ([]byte, error) {
 	type plain RuntimeBucket

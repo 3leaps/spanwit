@@ -59,6 +59,8 @@ const (
 
 	ReasonEndpointUnresolved = "endpoint_unresolved"
 	ReasonEngineUnreachable  = "engine_unreachable"
+	ReasonEngineError        = "engine_error"
+	ReasonEngineStopped      = "engine_stopped"
 	ReasonEngineDisagreement = "engine_disagreement"
 	ReasonProbeFailed        = "probe_failed"
 	ReasonTimeout            = "timeout"
@@ -79,6 +81,7 @@ type ContainerRuntime struct {
 	APIVersion      string              `json:"api_version,omitempty"`
 	RefDisclosure   string              `json:"ref_disclosure"`
 	GuestFilesystem GuestFilesystem     `json:"guest_filesystem"`
+	HostDisk        *RuntimeHostDisk    `json:"host_disk,omitempty"`
 	Buckets         []RuntimeBucket     `json:"buckets"`
 	Recipe          []RuntimeRecipeStep `json:"recipe"`
 	ImageRefs       []RuntimeImageRef   `json:"image_refs,omitempty"`
@@ -90,6 +93,22 @@ type EngineDetection struct {
 	Status string   `json:"status"`
 	Basis  []string `json:"basis"`
 	Reason string   `json:"reason,omitempty"`
+	// HTTPStatus is the engine's status code when Reason is engine_error and
+	// the code is plausible (100..599). The response body is never kept.
+	HTTPStatus *int `json:"http_status,omitempty"`
+}
+
+// RuntimeHostDisk is the VM disk as the host sees it: logical size and the
+// bytes actually allocated (the disk is sparse). Measured from the host, so
+// it is present even when the engine is stopped. Never names the VM or path.
+type RuntimeHostDisk struct {
+	Status         string `json:"status"`
+	Files          *int64 `json:"files,omitempty"`
+	LogicalBytes   *int64 `json:"logical_bytes,omitempty"`
+	AllocatedBytes *int64 `json:"allocated_bytes,omitempty"`
+	// Bound is exact when measured, absent otherwise; derived on marshal.
+	Bound  string `json:"bound,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // GuestFilesystem is the statfs of the engine data root as the engine sees
@@ -121,6 +140,8 @@ type RuntimeBucket struct {
 	// Bound is exact when measured, absent when unavailable; derived on marshal.
 	Bound  string `json:"bound,omitempty"`
 	Reason string `json:"reason,omitempty"`
+	// HTTPStatus accompanies reason engine_error (100..599 only).
+	HTTPStatus *int `json:"http_status,omitempty"`
 }
 
 // RuntimeRecipeStep is one cost-classed relief suggestion. Command is generic

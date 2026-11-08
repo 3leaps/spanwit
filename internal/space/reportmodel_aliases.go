@@ -23,6 +23,7 @@ type (
 	RecipeStep         = reportmodel.RecipeStep
 	Report             = reportmodel.Report
 	RuntimeBucket      = reportmodel.RuntimeBucket
+	RuntimeHostDisk    = reportmodel.RuntimeHostDisk
 	RuntimeImageRef    = reportmodel.RuntimeImageRef
 	RuntimeMeasure     = reportmodel.RuntimeMeasure
 	RuntimeRecipeStep  = reportmodel.RuntimeRecipeStep
@@ -89,6 +90,8 @@ const (
 	ReasonEndpointUnresolved     = reportmodel.ReasonEndpointUnresolved
 	ReasonEngineDisagreement     = reportmodel.ReasonEngineDisagreement
 	ReasonEngineUnreachable      = reportmodel.ReasonEngineUnreachable
+	ReasonEngineError            = reportmodel.ReasonEngineError
+	ReasonEngineStopped          = reportmodel.ReasonEngineStopped
 	ReasonParseFailed            = reportmodel.ReasonParseFailed
 	ReasonProbeFailed            = reportmodel.ReasonProbeFailed
 	ReasonProbeNotRequested      = reportmodel.ReasonProbeNotRequested

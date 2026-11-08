@@ -68,7 +68,8 @@ func (s *socketEngineAPI) Get(ctx context.Context, path string, out any) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("engine API %s: status %d", path, resp.StatusCode)
+		// The body is never read: engine error text can carry guest paths.
+		return &engineStatusError{Path: path, Status: resp.StatusCode}
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, engineMaxBody+1))
 	if err != nil {
@@ -87,6 +88,29 @@ var (
 	errEngineParse        = errors.New("engine API parse failed")
 	errEngineBodyTooLarge = errors.New("engine API body too large")
 )
+
+// engineStatusError is a non-200 answer from a reachable engine. Only the
+// status code is kept.
+type engineStatusError struct {
+	Path   string
+	Status int
+}
+
+func (e *engineStatusError) Error() string {
+	return fmt.Sprintf("engine API %s: status %d", e.Path, e.Status)
+}
+
+// httpStatusOf returns the status of a non-200 engine answer when it is a
+// plausible HTTP status (100..599); a socket we do not control can send
+// anything, and an implausible code is omitted rather than reported.
+func httpStatusOf(err error) *int {
+	var se *engineStatusError
+	if !errors.As(err, &se) || se.Status < 100 || se.Status > 599 {
+		return nil
+	}
+	n := se.Status
+	return &n
+}
 
 // Engine API response subsets.
 type engineVersion struct {
@@ -151,6 +175,9 @@ type engineSnapshot struct {
 	DF         engineDF
 	Images     []engineImage
 	ImagesErr  error
+	// DFErr is a failed /system/df call. Detection and the guest probe do not
+	// depend on it; only the df-derived buckets become unavailable.
+	DFErr error
 }
 
 func readEngineSnapshot(ctx context.Context, api EngineAPI) (engineSnapshot, error) {
@@ -164,7 +191,8 @@ func readEngineSnapshot(ctx context.Context, api EngineAPI) (engineSnapshot, err
 		return snap, err
 	}
 	if err := api.Get(ctx, "/system/df", &snap.DF); err != nil {
-		return snap, err
+		snap.DF = engineDF{} // never use a partial decode
+		snap.DFErr = err
 	}
 	// Manifests are optional enrichment (foreign-platform residue). A failure
 	// here marks that bucket unavailable; it does not fail the section.
@@ -178,6 +206,19 @@ func readEngineSnapshot(ctx context.Context, api EngineAPI) (engineSnapshot, err
 // (parse_failed); a bucket is never measured on fabricated zeros.
 func buildRuntimeBuckets(snap engineSnapshot, engineArch string) ([]RuntimeBucket, []RuntimeImageRef) {
 	var refs []RuntimeImageRef
+	if snap.DFErr != nil {
+		// Same kinds and order as a measured run; each df-derived bucket
+		// carries the df failure, and foreign-platform residue (from
+		// /images/json) is still measured.
+		reason, status := engineCallReason(snap.DFErr)
+		fail := func(kind string) RuntimeBucket {
+			return RuntimeBucket{Kind: kind, Status: ProbeUnavailable, Reason: reason, HTTPStatus: status}
+		}
+		buckets := []RuntimeBucket{fail(BucketImages), fail(BucketBuildCache), fail(BucketDanglingImages)}
+		buckets = append(buckets, foreignPlatformBucket(snap, engineArch, &refs))
+		buckets = append(buckets, fail(BucketSupersededTags), fail(BucketVolumesUnreferenced))
+		return buckets, capRefs(refs)
+	}
 	df := snap.DF
 	images, imagesOK := validDFImages(df.Images)
 
@@ -211,12 +252,39 @@ func buildRuntimeBuckets(snap engineSnapshot, engineArch string) ([]RuntimeBucke
 	}
 
 	buckets = append(buckets, volumesBucket(df.Volumes))
+	return buckets, capRefs(refs)
+}
 
+func capRefs(refs []RuntimeImageRef) []RuntimeImageRef {
 	sort.SliceStable(refs, func(i, j int) bool { return refs[i].UniqueBytes > refs[j].UniqueBytes })
 	if len(refs) > maxLocalImageRefs {
 		refs = refs[:maxLocalImageRefs]
 	}
-	return buckets, refs
+	return refs
+}
+
+// engineCallReason classifies a failed call to an engine that already
+// answered /version and /info.
+func engineCallReason(err error) (string, *int) {
+	var se *engineStatusError
+	switch {
+	case errors.Is(err, errEngineParse), errors.Is(err, errEngineBodyTooLarge):
+		return ReasonParseFailed, nil
+	case errors.As(err, &se):
+		return ReasonEngineError, httpStatusOf(err)
+	case isTimeout(err):
+		return ReasonTimeout, nil
+	}
+	return ReasonProbeFailed, nil
+}
+
+// isTimeout is true for a context deadline or a client/dial timeout.
+func isTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
 }
 
 func unavailableBucket(kind, reason string) RuntimeBucket {
@@ -294,11 +362,8 @@ func volumesBucket(p *[]engineDFVolume) RuntimeBucket {
 
 func foreignPlatformBucket(snap engineSnapshot, engineArch string, refs *[]RuntimeImageRef) RuntimeBucket {
 	if snap.ImagesErr != nil {
-		reason := ReasonProbeFailed
-		if errors.Is(snap.ImagesErr, errEngineParse) {
-			reason = ReasonParseFailed
-		}
-		return RuntimeBucket{Kind: BucketForeignPlatform, Status: ProbeUnavailable, Reason: reason}
+		reason, status := engineCallReason(snap.ImagesErr)
+		return RuntimeBucket{Kind: BucketForeignPlatform, Status: ProbeUnavailable, Reason: reason, HTTPStatus: status}
 	}
 	if engineArch == "" || engineArch == ArchOther {
 		return RuntimeBucket{Kind: BucketForeignPlatform, Status: ProbeUnavailable, Reason: ReasonUnsupportedEngine}
