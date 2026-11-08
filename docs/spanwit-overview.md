@@ -120,7 +120,11 @@ engine is `engine_stopped` (for a native daemon, only a refused connection);
 other connection failures are `engine_unreachable`
 and timeouts are `timeout`. For colima, `host_disk` gives the VM disk's logical
 size and the bytes allocated on the host, measured from the host side, so it is
-present even when the VM is stopped. `--probe-vm` runs a
+present even when the VM is stopped. `image_families` ranks images tagged
+with a full version within one repository, variant and major line, from the
+image list and the container list; untagged images, partial versions and other
+names are never ranked, and an older build is informational because compose
+files and Dockerfile pins are not seen. `--probe-vm` runs a
 bounded `colima ssh -p <profile> -- df -P -B1 <data root>`, with the data root
 taken from engine info. Recipe steps carry a `cost_class` (`none`, `rebuild`,
 `re_pull`, `data_loss_risk`) and an upper-bound estimate, and their commands

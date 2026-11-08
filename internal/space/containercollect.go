@@ -120,10 +120,17 @@ type engineVersion struct {
 // engineDF fields are pointers so an absent or null field (older or
 // compatible engines) reads as unavailable rather than as zero.
 type engineDF struct {
-	LayersSize *int64            `json:"LayersSize"`
-	Images     *[]engineDFImage  `json:"Images"`
-	Volumes    *[]engineDFVolume `json:"Volumes"`
-	BuildCache *[]engineDFCache  `json:"BuildCache"`
+	LayersSize *int64               `json:"LayersSize"`
+	Images     *[]engineDFImage     `json:"Images"`
+	Containers *[]engineDFContainer `json:"Containers"`
+	Volumes    *[]engineDFVolume    `json:"Volumes"`
+	BuildCache *[]engineDFCache     `json:"BuildCache"`
+}
+
+// engineDFContainer is a container's writable layer as /system/df reports it.
+type engineDFContainer struct {
+	State  string `json:"State"`
+	SizeRw *int64 `json:"SizeRw"`
 }
 
 type engineDFImage struct {
@@ -148,9 +155,12 @@ type engineDFCache struct {
 }
 
 type engineImage struct {
-	ID        string           `json:"Id"`
-	RepoTags  []string         `json:"RepoTags"`
-	Manifests []engineManifest `json:"Manifests"`
+	ID          string           `json:"Id"`
+	RepoTags    []string         `json:"RepoTags"`
+	RepoDigests []string         `json:"RepoDigests"`
+	Created     int64            `json:"Created"`
+	Size        int64            `json:"Size"`
+	Manifests   []engineManifest `json:"Manifests"`
 }
 
 type engineManifest struct {
@@ -175,6 +185,10 @@ type engineSnapshot struct {
 	DF         engineDF
 	Images     []engineImage
 	ImagesErr  error
+	// Containers come from /containers/json?all=1 and decide in-use for
+	// image families; a failure leaves in-use unknown.
+	Containers    []engineContainer
+	ContainersErr error
 	// DFErr is a failed /system/df call. Detection and the guest probe do not
 	// depend on it; only the df-derived buckets become unavailable.
 	DFErr error
@@ -197,6 +211,7 @@ func readEngineSnapshot(ctx context.Context, api EngineAPI) (engineSnapshot, err
 	// Manifests are optional enrichment (foreign-platform residue). A failure
 	// here marks that bucket unavailable; it does not fail the section.
 	snap.ImagesErr = api.Get(ctx, "/images/json?manifests=1", &snap.Images)
+	snap.ContainersErr = api.Get(ctx, "/containers/json?all=1", &snap.Containers)
 	return snap, nil
 }
 
@@ -255,12 +270,34 @@ func buildRuntimeBuckets(snap engineSnapshot, engineArch string) ([]RuntimeBucke
 	return buckets, capRefs(refs)
 }
 
+// maxImageRefLen caps an engine-supplied name; longer names are cut at a
+// rune boundary.
+const maxImageRefLen = 256
+
 func capRefs(refs []RuntimeImageRef) []RuntimeImageRef {
+	for i := range refs {
+		refs[i].Ref = truncateRunes(refs[i].Ref, maxImageRefLen)
+		refs[i].Platform = truncateRunes(refs[i].Platform, 64)
+	}
 	sort.SliceStable(refs, func(i, j int) bool { return refs[i].UniqueBytes > refs[j].UniqueBytes })
 	if len(refs) > maxLocalImageRefs {
 		refs = refs[:maxLocalImageRefs]
 	}
 	return refs
+}
+
+func truncateRunes(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	cut := 0
+	for i := range s {
+		if i > max {
+			break
+		}
+		cut = i
+	}
+	return s[:cut]
 }
 
 // engineCallReason classifies a failed call to an engine that already

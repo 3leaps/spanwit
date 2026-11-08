@@ -150,7 +150,9 @@ func TestCollectContainerRuntime_ColimaBuckets(t *testing.T) {
 	for _, s := range rt.Recipe {
 		steps = append(steps, s.Step)
 	}
-	wantSteps := "dangling_image_prune build_cache_prune foreign_platform_remove superseded_tag_remove image_prune_all volume_prune guest_trim"
+	// older_sibling_remove replaces superseded_tag_remove; with no container
+	// list in this fixture its estimate is unavailable, not zero.
+	wantSteps := "dangling_image_prune build_cache_prune foreign_platform_remove older_sibling_remove image_prune_all volume_prune guest_trim"
 	if strings.Join(steps, " ") != wantSteps {
 		t.Fatalf("recipe order = %v", steps)
 	}
@@ -506,15 +508,20 @@ func TestRecipeEstimateBounds(t *testing.T) {
 	t.Run("none in use: prune --all is exact from LayersSize", func(t *testing.T) {
 		eng := fakeColimaEngine()
 		eng.responses["/system/df"] = sharedOnlyAmongUnused
+		eng.responses["/images/json?manifests=1"] = `[
+ {"Id":"sha256:1111111111111111","RepoTags":["example.test/team/a:v1.0.1"],"RepoDigests":["example.test/team/a@sha256:aa"],"Created":200,"Size":1500},
+ {"Id":"sha256:2222222222222222","RepoTags":["example.test/team/a:v1.0.0"],"RepoDigests":["example.test/team/a@sha256:bb"],"Created":100,"Size":1500}
+]`
+		eng.responses["/containers/json?all=1"] = `[]`
 		rt := CollectContainerRuntime(context.Background(), ContainerRuntimeOptions{
 			Env: colimaEnv(t), API: func(string) EngineAPI { return eng }})
 		all := recipeStep(t, rt, StepImagePruneAll)
 		if all.Estimate.Bound != BoundExact || *all.Estimate.Bytes != 2500 {
 			t.Fatalf("prune --all: %+v", all.Estimate)
 		}
-		sup := recipeStep(t, rt, StepSupersededTagRemove)
+		sup := recipeStep(t, rt, StepOlderSiblingRemove)
 		if sup.Estimate.Bound != BoundLower || *sup.Estimate.Bytes != 1000 {
-			t.Fatalf("superseded estimate must be a lower bound: %+v", sup.Estimate)
+			t.Fatalf("older-sibling estimate from engine unique bytes must be a lower bound: %+v", sup.Estimate)
 		}
 		if b := recipeStep(t, rt, StepBuildCachePrune).Estimate; b.Bound != BoundExact {
 			t.Fatalf("build cache reclaimable is engine-reported: %+v", b)

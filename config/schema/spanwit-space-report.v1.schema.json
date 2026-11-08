@@ -2311,6 +2311,178 @@
             }
           ]
         },
+        "image_families": {
+          "type": "object",
+          "description": "Version-tagged native-platform images grouped into lines (one repository, tag variant and major version), with older builds (older siblings) counted. Tags that are not versions are never ranked. Aggregate only; names appear only in image_refs under ref_disclosure=local. In use is judged from containers alone, so compose files and Dockerfile pins are not seen: an older sibling is informational.",
+          "required": [
+            "status"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "measured",
+                "unavailable"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "endpoint_unresolved",
+                "engine_unreachable",
+                "engine_error",
+                "engine_stopped",
+                "engine_disagreement",
+                "probe_failed",
+                "timeout",
+                "parse_failed",
+                "unsupported_engine",
+                "probe_not_requested"
+              ]
+            },
+            "http_status": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599
+            },
+            "families": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Version lines with two or more native images."
+            },
+            "order_ambiguous": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Families whose version and build-time orders disagree, or with a version or build-time tie; none of their images is ranked."
+            },
+            "in_use_status": {
+              "type": "string",
+              "enum": [
+                "measured",
+                "unavailable"
+              ],
+              "description": "unavailable when containers could not be listed, or when a container's image matches no listed image (reason engine_disagreement); no image is then counted as an older sibling."
+            },
+            "in_use_reason": {
+              "type": "string",
+              "enum": [
+                "endpoint_unresolved",
+                "engine_unreachable",
+                "engine_error",
+                "engine_stopped",
+                "engine_disagreement",
+                "probe_failed",
+                "timeout",
+                "parse_failed",
+                "unsupported_engine",
+                "probe_not_requested"
+              ]
+            },
+            "older_siblings": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Images older than another build in every family they belong to, carrying no tag that is not a version, and used by no container."
+            },
+            "older_sibling_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "bytes_bound": {
+              "type": "string",
+              "enum": [
+                "lower",
+                "upper"
+              ],
+              "description": "lower when summed from engine-reported unique bytes (layers shared only among older siblings are missed); upper when summed from image sizes (shared layers counted more than once)."
+            },
+            "locally_built": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Older siblings with a :local tag or no registry digest: removal means a rebuild, not a re-pull."
+            },
+            "in_use_by_exited_only": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Older builds used only by stopped containers; removable after those containers are removed."
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "measured"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "families",
+                  "order_ambiguous",
+                  "in_use_status"
+                ]
+              },
+              "else": {
+                "required": [
+                  "reason"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "in_use_status": {
+                    "const": "measured"
+                  }
+                },
+                "required": [
+                  "in_use_status"
+                ]
+              },
+              "then": {
+                "required": [
+                  "older_siblings",
+                  "older_sibling_bytes",
+                  "bytes_bound",
+                  "locally_built",
+                  "in_use_by_exited_only"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "in_use_status": {
+                    "const": "unavailable"
+                  }
+                },
+                "required": [
+                  "in_use_status"
+                ]
+              },
+              "then": {
+                "required": [
+                  "in_use_reason"
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "older_siblings"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "older_sibling_bytes"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
         "buckets": {
           "type": "array",
           "items": {
@@ -2577,8 +2749,10 @@
           "enum": [
             "build_cache_prune",
             "dangling_image_prune",
+            "container_prune",
             "foreign_platform_remove",
             "superseded_tag_remove",
+            "older_sibling_remove",
             "volume_prune",
             "image_prune_all",
             "guest_trim",
@@ -2709,12 +2883,18 @@
           "type": "string",
           "minLength": 1
         },
+        "id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{12}$",
+          "description": "Short image ID, validated; use it in removal commands instead of a name."
+        },
         "bucket": {
           "type": "string",
           "enum": [
             "foreign_platform",
             "superseded_tags",
-            "dangling_images"
+            "dangling_images",
+            "older_sibling"
           ]
         },
         "platform": {
@@ -2727,8 +2907,11 @@
         },
         "bound": {
           "type": "string",
-          "const": "exact",
-          "description": "Bound of unique_bytes: exact, as reported by the engine API at capture. Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
+          "enum": [
+            "exact",
+            "upper"
+          ],
+          "description": "Bound of unique_bytes: exact when engine-reported; upper when an image's size stands in for its unique bytes (older siblings when the disk-usage call was unavailable). Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
         }
       }
     },

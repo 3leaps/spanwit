@@ -24,6 +24,7 @@ type (
 	Report             = reportmodel.Report
 	RuntimeBucket      = reportmodel.RuntimeBucket
 	RuntimeHostDisk    = reportmodel.RuntimeHostDisk
+	ImageFamilies      = reportmodel.ImageFamilies
 	RuntimeImageRef    = reportmodel.RuntimeImageRef
 	RuntimeMeasure     = reportmodel.RuntimeMeasure
 	RuntimeRecipeStep  = reportmodel.RuntimeRecipeStep
@@ -50,6 +51,7 @@ const (
 	BucketImages                 = reportmodel.BucketImages
 	BucketSupersededTags         = reportmodel.BucketSupersededTags
 	BucketVolumesUnreferenced    = reportmodel.BucketVolumesUnreferenced
+	BucketOlderSibling           = reportmodel.BucketOlderSibling
 	CaptureModeCapacityOnly      = reportmodel.CaptureModeCapacityOnly
 	CaptureModeFull              = reportmodel.CaptureModeFull
 	CompletionComplete           = reportmodel.CompletionComplete
@@ -122,6 +124,8 @@ const (
 	StepObserve                  = reportmodel.StepObserve
 	StepPurgeHint                = reportmodel.StepPurgeHint
 	StepSupersededTagRemove      = reportmodel.StepSupersededTagRemove
+	StepContainerPrune           = reportmodel.StepContainerPrune
+	StepOlderSiblingRemove       = reportmodel.StepOlderSiblingRemove
 	StepVerify                   = reportmodel.StepVerify
 	StepVolumePrune              = reportmodel.StepVolumePrune
 	TempPlaneSizeMeasured        = reportmodel.TempPlaneSizeMeasured

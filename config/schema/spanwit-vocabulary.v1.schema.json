@@ -332,7 +332,8 @@
         "dangling_images",
         "foreign_platform",
         "superseded_tags",
-        "volumes_unreferenced"
+        "volumes_unreferenced",
+        "older_sibling"
       ]
     },
     "runtime_reason": {
@@ -356,9 +357,11 @@
       "description": "Container relief step.",
       "enum": [
         "dangling_image_prune",
+        "container_prune",
         "build_cache_prune",
         "foreign_platform_remove",
         "superseded_tag_remove",
+        "older_sibling_remove",
         "image_prune_all",
         "volume_prune",
         "guest_trim",

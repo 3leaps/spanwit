@@ -669,7 +669,7 @@ func writeCapacityStoryList(w io.Writer, title string, entries []string, empty s
 
 func sanitizeTerminalText(value string) string {
 	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Zl, r) || unicode.Is(unicode.Zp, r) {
 			return '\uFFFD'
 		}
 		return r
@@ -1113,6 +1113,7 @@ func writeContainerRuntimeText(w io.Writer, rt *space.ContainerRuntime) {
 		}
 		_, _ = fmt.Fprintf(w, "  %-22s  %10s  count %-5d%s\n", b.Kind, measure(b.Bytes), derefInt(b.Count), extra)
 	}
+	writeImageFamiliesText(w, rt.ImageFamilies)
 	if len(rt.Recipe) > 0 {
 		_, _ = fmt.Fprintln(w, "Relief, cheapest first (≥ at least, ≤ at most, inside the engine):")
 		for i, s := range rt.Recipe {
@@ -1134,10 +1135,46 @@ func writeContainerRuntimeText(w io.Writer, rt *space.ContainerRuntime) {
 			if r.Platform != "" {
 				plat = " [" + sanitizeTerminalText(r.Platform) + "]"
 			}
-			_, _ = fmt.Fprintf(w, "  %-16s %10s  %s%s\n", r.Bucket, engine.HumanSize(r.UniqueBytes), sanitizeTerminalText(r.Ref), plat)
+			id := ""
+			if r.ID != "" {
+				id = "  " + sanitizeTerminalText(r.ID)
+			}
+			_, _ = fmt.Fprintf(w, "  %-16s %10s  %s%s%s\n", r.Bucket, engine.HumanSize(r.UniqueBytes), sanitizeTerminalText(r.Ref), plat, id)
 		}
 	}
 	_, _ = fmt.Fprintln(w)
+}
+
+// writeImageFamiliesText summarizes image families without naming images.
+func writeImageFamiliesText(w io.Writer, f *space.ImageFamilies) {
+	if f == nil {
+		return
+	}
+	if f.Status != space.ProbeMeasured {
+		_, _ = fmt.Fprintf(w, "Image families: unavailable (%s)\n", f.Reason)
+		return
+	}
+	line := fmt.Sprintf("Image families: %d version lines with more than one build", derefInt(f.Families))
+	if n := derefInt(f.OrderAmbiguous); n > 0 {
+		line += fmt.Sprintf(", %d with an ambiguous order (not ranked)", n)
+	}
+	_, _ = fmt.Fprintln(w, line)
+	if f.InUseStatus != space.ProbeMeasured {
+		_, _ = fmt.Fprintf(w, "  Older builds: not ranked; containers could not be listed (%s), so use is unknown.\n", f.InUseReason)
+		return
+	}
+	line = fmt.Sprintf("  Older builds not used by any container: %d", derefInt(f.OlderSiblings))
+	if derefInt(f.OlderSiblings) > 0 {
+		prefix := map[string]string{space.BoundLower: "≥", space.BoundUpper: "≤"}[f.BytesBound]
+		line += ", " + prefix + engine.HumanSize(derefInt(f.OlderSiblingBytes))
+	}
+	if n := derefInt(f.LocallyBuilt); n > 0 {
+		line += fmt.Sprintf(" (%d built locally: removal means a rebuild)", n)
+	}
+	_, _ = fmt.Fprintln(w, line)
+	if n := derefInt(f.InUseByExitedOnly); n > 0 {
+		_, _ = fmt.Fprintf(w, "  Older builds used only by stopped containers: %d (removable after the container step)\n", n)
+	}
 }
 
 // engineAccountingFailure reports whether a bucket is unavailable because the
