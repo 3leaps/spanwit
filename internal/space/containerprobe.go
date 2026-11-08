@@ -520,10 +520,11 @@ func dfImageFacts(df engineDF) dfFacts {
 	}
 	f := dfFacts{unique: map[string]int64{}, containers: map[string]int64{}}
 	for _, im := range images {
+		id := normalImageID(im.ID)
 		if im.SharedSize >= 0 && im.SharedSize <= im.Size {
-			f.unique[im.ID] = im.Size - im.SharedSize
+			f.unique[id] = im.Size - im.SharedSize
 		}
-		f.containers[im.ID] = im.Containers
+		f.containers[id] = im.Containers
 	}
 	return f
 }

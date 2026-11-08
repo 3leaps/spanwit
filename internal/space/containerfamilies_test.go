@@ -14,7 +14,11 @@ func img(id string, created, size int64, tags ...string) engineImage {
 
 func families(t *testing.T, images []engineImage, containers []engineContainer, unique map[string]int64) (ImageFamilies, []RuntimeImageRef) {
 	t.Helper()
-	return buildImageFamilies(engineSnapshot{Images: images, Containers: containers}, ArchARM64, dfFacts{unique: unique})
+	norm := map[string]int64{}
+	for id, n := range unique {
+		norm[normalImageID(id)] = n
+	}
+	return buildImageFamilies(engineSnapshot{Images: images, Containers: containers}, ArchARM64, dfFacts{unique: norm})
 }
 
 func refIDs(refs []RuntimeImageRef) string {
@@ -352,9 +356,15 @@ func TestImageFamilies_UnmatchedContainerImageFailsClosed(t *testing.T) {
 func TestImageFamilies_EngineContainerCountHoldsImage(t *testing.T) {
 	images := []engineImage{img(idA, 200, 1, "r/a:v1.1.0"), img(idB, 100, 1, "r/a:v1.0.0")}
 	f, refs := buildImageFamilies(engineSnapshot{Images: images, Containers: []engineContainer{}}, ArchARM64,
-		dfFacts{containers: map[string]int64{idB: 1}})
+		dfFacts{containers: map[string]int64{normalImageID(idB): 1}})
 	if *f.OlderSiblings != 0 || len(refs) != 0 {
 		t.Fatalf("df says a container uses idB: %+v %+v", f, refs)
+	}
+	// df reporting the ID without the sha256: prefix still holds the image.
+	df := engineDF{Images: &[]engineDFImage{{ID: strings.TrimPrefix(idB, "sha256:"), Size: 1, SharedSize: 0, Containers: 1}}}
+	f, _ = buildImageFamilies(engineSnapshot{Images: images, Containers: []engineContainer{}}, ArchARM64, dfImageFacts(df))
+	if *f.OlderSiblings != 0 {
+		t.Fatalf("prefix-less df ID must still hold the image: %+v", f)
 	}
 }
 
@@ -363,7 +373,7 @@ func TestDFImageFacts_SharedSizeNotComputedIsNoUniqueFigure(t *testing.T) {
 		{ID: idA, Size: 1000, SharedSize: -1}, {ID: idB, Size: 900, SharedSize: -1}, {ID: idC, Size: 800, SharedSize: 300, Containers: 2},
 	}}
 	facts := dfImageFacts(df)
-	if _, ok := facts.unique[idB]; ok || facts.unique[idC] != 500 || facts.containers[idC] != 2 {
+	if _, ok := facts.unique[normalImageID(idB)]; ok || facts.unique[normalImageID(idC)] != 500 || facts.containers[normalImageID(idC)] != 2 {
 		t.Fatalf("%+v", facts)
 	}
 	images := []engineImage{img(idA, 200, 1000, "r/a:v1.1.0"), img(idB, 100, 900, "r/a:v1.0.0")}

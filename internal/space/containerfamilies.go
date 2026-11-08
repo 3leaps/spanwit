@@ -224,7 +224,7 @@ func buildImageFamilies(snap engineSnapshot, engineArch string, df dfFacts) (Ima
 		case exitedOnly[normalImageID(id)]:
 			exitedCount++
 			continue
-		case df.containers[id] > 0:
+		case df.containers[normalImageID(id)] > 0:
 			// The engine's own count says something uses it, even though the
 			// container list did not show it: held.
 			continue
@@ -234,7 +234,7 @@ func buildImageFamilies(snap engineSnapshot, engineArch string, df dfFacts) (Ima
 			localCount++
 		}
 		sizeSum += im.Size
-		u, ok := unique[id]
+		u, ok := unique[normalImageID(id)]
 		if !ok {
 			allUnique = false
 		}
