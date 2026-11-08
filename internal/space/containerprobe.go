@@ -98,7 +98,7 @@ func CollectContainerRuntime(ctx context.Context, opts ContainerRuntimeOptions) 
 
 	buckets, refs := buildRuntimeBuckets(snap, rt.EngineArch)
 	rt.Buckets = buckets
-	families, familyRefs := buildImageFamilies(snap, rt.EngineArch, dfUniqueByID(snap.DF))
+	families, familyRefs := buildImageFamilies(snap, rt.EngineArch, dfImageFacts(snap.DF))
 	rt.ImageFamilies = &families
 	refs = capRefs(append(refs, familyRefs...))
 	if disclosure == RefDisclosureLocal && len(refs) > 0 {
@@ -503,18 +503,29 @@ func stoppedContainers(snap engineSnapshot) stoppedSet {
 	return s
 }
 
-// dfUniqueByID maps image ID to engine-reported unique bytes; nil when
-// /system/df did not answer with valid images.
-func dfUniqueByID(df engineDF) map[string]int64 {
+// dfFacts is what /system/df says about each image: unique bytes, present
+// only when the engine computed shared size (SharedSize -1 means it did not,
+// and the image size is then no unique figure), and the engine's own count
+// of containers using it.
+type dfFacts struct {
+	unique     map[string]int64
+	containers map[string]int64
+}
+
+// dfImageFacts is empty when /system/df did not answer with valid images.
+func dfImageFacts(df engineDF) dfFacts {
 	images, ok := validDFImages(df.Images)
 	if !ok {
-		return nil
+		return dfFacts{}
 	}
-	out := make(map[string]int64, len(images))
+	f := dfFacts{unique: map[string]int64{}, containers: map[string]int64{}}
 	for _, im := range images {
-		out[im.ID] = imageUnique(im)
+		if im.SharedSize >= 0 && im.SharedSize <= im.Size {
+			f.unique[im.ID] = im.Size - im.SharedSize
+		}
+		f.containers[im.ID] = im.Containers
 	}
-	return out
+	return f
 }
 
 // unusedImageUnique sums unique bytes of images no container uses: the

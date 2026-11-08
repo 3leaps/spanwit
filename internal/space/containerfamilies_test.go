@@ -14,7 +14,7 @@ func img(id string, created, size int64, tags ...string) engineImage {
 
 func families(t *testing.T, images []engineImage, containers []engineContainer, unique map[string]int64) (ImageFamilies, []RuntimeImageRef) {
 	t.Helper()
-	return buildImageFamilies(engineSnapshot{Images: images, Containers: containers}, ArchARM64, unique)
+	return buildImageFamilies(engineSnapshot{Images: images, Containers: containers}, ArchARM64, dfFacts{unique: unique})
 }
 
 func refIDs(refs []RuntimeImageRef) string {
@@ -188,7 +188,7 @@ func TestImageFamilies_ContainersUnknownRanksNothing(t *testing.T) {
 	f, refs := buildImageFamilies(engineSnapshot{
 		Images:        []engineImage{img(idA, 200, 1, "r/a:v1.1.0"), img(idB, 100, 1, "r/a:v1.0.0")},
 		ContainersErr: &engineStatusError{Path: "/containers/json", Status: 500},
-	}, ArchARM64, nil)
+	}, ArchARM64, dfFacts{})
 	if f.InUseStatus != ProbeUnavailable || f.InUseReason != ReasonEngineError || f.OlderSiblings != nil || len(refs) != 0 {
 		t.Fatalf("%+v %+v", f, refs)
 	}
@@ -198,11 +198,11 @@ func TestImageFamilies_ContainersUnknownRanksNothing(t *testing.T) {
 }
 
 func TestImageFamilies_ImagesFailureIsUnavailable(t *testing.T) {
-	f, _ := buildImageFamilies(engineSnapshot{ImagesErr: &engineStatusError{Status: 700}}, ArchARM64, nil)
+	f, _ := buildImageFamilies(engineSnapshot{ImagesErr: &engineStatusError{Status: 700}}, ArchARM64, dfFacts{})
 	if f.Status != ProbeUnavailable || f.Reason != ReasonEngineError || f.HTTPStatus != nil {
 		t.Fatalf("%+v", f)
 	}
-	f, _ = buildImageFamilies(engineSnapshot{Images: []engineImage{img(idA, -1, 1, "r/a:v1.0.0")}}, ArchARM64, nil)
+	f, _ = buildImageFamilies(engineSnapshot{Images: []engineImage{img(idA, -1, 1, "r/a:v1.0.0")}}, ArchARM64, dfFacts{})
 	if f.Status != ProbeUnavailable || f.Reason != ReasonParseFailed {
 		t.Fatalf("negative build time must not be ranked: %+v", f)
 	}
@@ -332,4 +332,43 @@ func TestCollectContainerRuntime_FamiliesEndToEnd(t *testing.T) {
 		t.Fatalf("aggregate disclosure leaked a name: %s", raw)
 	}
 	requireRuntimeSchemaValid(t, rt)
+}
+
+func TestImageFamilies_UnmatchedContainerImageFailsClosed(t *testing.T) {
+	images := []engineImage{img(idA, 200, 1, "r/a:v1.1.0"), img(idB, 100, 1, "r/a:v1.0.0")}
+	for _, imageID := range []string{"sha256:bbbbbbbbbbbb0000ffff", "", "sha256:dddddddddddd0000"} {
+		f, refs := families(t, images, []engineContainer{{ImageID: imageID, State: "running"}}, nil)
+		if f.InUseStatus != ProbeUnavailable || f.InUseReason != ReasonEngineDisagreement || f.OlderSiblings != nil || len(refs) != 0 {
+			t.Fatalf("container image %q matches no listed image: must rank nothing, got %+v %+v", imageID, f, refs)
+		}
+	}
+	// The same ID without the sha256: prefix resolves.
+	f, _ := families(t, images, []engineContainer{{ImageID: strings.TrimPrefix(idB, "sha256:"), State: "running"}}, nil)
+	if f.InUseStatus != ProbeMeasured || *f.OlderSiblings != 0 {
+		t.Fatalf("prefix-less ID must match and hold the image: %+v", f)
+	}
+}
+
+func TestImageFamilies_EngineContainerCountHoldsImage(t *testing.T) {
+	images := []engineImage{img(idA, 200, 1, "r/a:v1.1.0"), img(idB, 100, 1, "r/a:v1.0.0")}
+	f, refs := buildImageFamilies(engineSnapshot{Images: images, Containers: []engineContainer{}}, ArchARM64,
+		dfFacts{containers: map[string]int64{idB: 1}})
+	if *f.OlderSiblings != 0 || len(refs) != 0 {
+		t.Fatalf("df says a container uses idB: %+v %+v", f, refs)
+	}
+}
+
+func TestDFImageFacts_SharedSizeNotComputedIsNoUniqueFigure(t *testing.T) {
+	df := engineDF{Images: &[]engineDFImage{
+		{ID: idA, Size: 1000, SharedSize: -1}, {ID: idB, Size: 900, SharedSize: -1}, {ID: idC, Size: 800, SharedSize: 300, Containers: 2},
+	}}
+	facts := dfImageFacts(df)
+	if _, ok := facts.unique[idB]; ok || facts.unique[idC] != 500 || facts.containers[idC] != 2 {
+		t.Fatalf("%+v", facts)
+	}
+	images := []engineImage{img(idA, 200, 1000, "r/a:v1.1.0"), img(idB, 100, 900, "r/a:v1.0.0")}
+	f, refs := buildImageFamilies(engineSnapshot{Images: images, Containers: []engineContainer{}}, ArchARM64, facts)
+	if *f.OlderSiblingBytes != 900 || f.BytesBound != BoundUpper || refs[0].Bound != BoundUpper {
+		t.Fatalf("an image size is an upper bound, never lower or exact: %+v %+v", f, refs)
+	}
 }

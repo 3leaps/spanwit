@@ -118,7 +118,8 @@ type ImageFamilies struct {
 	// OrderAmbiguous counts families whose version and build-time orders
 	// disagree, or with a version or build-time tie; none are ranked.
 	OrderAmbiguous *int64 `json:"order_ambiguous,omitempty"`
-	// InUseStatus is unavailable when containers could not be listed; then
+	// InUseStatus is unavailable when containers could not be listed, or a
+	// container's image matches no listed image (engine_disagreement); then
 	// no image is counted as an older sibling.
 	InUseStatus string `json:"in_use_status,omitempty"`
 	InUseReason string `json:"in_use_reason,omitempty"`

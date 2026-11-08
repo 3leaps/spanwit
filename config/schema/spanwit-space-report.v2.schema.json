@@ -3699,7 +3699,7 @@
                 "measured",
                 "unavailable"
               ],
-              "description": "unavailable when containers could not be listed; no image is then counted as an older sibling."
+              "description": "unavailable when containers could not be listed, or when a container's image matches no listed image (reason engine_disagreement); no image is then counted as an older sibling."
             },
             "in_use_reason": {
               "type": "string",

@@ -78,7 +78,8 @@ type familyVerdict struct {
 // image is an older sibling only when it is older in every family it is in
 // and carries no tag that is not a version (latest, local, ...). unique maps
 // image ID to engine-reported unique bytes when /system/df answered.
-func buildImageFamilies(snap engineSnapshot, engineArch string, unique map[string]int64) (ImageFamilies, []RuntimeImageRef) {
+func buildImageFamilies(snap engineSnapshot, engineArch string, df dfFacts) (ImageFamilies, []RuntimeImageRef) {
+	unique := df.unique
 	if snap.ImagesErr != nil {
 		reason, status := engineCallReason(snap.ImagesErr)
 		return ImageFamilies{Status: ProbeUnavailable, Reason: reason, HTTPStatus: status}, nil
@@ -195,6 +196,19 @@ func buildImageFamilies(snap engineSnapshot, engineArch string, unique map[strin
 		out.InUseStatus, out.InUseReason = ProbeUnavailable, reason
 		return out, nil
 	}
+	// Every container must resolve to a listed image. One that does not (an
+	// image ID in another form, or an image missing from the list) could be
+	// using any candidate, so nothing is ranked.
+	listed := map[string]bool{}
+	for _, im := range snap.Images {
+		listed[normalImageID(im.ID)] = true
+	}
+	for _, c := range snap.Containers {
+		if c.ImageID == "" || !listed[normalImageID(c.ImageID)] {
+			out.InUseStatus, out.InUseReason = ProbeUnavailable, ReasonEngineDisagreement
+			return out, nil
+		}
+	}
 	running, exitedOnly := imageUse(snap.Containers)
 	out.InUseStatus = ProbeMeasured
 
@@ -205,10 +219,14 @@ func buildImageFamilies(snap engineSnapshot, engineArch string, unique map[strin
 	for _, id := range candidates {
 		im := images[id]
 		switch {
-		case running[id]:
+		case running[normalImageID(id)]:
 			continue
-		case exitedOnly[id]:
+		case exitedOnly[normalImageID(id)]:
 			exitedCount++
+			continue
+		case df.containers[id] > 0:
+			// The engine's own count says something uses it, even though the
+			// container list did not show it: held.
 			continue
 		}
 		count++
@@ -314,15 +332,20 @@ func imageUse(cs []engineContainer) (running, exitedOnly map[string]bool) {
 	running, exitedOnly = map[string]bool{}, map[string]bool{}
 	for _, c := range cs {
 		if runningStates[c.State] {
-			running[c.ImageID] = true
+			running[normalImageID(c.ImageID)] = true
 		}
 	}
 	for _, c := range cs {
-		if !running[c.ImageID] {
-			exitedOnly[c.ImageID] = true
+		if id := normalImageID(c.ImageID); !running[id] {
+			exitedOnly[id] = true
 		}
 	}
 	return running, exitedOnly
+}
+
+// normalImageID compares image IDs with or without the sha256: prefix.
+func normalImageID(id string) string {
+	return strings.ToLower(strings.TrimPrefix(id, "sha256:"))
 }
 
 func countExited(cs []engineContainer) int64 {
