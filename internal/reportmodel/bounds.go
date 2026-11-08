@@ -131,7 +131,9 @@ func (b RuntimeBucket) MarshalJSON() ([]byte, error) {
 func (r RuntimeImageRef) MarshalJSON() ([]byte, error) {
 	type plain RuntimeImageRef
 	p := plain(r)
-	p.Bound = BoundExact
+	if p.Bound != BoundUpper {
+		p.Bound = BoundExact
+	}
 	return json.Marshal(p)
 }
 

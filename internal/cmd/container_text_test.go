@@ -70,3 +70,34 @@ func TestWriteContainerRuntimeText_DetectionHTTPStatus(t *testing.T) {
 		t.Fatalf("got:\n%s", buf.String())
 	}
 }
+
+func TestWriteContainerRuntimeText_ImageFamilies(t *testing.T) {
+	f := &space.ImageFamilies{Status: space.ProbeMeasured, Families: i64(3), OrderAmbiguous: i64(1), InUseStatus: space.ProbeMeasured,
+		OlderSiblings: i64(2), OlderSiblingBytes: i64(14 << 30), BytesBound: space.BoundUpper, LocallyBuilt: i64(1), InUseByExitedOnly: i64(1)}
+	rt := &space.ContainerRuntime{Engine: space.EngineColima,
+		Detection:       space.EngineDetection{Status: space.DetectionIdentified},
+		GuestFilesystem: space.GuestFilesystem{Status: space.ProbeNotProbed, Reason: space.ReasonProbeNotRequested},
+		ImageFamilies:   f,
+		ImageRefs:       []space.RuntimeImageRef{{Ref: "r/a:\x1b[31mv1\u2028x", ID: "sha256:bbbbbbbbbbbb", Bucket: space.BucketOlderSibling, UniqueBytes: 1 << 30, Bound: space.BoundUpper}},
+	}
+	var buf bytes.Buffer
+	writeContainerRuntimeText(&buf, rt)
+	out := buf.String()
+	for _, want := range []string{"Image families: 3 version lines with more than one build, 1 with an ambiguous order (not ranked)",
+		"Older builds not used by any container: 2, ≤14.0G (1 built locally: removal means a rebuild)",
+		"used only by stopped containers: 1", "sha256:bbbbbbbbbbbb"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.ContainsAny(out, "\x1b\u2028") {
+		t.Fatalf("control or separator characters reached the terminal:\n%q", out)
+	}
+
+	f.InUseStatus, f.InUseReason, f.OlderSiblings = space.ProbeUnavailable, space.ReasonEngineError, nil
+	buf.Reset()
+	writeContainerRuntimeText(&buf, rt)
+	if !strings.Contains(buf.String(), "not ranked; containers could not be listed (engine_error)") {
+		t.Fatalf("got:\n%s", buf.String())
+	}
+}

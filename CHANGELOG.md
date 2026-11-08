@@ -25,6 +25,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reports the VM disk's logical size and the bytes allocated on the host. It is
   measured from the host side and is present even when the VM is stopped.
   Other engines show no `host_disk`.
+- **Container image families.** `container_runtime.image_families` groups
+  images tagged with a full version (`v1.2.3`, `1.94.1-bookworm`) into lines of
+  one repository, variant and major version, and counts the older builds no
+  container uses. Partial versions, `latest`, `:local` and other names are never
+  ranked; families whose version and build-time orders disagree are counted as
+  ambiguous and not ranked; if containers cannot be listed, nothing is ranked.
+  Families come from the image list, so they work when the disk-usage call
+  fails. Names appear only with `--image-refs`, which now also shows each
+  image's short ID.
+- **Container recipe.** New `container_prune` step (stopped containers, with
+  their writable-layer bytes when known) and `older_sibling_remove`, which
+  replaces `superseded_tag_remove`. The `guest_trim` step now estimates what a
+  trim returns (host allocation minus guest used, an upper bound) and says to
+  free space inside the VM first when that is under 1 GiB.
 
 ### Changed
 

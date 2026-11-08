@@ -42,6 +42,9 @@ const (
 	BucketForeignPlatform     = "foreign_platform"
 	BucketSupersededTags      = "superseded_tags"
 	BucketVolumesUnreferenced = "volumes_unreferenced"
+	// BucketOlderSibling labels image refs only (an older build in an image
+	// family); it is never a bucket kind.
+	BucketOlderSibling = "older_sibling"
 
 	CostNone         = "none"
 	CostRebuild      = "rebuild"
@@ -52,6 +55,8 @@ const (
 	StepDanglingImagePrune    = "dangling_image_prune"
 	StepForeignPlatformRemove = "foreign_platform_remove"
 	StepSupersededTagRemove   = "superseded_tag_remove"
+	StepContainerPrune        = "container_prune"
+	StepOlderSiblingRemove    = "older_sibling_remove"
 	StepVolumePrune           = "volume_prune"
 	StepImagePruneAll         = "image_prune_all"
 	StepGuestTrim             = "guest_trim"
@@ -82,6 +87,7 @@ type ContainerRuntime struct {
 	RefDisclosure   string              `json:"ref_disclosure"`
 	GuestFilesystem GuestFilesystem     `json:"guest_filesystem"`
 	HostDisk        *RuntimeHostDisk    `json:"host_disk,omitempty"`
+	ImageFamilies   *ImageFamilies      `json:"image_families,omitempty"`
 	Buckets         []RuntimeBucket     `json:"buckets"`
 	Recipe          []RuntimeRecipeStep `json:"recipe"`
 	ImageRefs       []RuntimeImageRef   `json:"image_refs,omitempty"`
@@ -96,6 +102,36 @@ type EngineDetection struct {
 	// HTTPStatus is the engine's status code when Reason is engine_error and
 	// the code is plausible (100..599). The response body is never kept.
 	HTTPStatus *int `json:"http_status,omitempty"`
+}
+
+// ImageFamilies groups version-tagged images into lines (one repository,
+// variant and major version) and counts older builds in each (older
+// siblings). Tags that are not versions are never ranked. Aggregate only: names appear only in local image
+// refs. In use is judged from containers alone; compose files and Dockerfile
+// pins are not seen, so an older sibling is informational, never "safe".
+type ImageFamilies struct {
+	Status     string `json:"status"`
+	Reason     string `json:"reason,omitempty"`
+	HTTPStatus *int   `json:"http_status,omitempty"`
+	// Families counts version lines with two or more native images.
+	Families *int64 `json:"families,omitempty"`
+	// OrderAmbiguous counts families whose version and build-time orders
+	// disagree, or with a version or build-time tie; none are ranked.
+	OrderAmbiguous *int64 `json:"order_ambiguous,omitempty"`
+	// InUseStatus is unavailable when containers could not be listed; then
+	// no image is counted as an older sibling.
+	InUseStatus string `json:"in_use_status,omitempty"`
+	InUseReason string `json:"in_use_reason,omitempty"`
+	// OlderSiblings excludes images used by any container.
+	OlderSiblings     *int64 `json:"older_siblings,omitempty"`
+	OlderSiblingBytes *int64 `json:"older_sibling_bytes,omitempty"`
+	BytesBound        string `json:"bytes_bound,omitempty"`
+	// LocallyBuilt counts older siblings that would need a rebuild, not a
+	// re-pull (a :local tag or no registry digest).
+	LocallyBuilt *int64 `json:"locally_built,omitempty"`
+	// InUseByExitedOnly counts older builds used only by stopped containers:
+	// removable once those containers are removed.
+	InUseByExitedOnly *int64 `json:"in_use_by_exited_only,omitempty"`
 }
 
 // RuntimeHostDisk is the VM disk as the host sees it: logical size and the
@@ -165,11 +201,15 @@ type RuntimeMeasure struct {
 
 // RuntimeImageRef is a local-only image reference (RefDisclosureLocal).
 type RuntimeImageRef struct {
-	Ref         string `json:"ref"`
+	Ref string `json:"ref"`
+	// ID is the short image ID (sha256: plus 12 hex), validated; the form to
+	// paste into a removal command instead of a name.
+	ID          string `json:"id,omitempty"`
 	Bucket      string `json:"bucket"`
 	Platform    string `json:"platform,omitempty"`
 	UniqueBytes int64  `json:"unique_bytes"`
-	// Bound is always exact (engine-reported); set on marshal.
+	// Bound is exact (engine-reported) unless set to upper, for an image
+	// size standing in for its unique bytes; set on marshal.
 	Bound string `json:"bound,omitempty"`
 }
 

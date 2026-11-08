@@ -98,12 +98,15 @@ func CollectContainerRuntime(ctx context.Context, opts ContainerRuntimeOptions) 
 
 	buckets, refs := buildRuntimeBuckets(snap, rt.EngineArch)
 	rt.Buckets = buckets
+	families, familyRefs := buildImageFamilies(snap, rt.EngineArch, dfUniqueByID(snap.DF))
+	rt.ImageFamilies = &families
+	refs = capRefs(append(refs, familyRefs...))
 	if disclosure == RefDisclosureLocal && len(refs) > 0 {
 		rt.ImageRefs = refs
 	}
 
 	rt.GuestFilesystem = probeGuest(ctx, rt.Engine, ep, snap.Info.DockerRootDir, opts)
-	rt.Recipe = buildRuntimeRecipe(rt, unusedImageUnique(snap.DF), opts.ProbeVM)
+	rt.Recipe = buildRuntimeRecipe(rt, unusedImageUnique(snap.DF), stoppedContainers(snap), opts.ProbeVM)
 	return rt
 }
 
@@ -318,7 +321,7 @@ func normalizeAPIVersion(v string) string {
 // data_loss_risk), then trims the guest so the host gets the space back, then
 // advises growth when the guest stays full. Commands are generic and never
 // name an image, volume, profile or path; placeholders stand in for those.
-func buildRuntimeRecipe(rt *ContainerRuntime, unusedImageBytes *int64, probedVM bool) []RuntimeRecipeStep {
+func buildRuntimeRecipe(rt *ContainerRuntime, unusedImageBytes *int64, stopped stoppedSet, probedVM bool) []RuntimeRecipeStep {
 	b := map[string]RuntimeBucket{}
 	for _, x := range rt.Buckets {
 		b[x.Kind] = x
@@ -349,6 +352,11 @@ func buildRuntimeRecipe(rt *ContainerRuntime, unusedImageBytes *int64, probedVM 
 	}
 	add(RuntimeRecipeStep{Step: StepDanglingImagePrune, CostClass: CostNone,
 		Estimate: est(BucketDanglingImages, BoundLower, unique), Command: []string{"docker", "image", "prune"}})
+	if stopped.present() {
+		steps = append(steps, RuntimeRecipeStep{Step: StepContainerPrune, CostClass: CostNone,
+			Estimate: stopped.bytes, Command: []string{"docker", "container", "prune"},
+			Warning: "Removes every stopped container; review `docker ps -a` first. Images used only by stopped containers become removable afterwards."})
+	}
 	add(RuntimeRecipeStep{Step: StepBuildCachePrune, CostClass: CostRebuild,
 		Estimate: est(BucketBuildCache, BoundExact, func(x RuntimeBucket) *int64 { return x.ReclaimableBytes }),
 		Command:  []string{"docker", "builder", "prune"}})
@@ -356,8 +364,15 @@ func buildRuntimeRecipe(rt *ContainerRuntime, unusedImageBytes *int64, probedVM 
 		Estimate: est(BucketForeignPlatform, BoundUpper, bytesOf),
 		Command:  []string{"docker", "image", "rm", "--force", "--platform", "<os/arch>", "<image>"},
 		Warning:  "Removes that platform from every tag sharing the content; --force is required when content is shared."})
-	add(RuntimeRecipeStep{Step: StepSupersededTagRemove, CostClass: CostRePull,
-		Estimate: est(BucketSupersededTags, BoundLower, unique), Command: []string{"docker", "image", "rm", "<image>"}})
+	if f := rt.ImageFamilies; f != nil {
+		cost := CostRePull
+		if f.LocallyBuilt != nil && *f.LocallyBuilt > 0 {
+			cost = CostRebuild
+		}
+		add(RuntimeRecipeStep{Step: StepOlderSiblingRemove, CostClass: cost,
+			Estimate: olderSiblingEstimate(*f), Command: []string{"docker", "image", "rm", "<image>"},
+			Warning: "Older versions in the same version line (repository, variant and major version). Only containers are checked: compose files and Dockerfile FROM pins are not. Confirm before removing; --image-refs lists them for local review."})
+	}
 	// prune --all removes every unused image. With none in use it frees the
 	// whole deduplicated layer total (exact); otherwise the unused images'
 	// unique bytes omit layers shared only among them (lower bound).
@@ -383,12 +398,12 @@ func buildRuntimeRecipe(rt *ContainerRuntime, unusedImageBytes *int64, probedVM 
 	if rt.Engine == EngineColima {
 		trimReason := ReasonProbeNotRequested
 		if probedVM {
-			// No trim-headroom estimate yet (guest used vs host allocation).
 			trimReason = ReasonUnsupportedEngine
 		}
+		trim, trimWarning := trimEstimate(rt, trimReason)
 		steps = append(steps, RuntimeRecipeStep{Step: StepGuestTrim, CostClass: CostNone,
-			Estimate: RuntimeMeasure{Status: ProbeNotProbed, Reason: trimReason},
-			Command:  []string{"colima", "ssh", "-p", "<profile>", "--", "sudo", "fstrim", "-v", "<data-root>"}})
+			Estimate: trim, Warning: trimWarning,
+			Command: []string{"colima", "ssh", "-p", "<profile>", "--", "sudo", "fstrim", "-v", "<data-root>"}})
 		g := rt.GuestFilesystem
 		if g.Status == ProbeMeasured && g.Level != PressureOK {
 			steps = append(steps, RuntimeRecipeStep{Step: StepDiskGrow, CostClass: CostNone,
@@ -398,6 +413,108 @@ func buildRuntimeRecipe(rt *ContainerRuntime, unusedImageBytes *int64, probedVM 
 		}
 	}
 	return steps
+}
+
+// trimGapLow is the trim estimate below which trimming now returns little
+// and space must first be freed inside the VM.
+const trimGapLow = 1 << 30
+
+// trimEstimate is the trim gap: the VM disk's host allocation minus the
+// engine filesystem's used bytes (df Used: total minus free), clamped at
+// zero. It is an upper bound and an estimate: the allocation covers the
+// whole disk, the guest figure one filesystem. Both sides must be measured.
+func trimEstimate(rt *ContainerRuntime, notProbed string) (RuntimeMeasure, string) {
+	g, h := rt.GuestFilesystem, rt.HostDisk
+	switch {
+	case g.Status != ProbeMeasured || g.UsedBytes == nil:
+		if g.Status == ProbeNotProbed || g.Reason == "" {
+			return RuntimeMeasure{Status: ProbeNotProbed, Reason: notProbed}, ""
+		}
+		return RuntimeMeasure{Status: ProbeUnavailable, Reason: g.Reason}, ""
+	case h == nil:
+		return RuntimeMeasure{Status: ProbeUnavailable, Reason: ReasonUnsupportedEngine}, ""
+	case h.Status != ProbeMeasured || h.AllocatedBytes == nil:
+		return RuntimeMeasure{Status: ProbeUnavailable, Reason: h.Reason}, ""
+	}
+	gap := *h.AllocatedBytes - *g.UsedBytes
+	if gap < 0 {
+		gap = 0
+	}
+	m := RuntimeMeasure{Status: ProbeMeasured, Bytes: i64p(gap), Bound: BoundUpper}
+	if gap < trimGapLow {
+		return m, "Trim would return little now: the host already holds about what the VM uses. Free space inside the VM first (steps above), then trim."
+	}
+	return m, "Estimate: the VM disk's host allocation minus the space the engine's filesystem uses."
+}
+
+// olderSiblingEstimate is measured only when families and in-use are both
+// known; otherwise no image is ranked and the reason says why.
+func olderSiblingEstimate(f ImageFamilies) RuntimeMeasure {
+	switch {
+	case f.Status != ProbeMeasured:
+		return RuntimeMeasure{Status: ProbeUnavailable, Reason: f.Reason}
+	case f.InUseStatus != ProbeMeasured:
+		return RuntimeMeasure{Status: ProbeUnavailable, Reason: f.InUseReason}
+	case f.OlderSiblingBytes == nil:
+		return RuntimeMeasure{Status: ProbeUnavailable, Reason: ReasonParseFailed}
+	}
+	return RuntimeMeasure{Status: ProbeMeasured, Bytes: f.OlderSiblingBytes, Bound: f.BytesBound}
+}
+
+// stoppedSet is what the recipe knows about stopped containers: a count from
+// the container list and their writable-layer bytes from /system/df.
+type stoppedSet struct {
+	count *int64
+	bytes RuntimeMeasure
+}
+
+func (s stoppedSet) present() bool {
+	if s.count != nil {
+		return *s.count > 0
+	}
+	return s.bytes.Status == ProbeMeasured && *s.bytes.Bytes > 0
+}
+
+func stoppedContainers(snap engineSnapshot) stoppedSet {
+	var s stoppedSet
+	if snap.ContainersErr == nil {
+		s.count = i64p(countExited(snap.Containers))
+	}
+	switch {
+	case snap.DFErr != nil:
+		reason, _ := engineCallReason(snap.DFErr)
+		s.bytes = RuntimeMeasure{Status: ProbeUnavailable, Reason: reason}
+	case snap.DF.Containers == nil:
+		s.bytes = RuntimeMeasure{Status: ProbeUnavailable, Reason: ReasonParseFailed}
+	default:
+		var n int64
+		for _, c := range *snap.DF.Containers {
+			if runningStates[c.State] {
+				continue
+			}
+			if c.SizeRw == nil || *c.SizeRw < 0 {
+				s.bytes = RuntimeMeasure{Status: ProbeUnavailable, Reason: ReasonParseFailed}
+				return s
+			}
+			n += *c.SizeRw
+		}
+		s.bytes = RuntimeMeasure{Status: ProbeMeasured, Bytes: i64p(n), Bound: BoundExact}
+	}
+	return s
+}
+
+// dfUniqueByID maps image ID to engine-reported unique bytes; nil when
+// /system/df did not answer with valid images.
+func dfUniqueByID(df engineDF) map[string]int64 {
+	images, ok := validDFImages(df.Images)
+	if !ok {
+		return nil
+	}
+	out := make(map[string]int64, len(images))
+	for _, im := range images {
+		out[im.ID] = imageUnique(im)
+	}
+	return out
 }
 
 // unusedImageUnique sums unique bytes of images no container uses: the
