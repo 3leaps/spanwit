@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -389,4 +390,77 @@ func TestPlanFromExact_MixedBasesFailClosed(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "mixes size bases") {
 		t.Fatalf("err=%v", err)
 	}
+}
+
+// An allocated baseline whose logical_bytes was removed still carries the
+// logical axis, as unknown: a sub-block append can no longer read as
+// unchanged just because one optional field is missing.
+func TestFreshness_AllocatedBaselineWithoutLogicalIsUnknown(t *testing.T) {
+	if !AllocatedSizesSupported {
+		t.Skip("build cannot read allocated sizes")
+	}
+	root, target := cargoFixture(t)
+	f := filepath.Join(target, "debug", "small")
+	if err := os.WriteFile(f, make([]byte, 100), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().Add(-3 * time.Hour)
+	setTreeTime(t, target, at)
+	b := measuredBaseline(t, target, at)
+	b.LogicalBytes = nil
+	if err := os.WriteFile(f, make([]byte, 110), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(f, at, at); err != nil {
+		t.Fatal(err)
+	}
+	plan, c := planOne(t, ExactPlanInput{AnalysisRoot: root, Entries: []ExactEntry{cargoEntry(target, FilterDisplayNone, b)}})
+	if c.Drift.SizeLogical != DriftUnknown || c.Drift.SizeAllocated != DriftUnchanged || c.Drift.Size != DriftUnknown {
+		t.Fatalf("missing logical_bytes must read unknown, never unchanged: %+v", c.Drift)
+	}
+	if plan.Freshness.DriftUnknown != 1 {
+		t.Fatalf("freshness=%+v", plan.Freshness)
+	}
+}
+
+// A lower-bound baseline compares neither axis exactly, even when the
+// remeasured side is complete.
+func TestCompareDrift_IncompleteAllocatedBaselineIsUnknownOnBothAxes(t *testing.T) {
+	logical := int64(100)
+	b := &ExactBaseline{SizeBasis: SizeBasisAllocated, SizeBytes: 4096, LogicalBytes: &logical, SizeIncomplete: true}
+	c := PruneCandidate{SizeBasis: SizeBasisAllocated, Size: 8192, AllocatedBytes: 8192, LogicalBytes: 5000}
+	d := compareDrift(c, b)
+	if d.SizeLogical != DriftUnknown || d.SizeAllocated != DriftUnknown || d.Size != DriftUnknown || d.SizeDeltaBytes != nil {
+		t.Fatalf("drift=%+v", d)
+	}
+}
+
+// A file whose allocation cannot be read makes the allocated sum a lower
+// bound: the row is incomplete on the allocated basis, and a floor it does
+// not reach is indeterminate, not min_size.
+func TestDirSize_UnreadableAllocationIsLowerBound(t *testing.T) {
+	orig := allocatedBytesOf
+	t.Cleanup(func() { allocatedBytesOf = orig })
+	allocatedBytesOf = func(fs.FileInfo) (int64, bool) { return 0, false }
+
+	root, target := cargoFixture(t)
+	r, err := DirSizeContext(context.Background(), target, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.AllocatedUnmeasured || r.Incomplete || r.Bytes == 0 {
+		t.Fatalf("result=%+v", r)
+	}
+	setTreeTime(t, target, time.Now().Add(-3*time.Hour))
+	jobs := []CandidateJob{{Path: target, State: CandidateStatePrunable, ReclaimScope: ReclaimScopeWhole, MinSize: 1 << 30, EffectiveMinSize: "1G"}}
+	cands, _ := sizeCandidateJobs(context.Background(), jobs, -1, sizePolicy{headline: SizeBasisAllocated, gate: SizeBasisAllocated})
+	if len(cands) != 1 {
+		t.Fatalf("cands=%+v", cands)
+	}
+	c := cands[0]
+	if !c.SizeIncomplete || !c.AllocatedIncomplete || c.LogicalIncomplete {
+		t.Fatalf("bounds: %+v", c)
+	}
+	wantState(t, c, CandidateStateWithheld, WithheldReasonIndeterminate)
+	_ = root
 }

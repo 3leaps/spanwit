@@ -173,7 +173,9 @@ links reads high.
 sparse tree between its allocated and logical sizes is withheld (or kept) the
 same way both times. Replay of an allocated report on a host that cannot read
 allocation reports its rows as apparent and treats `min_size` as undecidable
-(`indeterminate`). Replay refuses a plan whose rows carry different bases.
+(`indeterminate`). Replay refuses a plan whose rows carry different bases
+(across the primary and temp plans of one report too), and an allocated row
+that does not carry `logical_bytes`.
 Reports written before size bases existed replay on logical bytes.
 
 **Temp planes.** `temp_plane_coverage` appears only under warn/critical

@@ -85,3 +85,31 @@ func TestPruneFromSpaceReport_PrimaryAndTempShareBasis(t *testing.T) {
 		}
 	}
 }
+
+// An allocated exact candidate must carry logical_bytes: a report with it
+// removed is refused before replay (schema), so the logical drift axis
+// cannot be switched off by deleting one field.
+func TestPruneFromSpaceReport_AllocatedWithoutLogicalRefused(t *testing.T) {
+	e2eSkip(t)
+	if !engine.AllocatedSizesSupported {
+		t.Skip("reports from this build are apparent-only")
+	}
+	analysis, temp := t.TempDir(), e2eTempRoot(t)
+	e2eCargo(t, filepath.Join(analysis, "app"))
+	e2eAge(t, analysis)
+	path, r := e2eReport(t, analysis, temp)
+	if r.PruneHandoff == nil || r.PruneHandoff.ExactPlan == nil || len(r.PruneHandoff.ExactPlan.Candidates) == 0 {
+		t.Fatalf("no primary plan: %+v", r.PruneHandoff)
+	}
+	r.PruneHandoff.ExactPlan.Candidates[0].LogicalBytes = nil
+	raw, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildPrunePlanFromSpaceReport(context.Background(), path, ""); err == nil || !strings.Contains(err.Error(), "logical_bytes") {
+		t.Fatalf("allocated candidate without logical_bytes accepted: err=%v", err)
+	}
+}

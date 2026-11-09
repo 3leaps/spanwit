@@ -93,10 +93,15 @@ type sizeAxis struct {
 }
 
 // baselineAxes splits a carried baseline into its logical and allocated
-// sums. A legacy or apparent carrier has only the logical axis.
+// sums. A legacy or apparent carrier has only the logical axis. An
+// allocated carrier always has both: spanwit writes logical_bytes beside
+// every allocated headline, so a missing one is carried as unknown (never
+// absent), and the row can no longer compare unchanged. Dropping one field
+// must not switch off the axis that catches sub-block appends.
 func baselineAxes(b *ExactBaseline) (logical, allocated sizeAxis) {
 	if b.SizeBasis == SizeBasisAllocated {
 		allocated = sizeAxis{present: true, bytes: b.SizeBytes, complete: !b.SizeIncomplete}
+		logical = sizeAxis{present: true, complete: false}
 		if b.LogicalBytes != nil {
 			logical = sizeAxis{present: true, bytes: *b.LogicalBytes, complete: !b.SizeIncomplete}
 		}

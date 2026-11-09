@@ -118,7 +118,7 @@ func DirSizeContext(ctx context.Context, path string, maxDepth int) (SizeResult,
 				return nil
 			}
 			result.Bytes += info.Size()
-			if a, ok := allocatedBytes(info); ok {
+			if a, ok := allocatedBytesOf(info); ok {
 				result.AllocatedBytes += a
 			} else {
 				result.AllocatedUnmeasured = true

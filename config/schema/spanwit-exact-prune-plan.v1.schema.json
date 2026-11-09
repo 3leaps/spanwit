@@ -219,6 +219,24 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "required": [
+              "size_basis"
+            ],
+            "properties": {
+              "size_basis": {
+                "const": "allocated"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "logical_bytes"
+            ]
+          },
+          "description": "An allocated headline always carries its logical sum; replay compares both."
         }
       ]
     }

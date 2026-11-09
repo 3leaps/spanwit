@@ -9,6 +9,10 @@ const (
 	SizeBasisApparent  = "apparent"
 )
 
+// allocatedBytesOf reads an entry's allocation; a variable so tests can
+// simulate a filesystem that does not report it.
+var allocatedBytesOf = allocatedBytes
+
 // DefaultSizeBasis is the basis a fresh plan uses on this build.
 func DefaultSizeBasis() string {
 	if AllocatedSizesSupported {

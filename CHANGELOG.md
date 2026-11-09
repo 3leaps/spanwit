@@ -48,8 +48,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   occupies. Each row adds `size_basis` and `logical_bytes`; text shows the
   logical figure after the path when it differs by more than 10%. `min_size`,
   totals and replay use the same basis. Replay compares allocated and logical
-  sums separately and withholds on a change in either; a plan that mixes bases
-  is refused. Builds that cannot read allocation (Windows) stay on apparent
+  sums separately and withholds on a change in either; a plan that mixes bases,
+  or an allocated row without `logical_bytes`, is refused. Builds that cannot read allocation (Windows) stay on apparent
   bytes, and older reports replay on logical bytes. Small trees now read
   larger (a 100-byte file occupies one block), so a low `min_size` floor may
   admit rows it previously withheld.
