@@ -180,15 +180,21 @@ func TestCapacityJSON_RebootStatesAgainstSchema(t *testing.T) {
 	heldNoFigure.LogicalBytes = nil
 	heldNotReqWithFigure := heldNotReq
 	heldNotReqWithFigure.LogicalBytes = heldMeasured.LogicalBytes
+	heldExactBound := heldMeasured
+	heldExactBound.LogicalBytes = rebootClaim(1<<30, "lsof_file_size_dedup_device_inode", capacity.BoundExact)
+	heldWrongBasis := heldMeasured
+	heldWrongBasis.LogicalBytes = rebootClaim(1<<30, "allocated_blocks", capacity.BoundLower)
 	invalid := map[string]*capacity.RebootReleasable{
-		"unknown scope with bytes":        rebootBlock(unknownWithBytes, heldNotReq, capacity.StatusPartial),
-		"target scope without bytes":      rebootBlock(targetNoBytes, heldNotReq, capacity.StatusMeasured),
-		"other container with bytes":      rebootBlock(otherWithBytes, heldNotReq, capacity.StatusMeasured),
-		"measured swap with reason":       rebootBlock(measuredWithReason, heldNotReq, capacity.StatusMeasured),
-		"unavailable swap without reason": rebootBlock(failedNoReason, heldNotReq, capacity.StatusPartial),
-		"swap bytes on another basis":     rebootBlock(wrongBasis, heldNotReq, capacity.StatusMeasured),
-		"measured held-open, no figure":   rebootBlock(swapTarget, heldNoFigure, capacity.StatusMeasured),
-		"not-requested held-open figure":  rebootBlock(swapTarget, heldNotReqWithFigure, capacity.StatusMeasured),
+		"unknown scope with bytes":           rebootBlock(unknownWithBytes, heldNotReq, capacity.StatusPartial),
+		"target scope without bytes":         rebootBlock(targetNoBytes, heldNotReq, capacity.StatusMeasured),
+		"other container with bytes":         rebootBlock(otherWithBytes, heldNotReq, capacity.StatusMeasured),
+		"measured swap with reason":          rebootBlock(measuredWithReason, heldNotReq, capacity.StatusMeasured),
+		"unavailable swap without reason":    rebootBlock(failedNoReason, heldNotReq, capacity.StatusPartial),
+		"swap bytes on another basis":        rebootBlock(wrongBasis, heldNotReq, capacity.StatusMeasured),
+		"measured held-open, no figure":      rebootBlock(swapTarget, heldNoFigure, capacity.StatusMeasured),
+		"not-requested held-open figure":     rebootBlock(swapTarget, heldNotReqWithFigure, capacity.StatusMeasured),
+		"held-open figure not a lower bound": rebootBlock(swapTarget, heldExactBound, capacity.StatusMeasured),
+		"held-open figure on another basis":  rebootBlock(swapTarget, heldWrongBasis, capacity.StatusMeasured),
 	}
 	for name, block := range invalid {
 		report.CapacityAccounting.RebootReleasable = block

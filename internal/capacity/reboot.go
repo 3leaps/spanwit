@@ -12,10 +12,7 @@ import (
 // darwinVMMount is where macOS mounts the volume that holds this boot's swap
 // files (dynamic_pager). A VM-role volume anywhere else, such as one in an
 // external macOS install, is not the live swap store.
-const (
-	darwinVMMount       = "/System/Volumes/VM"
-	darwinVMMountParent = "/System/Volumes"
-)
+const darwinVMMount = "/System/Volumes/VM"
 
 // SwapUsageFunc returns the kernel's current swap reservation in bytes
 // (darwin: vm.swapusage total). Any failure, including a malformed,
@@ -23,22 +20,19 @@ const (
 // partial figure.
 type SwapUsageFunc func(ctx context.Context) (int64, error)
 
-// DeviceOfFunc returns st_dev for a path (lstat semantics are not needed:
-// every caller passes a mount point).
-type DeviceOfFunc func(path string) (uint64, error)
-
 // MountEntry is one row of the OS mount table: the source device node
-// (e.g. /dev/disk3s6), the mount point, and st_dev of the mount point.
-// StatOK is false when the mount point could not be statted.
+// (e.g. /dev/disk3s6), the mount point, and the filesystem id from the same
+// row (f_fsid; equal to st_dev of files on that volume). No path is statted:
+// a path can follow a symlink, race an unmount, or block on a network mount.
 type MountEntry struct {
-	From   string
-	On     string
-	Dev    uint64
-	StatOK bool
+	From string
+	On   string
+	Dev  uint64
 }
 
 // MountTableFunc returns every mounted filesystem. An error means the table
-// is unknown, and no conclusion may be drawn from a device's absence.
+// is unknown or may be incomplete, and no conclusion may be drawn from a
+// device's absence.
 type MountTableFunc func() ([]MountEntry, error)
 
 var errSwapUsageUnsupported = errors.New("swap usage probe unsupported on this platform")
@@ -56,6 +50,9 @@ type targetDevices struct {
 // volume id: the volume itself (/dev/disk3s6) or a snapshot of it mounted
 // in its place (/dev/disk3s1s1 for the sealed system volume disk3s1).
 func mountedFromVolume(from, volumeID string) bool {
+	if !isAPFSVolumeID(volumeID) {
+		return false // a container id (disk3) must never match its volumes
+	}
 	node := "/dev/" + volumeID
 	if from == node {
 		return true
@@ -72,12 +69,36 @@ func mountedFromVolume(from, volumeID string) bool {
 	return true
 }
 
+// isAPFSVolumeID accepts disk<N>s<M> only (ASCII digits).
+func isAPFSVolumeID(id string) bool {
+	rest, ok := strings.CutPrefix(id, "disk")
+	if !ok {
+		return false
+	}
+	n, m, ok := strings.Cut(rest, "s")
+	return ok && allDigits(n) && allDigits(m)
+}
+
+func allDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // collectTargetDevices maps the target container's volumes to the devices
 // they are mounted as, using the OS mount table (the volumes plane carries
 // membership but not mount points). The set is complete only when the
-// volumes plane is measured, the whole mount table was read, and every
-// matching mount point was statted: a volume with no mount row is then
-// known to be unmounted.
+// volumes plane is measured and the whole mount table was read: a volume
+// with no mount row is then known to be unmounted.
+// An APFS sealed system snapshot mounted at / carries its own fsid; the
+// volume group's Data row carries the device its files report, so matching
+// is "any row of a target volume", never one device per volume.
 func collectTargetDevices(volumes VolumesPlane, mounts []MountEntry, mountsOK bool) targetDevices {
 	out := targetDevices{
 		devs:     map[uint64]struct{}{},
@@ -87,37 +108,37 @@ func collectTargetDevices(volumes VolumesPlane, mounts []MountEntry, mountsOK bo
 		return out
 	}
 	for _, v := range volumes.Entries {
-		if v.ID == "" {
-			out.complete = false
+		if !isAPFSVolumeID(v.ID) {
+			out.complete = false // cannot be matched, so cannot be shown unmounted
 			continue
 		}
 		for _, m := range mounts {
-			if !mountedFromVolume(m.From, v.ID) {
-				continue
+			if mountedFromVolume(m.From, v.ID) {
+				out.devs[m.Dev] = struct{}{}
 			}
-			if !m.StatOK {
-				out.complete = false
-				continue
-			}
-			out.devs[m.Dev] = struct{}{}
 		}
 	}
 	return out
 }
 
-// swapScope binds swap to the live VM mount's device and compares it with
-// the target container's mounted devices. Role presence is never used.
-func swapScope(target targetDevices, deviceOf DeviceOfFunc) string {
-	if deviceOf == nil {
+// swapScope binds swap to the live VM mount and compares its device with
+// the target container's mounted devices. The live mount is the single
+// mount-table row whose mount point is /System/Volumes/VM; that row's
+// existence is the mount-point proof. Role presence is never used.
+func swapScope(target targetDevices, mounts []MountEntry, mountsOK bool) string {
+	if !mountsOK {
 		return RebootScopeUnknown
 	}
-	vm, err := deviceOf(darwinVMMount)
-	if err != nil {
-		return RebootScopeUnknown
+	var vm uint64
+	found := 0
+	for _, m := range mounts {
+		if m.On == darwinVMMount {
+			vm = m.Dev
+			found++
+		}
 	}
-	parent, err := deviceOf(darwinVMMountParent)
-	if err != nil || parent == vm {
-		return RebootScopeUnknown // not a live mount point
+	if found != 1 {
+		return RebootScopeUnknown // not mounted, or ambiguous
 	}
 	if _, ok := target.devs[vm]; ok {
 		return RebootScopeTargetContainer
@@ -201,7 +222,7 @@ func lsofDevice(v string) (uint64, bool) {
 }
 
 func scopeHeldOpen(parsed heldOpenParseResult, target targetDevices, mounted map[uint64]struct{}) heldOpenScoped {
-	// mounted holds every statted mount's device; an object on a device in
+	// mounted holds every mount row's device; an object on a device in
 	// neither set is unmappable.
 	if !target.complete {
 		return heldOpenScoped{incomplete: true}
@@ -320,13 +341,10 @@ func (c Collector) rebootReleasable(
 	heldParsed *heldOpenParseResult,
 ) *RebootReleasable {
 	live := c.Platform == ""
-	swapUsage, deviceOf, mountTable := c.SwapUsage, c.DeviceOf, c.MountTable
+	swapUsage, mountTable := c.SwapUsage, c.MountTable
 	if live {
 		if swapUsage == nil {
 			swapUsage = defaultSwapUsage()
-		}
-		if deviceOf == nil {
-			deviceOf = defaultDeviceOf()
 		}
 		if mountTable == nil {
 			mountTable = defaultMountTable()
@@ -343,13 +361,11 @@ func (c Collector) rebootReleasable(
 			}
 		}
 		target := collectTargetDevices(planes.Volumes, mounts, mountsOK)
-		scope = swapScope(target, deviceOf)
+		scope = swapScope(target, mounts, mountsOK)
 		if heldOpenRequested && heldParsed != nil {
 			mounted := map[uint64]struct{}{}
 			for _, m := range mounts {
-				if m.StatOK {
-					mounted[m.Dev] = struct{}{}
-				}
+				mounted[m.Dev] = struct{}{}
 			}
 			s := scopeHeldOpen(*heldParsed, target, mounted)
 			scoped = &s

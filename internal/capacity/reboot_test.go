@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -13,17 +14,16 @@ import (
 // Target container disk9 (Data disk9s5, VM-role disk9s4); disk7 is a second
 // container with its own VM-role volume (apfs-list-multi.plist).
 const (
-	devRoot   = 100 // disk9s1s1 "/" and disk9s5 Data share st_dev (volume group)
-	devVM9    = 101 // disk9s4
-	devPre9   = 102 // disk9s2
-	devVM7    = 201 // disk7s1
-	devParent = 100 // /System/Volumes
+	devSnap = 99  // disk9s1s1 "/" (sealed snapshot: its own fsid)
+	devRoot = 100 // disk9s5 Data (the device files on the volume group report)
+	devVM9  = 101 // disk9s4
+	devPre9 = 102 // disk9s2
+	devVM7  = 201 // disk7s1
 )
 
 type rebootFixture struct {
 	platform   string
 	swap       SwapUsageFunc
-	devices    map[string]uint64
 	mounts     []MountEntry
 	mountsErr  error
 	lsof       string // non-empty: --held-open requested with this output
@@ -40,12 +40,11 @@ func liveTarget() rebootFixture {
 	return rebootFixture{
 		platform: "darwin",
 		swap:     gib(6),
-		devices:  map[string]uint64{darwinVMMount: devVM9, darwinVMMountParent: devParent},
 		mounts: []MountEntry{
-			{From: "/dev/disk9s1s1", On: "/", Dev: devRoot, StatOK: true},
-			{From: "/dev/disk9s5", On: "/System/Volumes/Data", Dev: devRoot, StatOK: true},
-			{From: "/dev/disk9s4", On: darwinVMMount, Dev: devVM9, StatOK: true},
-			{From: "/dev/disk9s2", On: "/System/Volumes/Preboot", Dev: devPre9, StatOK: true},
+			{From: "/dev/disk9s1s1", On: "/", Dev: devSnap},
+			{From: "/dev/disk9s5", On: "/System/Volumes/Data", Dev: devRoot},
+			{From: "/dev/disk9s4", On: darwinVMMount, Dev: devVM9},
+			{From: "/dev/disk9s2", On: "/System/Volumes/Preboot", Dev: devPre9},
 		},
 	}
 }
@@ -77,13 +76,7 @@ func runReboot(t *testing.T, f rebootFixture) *RebootReleasable {
 		ManagedRootMeasurer: func(context.Context, string, int) ManagedMeasurement {
 			return ManagedMeasurement{Complete: true, Gaps: []CoverageGap{}}
 		},
-		SwapUsage: f.swap,
-		DeviceOf: func(p string) (uint64, error) {
-			if d, ok := f.devices[p]; ok {
-				return d, nil
-			}
-			return 0, errors.New("stat failed")
-		},
+		SwapUsage:  f.swap,
 		MountTable: func() ([]MountEntry, error) { return f.mounts, f.mountsErr },
 		HeldOpenRunner: RunnerFunc(func(context.Context, string, ...string) ([]byte, error) {
 			return []byte(f.lsof), f.lsofErr
@@ -174,12 +167,11 @@ func TestReboot_SwapZeroIsMeasuredZero(t *testing.T) {
 // attribute A's reservation to B.
 func TestReboot_TwoContainersBothWithVMRole(t *testing.T) {
 	f := liveTarget()
-	f.devices[darwinVMMount] = devVM7
 	f.mounts = []MountEntry{
-		{From: "/dev/disk9s1s1", On: "/", Dev: devRoot, StatOK: true},
-		{From: "/dev/disk9s5", On: "/System/Volumes/Data", Dev: devRoot, StatOK: true},
-		{From: "/dev/disk9s4", On: "/Volumes/Ext/System/Volumes/VM", Dev: devVM9, StatOK: true},
-		{From: "/dev/disk7s1", On: darwinVMMount, Dev: devVM7, StatOK: true},
+		{From: "/dev/disk9s1s1", On: "/", Dev: devSnap},
+		{From: "/dev/disk9s5", On: "/System/Volumes/Data", Dev: devRoot},
+		{From: "/dev/disk9s4", On: "/Volumes/Ext/System/Volumes/VM", Dev: devVM9},
+		{From: "/dev/disk7s1", On: darwinVMMount, Dev: devVM7},
 	}
 	r := runReboot(t, f)
 	wantSwap(t, r, RebootSwapNotReleasable, RebootReasonNotBootContainer, RebootScopeOtherContainer, nil, StatusMeasured)
@@ -196,13 +188,14 @@ func TestReboot_VolumesWithoutMountPointsStillBind(t *testing.T) {
 
 func TestReboot_UnknownScopeWithholdsBytes(t *testing.T) {
 	cases := map[string]func(*rebootFixture){
-		"vm not a mount point": func(f *rebootFixture) { f.devices[darwinVMMount] = devParent },
-		"vm stat fails":        func(f *rebootFixture) { delete(f.devices, darwinVMMount) },
-		"mount table fails":    func(f *rebootFixture) { f.mountsErr = errors.New("getfsstat") },
-		"volumes not measured": func(f *rebootFixture) { f.noVolumes = true; f.devices[darwinVMMount] = devVM7 },
-		"target mount unstatted, vm elsewhere": func(f *rebootFixture) {
-			f.devices[darwinVMMount] = devVM7
-			f.mounts[3].StatOK = false
+		"no live VM mount row": func(f *rebootFixture) { f.mounts = append(f.mounts[:2], f.mounts[3]) },
+		"two rows at the VM mount point": func(f *rebootFixture) {
+			f.mounts = append(f.mounts, MountEntry{From: "/dev/disk7s1", On: darwinVMMount, Dev: devVM7})
+		},
+		"mount table fails or grew": func(f *rebootFixture) { f.mountsErr = errors.New("mount table grew") },
+		"volumes not measured": func(f *rebootFixture) {
+			f.noVolumes = true
+			f.mounts[2] = MountEntry{From: "/dev/disk7s1", On: darwinVMMount, Dev: devVM7}
 		},
 	}
 	for name, mut := range cases {
@@ -224,7 +217,7 @@ func TestReboot_SwapProbeFailureIsUnavailableForEveryScope(t *testing.T) {
 	scopes := map[string]func(*rebootFixture){
 		RebootScopeTargetContainer: func(*rebootFixture) {},
 		RebootScopeOtherContainer: func(f *rebootFixture) {
-			f.devices[darwinVMMount] = devVM7
+			f.mounts[2] = MountEntry{From: "/dev/disk7s1", On: darwinVMMount, Dev: devVM7}
 		},
 		RebootScopeUnknown: func(f *rebootFixture) { f.mountsErr = errors.New("x") },
 	}
@@ -273,7 +266,7 @@ func TestReboot_HeldOpen(t *testing.T) {
 	})
 	t.Run("scoped, deduplicated, other container dropped", func(t *testing.T) {
 		f := liveTarget()
-		f.mounts = append(f.mounts, MountEntry{From: "/dev/disk7s1", On: "/Volumes/X", Dev: devVM7, StatOK: true})
+		f.mounts = append(f.mounts, MountEntry{From: "/dev/disk7s1", On: "/Volumes/X", Dev: devVM7})
 		f.heldOpenOn = true
 		f.lsof = lsofSet("p10", "cCodex", "u501") +
 			lsofObj("3", target, "1", "1000", "/a") +
@@ -389,6 +382,113 @@ func TestMountedFromVolume(t *testing.T) {
 	} {
 		if got := mountedFromVolume(tc.from, tc.id); got != tc.want {
 			t.Errorf("mountedFromVolume(%q,%q)=%v", tc.from, tc.id, got)
+		}
+	}
+}
+
+// Verifier attack (devrev's cap-ordering check): more than the 200-entry detail cap of target-container objects,
+// plus larger other-container objects that would crowd the capped entries.
+// The scoped sum must cover every deduplicated target object.
+func TestReboot_AttackHeldOpenSumPrecedesDetailCap(t *testing.T) {
+	f := liveTarget()
+	f.mounts = append(f.mounts, MountEntry{From: "/dev/disk7s1", On: "/Volumes/X", Dev: devVM7})
+	f.heldOpenOn = true
+	var b strings.Builder
+	b.WriteString(lsofSet("p10", "cCodex", "u501"))
+	for i := 0; i < 300; i++ { // other container, larger: sort first in the plane
+		b.WriteString(lsofObj(fmt.Sprint(1000+i), "0xc9", fmt.Sprint(5000+i), "999999", "/x"))
+	}
+	for i := 0; i < 250; i++ {
+		b.WriteString(lsofObj(fmt.Sprint(i+3), "0x64", fmt.Sprint(i+1), "10", "/a"))
+	}
+	f.lsof = b.String()
+	r := runReboot(t, f)
+	h := r.HeldOpen
+	if h.LogicalBytes == nil || *h.LogicalBytes.Bytes != 2500 {
+		t.Fatalf("scoped sum must be 2500 from all objects, got %+v", h.LogicalBytes)
+	}
+}
+
+// Attack: same (device,inode) seen with different sizes by two holders must
+// count once at the largest size (plane semantics), not first-seen.
+func TestReboot_AttackHeldOpenDedupLargest(t *testing.T) {
+	f := liveTarget()
+	f.heldOpenOn = true
+	f.lsof = lsofSet("p10", "cA", "u501") + lsofObj("3", "0x64", "1", "100", "/a") +
+		lsofSet("p11", "cB", "u501") + lsofObj("4", "0x64", "1", "900", "/a")
+	r := runReboot(t, f)
+	if r.HeldOpen.LogicalBytes == nil || *r.HeldOpen.LogicalBytes.Bytes != 900 {
+		t.Fatalf("got %+v", r.HeldOpen.LogicalBytes)
+	}
+}
+
+// Attack: an empty volume ID in a measured volumes plane must not let an
+// other_container conclusion be drawn.
+func TestReboot_AttackEmptyVolumeIDBlocksOtherContainer(t *testing.T) {
+	v := VolumesPlane{CollectionStatus: StatusMeasured, Entries: []VolumeEntry{{ID: "disk9s5"}, {ID: ""}}}
+	td := collectTargetDevices(v, []MountEntry{{From: "/dev/disk9s5", On: "/d", Dev: 100}}, true)
+	if td.complete {
+		t.Fatal("empty volume id must make the target device set incomplete")
+	}
+}
+
+// Attack: unmapped-only objects (every object on an unknown device) with a
+// measured plane: must be partial with 0 B partial, never measured 0.
+func TestReboot_AttackAllUnmappedNeverMeasuredZero(t *testing.T) {
+	f := liveTarget()
+	f.heldOpenOn = true
+	f.lsof = lsofSet("p10", "cA", "u501") + lsofObj("3", "0x999", "1", "100", "/a") + lsofObj("4", "zz", "2", "5", "/b")
+	r := runReboot(t, f)
+	h := r.HeldOpen
+	if h.Status != StatusPartial || r.Status != StatusPartial || (h.LogicalBytes != nil && h.LogicalBytes.Status == StatusMeasured) {
+		t.Fatalf("held=%+v %+v block=%s", h, h.LogicalBytes, r.Status)
+	}
+}
+
+// Attack: disk-id prefix collisions in the mount table.
+func TestReboot_AttackMountedFromVolumePrefixes(t *testing.T) {
+	for _, tc := range []struct {
+		from, id string
+		want     bool
+	}{
+		{"/dev/disk31s1", "disk3s1", false},
+		{"/dev/disk3s1", "disk31s1", false},
+		{"/dev/disk3s10s1", "disk3s1", false},
+		{"/dev/disk3s1s1", "disk3s10", false},
+		{"/dev/rdisk3s1", "disk3s1", false},
+		{"com.apple.TimeMachine.x@/dev/disk3s5", "disk3s5", false},
+		{"/dev/disk3s5/", "disk3s5", false},
+		{"/dev/disk3s5", "disk3", false},
+		{"/dev/disk3s1s+1", "disk3s1", false},
+		{"/dev/disk3s1s１", "disk3s1", false},
+	} {
+		if got := mountedFromVolume(tc.from, tc.id); got != tc.want {
+			t.Errorf("mountedFromVolume(%q,%q)=%v want %v", tc.from, tc.id, got, tc.want)
+		}
+	}
+}
+
+// Attack: lsof timed out after emitting some output. The plane is partial;
+// held_open must be partial (status and claim), never measured.
+func TestReboot_AttackPartialPlaneWithOutputIsPartial(t *testing.T) {
+	f := liveTarget()
+	f.heldOpenOn = true
+	f.lsofErr = &RunError{Code: GapTimeout}
+	f.lsof = lsofSet("p10", "cA", "u501") + lsofObj("3", "0x64", "1", "100", "/a")
+	r := runReboot(t, f)
+	h := r.HeldOpen
+	if h.Status != StatusPartial || r.Status != StatusPartial || h.LogicalBytes == nil ||
+		h.LogicalBytes.Status != StatusPartial || *h.LogicalBytes.Bytes != 100 {
+		t.Fatalf("held=%+v %+v block=%s", h, h.LogicalBytes, r.Status)
+	}
+}
+
+func TestReboot_MalformedVolumeIDBlocksOtherContainer(t *testing.T) {
+	for _, id := range []string{"disk9", "disk9sX", "9s5", "disk9s5 "} {
+		v := VolumesPlane{CollectionStatus: StatusMeasured, Entries: []VolumeEntry{{ID: "disk9s5"}, {ID: id}}}
+		td := collectTargetDevices(v, []MountEntry{{From: "/dev/disk9s5", On: "/d", Dev: 100}}, true)
+		if td.complete {
+			t.Fatalf("volume id %q must make the set incomplete", id)
 		}
 	}
 }

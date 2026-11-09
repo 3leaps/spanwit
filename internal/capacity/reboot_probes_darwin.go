@@ -4,6 +4,7 @@ package capacity
 
 import (
 	"context"
+	"errors"
 
 	"golang.org/x/sys/unix"
 )
@@ -22,41 +23,37 @@ func darwinSwapUsage(ctx context.Context) (int64, error) {
 	return parseXswUsageTotal(raw)
 }
 
-func statDevice(path string) (uint64, error) {
-	var st unix.Stat_t
-	if err := unix.Stat(path, &st); err != nil {
-		return 0, err
-	}
-	return uint64(st.Dev), nil // #nosec G115 -- st_dev is an identity compared for equality only.
-}
+// mountTableSlack is spare capacity for mounts that appear between the
+// counting call and the filling call. A full buffer means the table may be
+// incomplete, so it is reported as an error rather than read as complete.
+const mountTableSlack = 16
 
-// darwinMountTable reads every mounted filesystem (source node and mount
-// point) and stats each mount point. A stat failure is kept as StatOK=false
-// so callers can treat that mount as unknown rather than absent.
+// darwinMountTable reads every mounted filesystem with MNT_NOWAIT (cached
+// statistics: never blocks on a network mount). Each row's device is its
+// f_fsid, taken from the same row as its source and mount point.
 func darwinMountTable() ([]MountEntry, error) {
 	n, err := unix.Getfsstat(nil, unix.MNT_NOWAIT)
 	if err != nil {
 		return nil, err
 	}
-	buf := make([]unix.Statfs_t, n)
+	buf := make([]unix.Statfs_t, n+mountTableSlack)
 	n, err = unix.Getfsstat(buf, unix.MNT_NOWAIT)
 	if err != nil {
 		return nil, err
 	}
+	if n >= len(buf) {
+		return nil, errors.New("mount table grew while it was read")
+	}
 	out := make([]MountEntry, 0, n)
 	for _, fs := range buf[:n] {
-		m := MountEntry{
+		out = append(out, MountEntry{
 			From: unix.ByteSliceToString(fs.Mntfromname[:]),
 			On:   unix.ByteSliceToString(fs.Mntonname[:]),
-		}
-		if dev, err := statDevice(m.On); err == nil {
-			m.Dev, m.StatOK = dev, true
-		}
-		out = append(out, m)
+			Dev:  uint64(uint32(fs.Fsid.Val[0])), // #nosec G115 -- fsid.val[0] is the dev_t bit pattern; compared for equality only.
+		})
 	}
 	return out, nil
 }
 
 func defaultSwapUsage() SwapUsageFunc   { return darwinSwapUsage }
-func defaultDeviceOf() DeviceOfFunc     { return statDevice }
 func defaultMountTable() MountTableFunc { return darwinMountTable }

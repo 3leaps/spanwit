@@ -9,5 +9,4 @@ import "context"
 func defaultSwapUsage() SwapUsageFunc {
 	return func(context.Context) (int64, error) { return 0, errSwapUsageUnsupported }
 }
-func defaultDeviceOf() DeviceOfFunc     { return nil }
 func defaultMountTable() MountTableFunc { return nil }

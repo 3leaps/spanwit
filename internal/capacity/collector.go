@@ -40,7 +40,6 @@ type Collector struct {
 	// nil and the block reports unknown/unavailable; real probes are used
 	// only for a live run (Platform empty).
 	SwapUsage  SwapUsageFunc
-	DeviceOf   DeviceOfFunc
 	MountTable MountTableFunc
 }
 
