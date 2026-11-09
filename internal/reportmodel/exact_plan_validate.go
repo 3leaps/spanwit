@@ -61,6 +61,9 @@ func ValidateStandaloneExactPlan(ep *ExactPlan) error {
 		if err := requireFilterField(ec.Path, "effective_max_age", ec.EffectiveMaxAge); err != nil {
 			return err
 		}
+		if err := validateExactCandidateSize(ec); err != nil {
+			return err
+		}
 		if err := validateExactCandidateScope(ec, ep.ReclaimScope); err != nil {
 			return err
 		}
@@ -70,6 +73,26 @@ func ValidateStandaloneExactPlan(ep *ExactPlan) error {
 		if !pathWithinRoot(ec.Path, ep.AnalysisRoot) {
 			return fmt.Errorf("exact_plan candidate %s is outside analysis_root %s", ec.Path, ep.AnalysisRoot)
 		}
+	}
+	return nil
+}
+
+// validateExactCandidateSize checks the size basis carrier. An allocated
+// headline must carry its logical sum: replay compares both, and a missing
+// one would switch off the axis that sees appends within the last block.
+// Absent size_basis is a legacy apparent carrier.
+func validateExactCandidateSize(ec ExactCandidate) error {
+	switch ec.SizeBasis {
+	case "", "apparent":
+	case "allocated":
+		if ec.LogicalBytes == nil {
+			return fmt.Errorf("exact_plan candidate %s: size_basis allocated requires logical_bytes", ec.Path)
+		}
+	default:
+		return fmt.Errorf("exact_plan candidate %s: invalid size_basis %q (want allocated|apparent)", ec.Path, ec.SizeBasis)
+	}
+	if ec.LogicalBytes != nil && *ec.LogicalBytes < 0 {
+		return fmt.Errorf("exact_plan candidate %s: logical_bytes must not be negative", ec.Path)
 	}
 	return nil
 }

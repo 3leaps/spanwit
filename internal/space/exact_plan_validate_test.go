@@ -136,3 +136,44 @@ func TestCargoPlacement_ExactPlanCargoOnlyVsMixedVerified(t *testing.T) {
 		t.Fatalf("round-trip path set: %#v", parsed.Candidates)
 	}
 }
+
+// The size-basis carrier is checked before any walk: an allocated headline
+// without its logical sum, an unknown basis, or a negative logical sum is
+// refused; legacy (absent) and complete allocated carriers load.
+func TestParseAndValidateExactPlanJSON_SizeBasis(t *testing.T) {
+	logical := int64(4096)
+	negative := int64(-1)
+	for _, tc := range []struct {
+		name    string
+		basis   string
+		logical *int64
+		wantErr string
+	}{
+		{"legacy absent", "", nil, ""},
+		{"apparent", engine.SizeBasisApparent, &logical, ""},
+		{"allocated with logical", engine.SizeBasisAllocated, &logical, ""},
+		{"allocated without logical", engine.SizeBasisAllocated, nil, "requires logical_bytes"},
+		{"unknown basis", "blocks", &logical, "invalid size_basis"},
+		{"negative logical", engine.SizeBasisApparent, &negative, "must not be negative"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ep := validExactPlanFixture(t, "/tmp/analysis/crate/target")
+			ep.Candidates[0].SizeBasis = tc.basis
+			ep.Candidates[0].LogicalBytes = tc.logical
+			raw, err := json.Marshal(ep)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = ParseAndValidateExactPlanJSON(raw)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("want ok, got %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("want %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}

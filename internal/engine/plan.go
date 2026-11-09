@@ -68,6 +68,8 @@ type EffectiveFilters struct {
 type PrunePlan struct {
 	Candidates []PruneCandidate
 	TotalSize  int64
+	// SizeBasis is the basis every candidate's Size and TotalSize are on.
+	SizeBasis string
 	// SizeIncomplete is true when any candidate was sized under a depth bound
 	// that stopped descent (totals are then lower bounds, not exact reclaim).
 	SizeIncomplete   bool
@@ -83,10 +85,23 @@ type PrunePlan struct {
 
 type PruneCandidate struct {
 	Path string
+	// Size is the headline figure on SizeBasis.
 	Size int64
-	// SizeIncomplete is true when Size was measured with a depth bound that
-	// prevented a full-tree walk under Path.
+	// SizeIncomplete is true when Size is a lower bound: a depth bound
+	// stopped the walk, or (allocated basis) an allocation was unreadable.
 	SizeIncomplete bool
+	// SizeBasis is the basis Size is on: allocated or apparent. One plan
+	// never mixes bases.
+	SizeBasis string
+	// LogicalBytes is the apparent (st_size) sum; a lower bound when
+	// LogicalIncomplete is true.
+	LogicalBytes      int64
+	LogicalIncomplete bool
+	// AllocatedBytes is the allocated (st_blocks) sum; a lower bound when
+	// AllocatedIncomplete is true, and always incomplete on a build that
+	// cannot read allocation.
+	AllocatedBytes      int64
+	AllocatedIncomplete bool
 	// State is CandidateStatePrunable or CandidateStateWithheld.
 	State string
 	// WithheldReason is set only when State is CandidateStateWithheld.
@@ -141,6 +156,8 @@ type PlanOptions struct {
 	SortMode string
 	// ReclaimScope is ReclaimScopeWhole (default) or ReclaimScopeIncremental.
 	ReclaimScope string
+	// SizeBasis is "" (this build's default), allocated or apparent.
+	SizeBasis string
 }
 
 // WithSizeMaxDepth returns PlanOptions that bound candidate sizing depth.
@@ -158,6 +175,11 @@ func WithReclaimScope(scope string) PlanOptions {
 	return PlanOptions{ReclaimScope: scope}
 }
 
+// WithSizeBasis selects the headline size basis (allocated|apparent).
+func WithSizeBasis(basis string) PlanOptions {
+	return PlanOptions{SizeBasis: basis}
+}
+
 // MergePlanOptions folds option values left-to-right (later wins when set).
 func MergePlanOptions(opts ...PlanOptions) PlanOptions {
 	var out PlanOptions
@@ -171,6 +193,9 @@ func MergePlanOptions(opts ...PlanOptions) PlanOptions {
 		}
 		if o.ReclaimScope != "" {
 			out.ReclaimScope = o.ReclaimScope
+		}
+		if o.SizeBasis != "" {
+			out.SizeBasis = o.SizeBasis
 		}
 	}
 	return out
@@ -216,6 +241,11 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 	if reclaimScope != ReclaimScopeWhole && reclaimScope != ReclaimScopeIncremental {
 		return plan, fmt.Errorf("invalid reclaim scope %q (want whole|incremental)", reclaimScope)
 	}
+	policy, err := resolveSizePolicy(merged.SizeBasis)
+	if err != nil {
+		return plan, err
+	}
+	plan.SizeBasis = policy.headline
 	signatures := config.MergeSignatureCatalogs(config.BuiltInSignatures(), cfg.Signatures)
 	var jobs []CandidateJob
 
@@ -441,7 +471,7 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 	}
 
 	plan.EffectiveFilters = aggregateEffectiveFilters(jobs, cfg.Defaults)
-	candidates, warnings := sizeCandidateJobs(ctx, jobs, sizeMaxDepth)
+	candidates, warnings := sizeCandidateJobs(ctx, jobs, sizeMaxDepth, policy)
 	plan.Candidates = append(plan.Candidates, candidates...)
 	plan.Warnings = append(plan.Warnings, warnings...)
 	// Authorize-narrow: when domains.enabled is explicitly configured, withhold
@@ -724,7 +754,7 @@ func isWithinDir(dir string, candidate string) bool {
 	return true
 }
 
-func sizeCandidateJobs(ctx context.Context, jobs []CandidateJob, sizeMaxDepth int) ([]PruneCandidate, []error) {
+func sizeCandidateJobs(ctx context.Context, jobs []CandidateJob, sizeMaxDepth int, policy sizePolicy) ([]PruneCandidate, []error) {
 	if len(jobs) == 0 {
 		return nil, nil
 	}
@@ -769,6 +799,9 @@ func sizeCandidateJobs(ctx context.Context, jobs []CandidateJob, sizeMaxDepth in
 						candidates = append(candidates, PruneCandidate{
 							Path:                  job.Path,
 							SizeIncomplete:        true,
+							SizeBasis:             policy.headline,
+							LogicalIncomplete:     true,
+							AllocatedIncomplete:   true,
 							State:                 job.State,
 							WithheldReason:        job.WithheldReason,
 							Pattern:               job.Pattern,
@@ -796,9 +829,12 @@ func sizeCandidateJobs(ctx context.Context, jobs []CandidateJob, sizeMaxDepth in
 					// or safety reason if already withheld.
 					// Complete below floor → min_size (excluded). Incomplete lower
 					// bound below floor → indeterminate (threshold undecidable).
-					if sized.Bytes < job.MinSize && state != CandidateStateWithheld {
+					// The floor is decided on the gate basis, so a replay
+					// agrees with the plan the operator reviewed.
+					gateBytes, gateIncomplete := onBasis(sized, policy.gate)
+					if gateBytes < job.MinSize && state != CandidateStateWithheld {
 						state = CandidateStateWithheld
-						if sized.Incomplete {
+						if gateIncomplete {
 							withheldReason = WithheldReasonIndeterminate
 						} else {
 							withheldReason = WithheldReasonMinSize
@@ -818,10 +854,17 @@ func sizeCandidateJobs(ctx context.Context, jobs []CandidateJob, sizeMaxDepth in
 					if scope == "" {
 						scope = ReclaimScopeWhole
 					}
+					headBytes, headIncomplete := onBasis(sized, policy.headline)
+					allocBytes, allocIncomplete := onBasis(sized, SizeBasisAllocated)
 					candidates = append(candidates, PruneCandidate{
 						Path:                  job.Path,
-						Size:                  sized.Bytes,
-						SizeIncomplete:        sized.Incomplete,
+						Size:                  headBytes,
+						SizeIncomplete:        headIncomplete,
+						SizeBasis:             policy.headline,
+						LogicalBytes:          sized.Bytes,
+						LogicalIncomplete:     sized.Incomplete,
+						AllocatedBytes:        allocBytes,
+						AllocatedIncomplete:   allocIncomplete,
 						State:                 state,
 						WithheldReason:        withheldReason,
 						Pattern:               job.Pattern,

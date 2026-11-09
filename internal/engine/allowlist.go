@@ -33,6 +33,11 @@ func PlanFromAllowlist(ctx context.Context, paths []string, opts ...PlanOptions)
 	}
 	// Allowlist is whole-path revalidation only; incremental expansion requires
 	// config discovery or an exact-plan carrier.
+	policy, err := resolveSizePolicy(merged.SizeBasis)
+	if err != nil {
+		return plan, err
+	}
+	plan.SizeBasis = policy.headline
 	if merged.ReclaimScope != "" && merged.ReclaimScope != ReclaimScopeWhole {
 		return plan, fmt.Errorf("allowlist does not support reclaim_scope=%s (use config discovery or --from-space-report)", merged.ReclaimScope)
 	}
@@ -122,7 +127,7 @@ func PlanFromAllowlist(ctx context.Context, paths []string, opts ...PlanOptions)
 	}
 
 	plan.EffectiveFilters = aggregateEffectiveFilters(jobs, config.Defaults{})
-	candidates, warnings := sizeCandidateJobs(ctx, jobs, sizeMaxDepth)
+	candidates, warnings := sizeCandidateJobs(ctx, jobs, sizeMaxDepth, policy)
 	plan.Candidates = candidates
 	plan.Warnings = append(plan.Warnings, warnings...)
 	for _, c := range plan.Candidates {

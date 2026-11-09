@@ -55,6 +55,8 @@ type pruneEffectiveFilters struct {
 // discovered match (prunable + withheld); the reclaimable amount is
 // PrunableBytes. This avoids labelling withheld bytes as "reclaimable".
 type prunePlanSummary struct {
+	// SizeBasis is the basis every byte figure in the plan is on.
+	SizeBasis          string `json:"size_basis,omitempty"`
 	Candidates         int    `json:"candidates"`
 	TotalBytes         int64  `json:"total_bytes"`
 	TotalHuman         string `json:"total_human"`
@@ -71,6 +73,8 @@ type pruneCandidateOutput struct {
 	Path               string            `json:"path"`
 	SizeBytes          int64             `json:"size_bytes"`
 	SizeHuman          string            `json:"size_human"`
+	SizeBasis          string            `json:"size_basis,omitempty"`
+	LogicalBytes       *int64            `json:"logical_bytes,omitempty"`
 	State              string            `json:"state"`
 	WithheldReason     string            `json:"withheld_reason,omitempty"`
 	EffectiveMinSize   string            `json:"effective_min_size"`
@@ -105,7 +109,11 @@ type pruneFreshnessOutput struct {
 
 // pruneDriftOutput compares a row with the plan baseline it was reviewed as.
 type pruneDriftOutput struct {
-	Size           string `json:"size"`
+	Size string `json:"size"`
+	// SizeLogical / SizeAllocated are the per-axis outcomes behind Size;
+	// omitted when the plan baseline does not carry that axis.
+	SizeLogical    string `json:"size_logical,omitempty"`
+	SizeAllocated  string `json:"size_allocated,omitempty"`
 	SizeDeltaBytes *int64 `json:"size_delta_bytes,omitempty"`
 	Activity       string `json:"activity"`
 }
@@ -149,6 +157,7 @@ func newPrunePlanOutput(plan PrunePlan, loadedPath string, execute bool, now tim
 			MaxAge:  effMaxAge,
 		},
 		Summary: prunePlanSummary{
+			SizeBasis:  plan.SizeBasis,
 			Candidates: len(plan.Candidates),
 			TotalBytes: plan.TotalSize,
 			TotalHuman: humanSize(plan.TotalSize),
@@ -190,6 +199,8 @@ func newPrunePlanOutput(plan PrunePlan, loadedPath string, execute bool, now tim
 			Path:               candidate.Path,
 			SizeBytes:          candidate.Size,
 			SizeHuman:          humanSize(candidate.Size),
+			SizeBasis:          candidate.SizeBasis,
+			LogicalBytes:       int64Ptr(candidate.LogicalBytes),
 			State:              candidate.State,
 			WithheldReason:     candidate.WithheldReason,
 			EffectiveMinSize:   displayFilter(candidate.EffectiveMinSize),
@@ -216,7 +227,10 @@ func newPrunePlanOutput(plan PrunePlan, loadedPath string, execute bool, now tim
 			po.LastActivityAt = candidate.LastActivityAt.UTC().Format(time.RFC3339)
 		}
 		if d := candidate.Drift; d != nil {
-			po.Drift = &pruneDriftOutput{Size: d.Size, SizeDeltaBytes: d.SizeDeltaBytes, Activity: d.Activity}
+			po.Drift = &pruneDriftOutput{
+				Size: d.Size, SizeLogical: d.SizeLogical, SizeAllocated: d.SizeAllocated,
+				SizeDeltaBytes: d.SizeDeltaBytes, Activity: d.Activity,
+			}
 		}
 		out.Candidates = append(out.Candidates, po)
 	}
@@ -289,7 +303,7 @@ func writePlanText(w io.Writer, plan PrunePlan) {
 		_, _ = fmt.Fprintln(w, rule)
 		for _, candidate := range prunable {
 			_, _ = fmt.Fprintf(w, "%-12s  %-36s  %-24s  %s  %s%s\n",
-				humanSize(candidate.Size), candidateLabel(candidate), formatActivity(candidate, now), candidate.Path, formatCandidateFilters(candidate), formatDrift(candidate.Drift))
+				humanSize(candidate.Size), candidateLabel(candidate), formatActivity(candidate, now), candidate.Path+candidateLogicalNote(candidate), formatCandidateFilters(candidate), formatDrift(candidate.Drift))
 		}
 		_, _ = fmt.Fprintln(w, rule)
 		_, _ = fmt.Fprintf(w, "Total reclaimable: %s\n", humanSize(prunableBytes))
@@ -302,7 +316,7 @@ func writePlanText(w io.Writer, plan PrunePlan) {
 		_, _ = fmt.Fprintln(w, rule)
 		for _, candidate := range withheld {
 			_, _ = fmt.Fprintf(w, "%-12s  %-36s  %-24s  %s  [withheld: %s]  %s%s\n",
-				humanSize(candidate.Size), candidateLabel(candidate), formatActivity(candidate, now), candidate.Path, candidate.WithheldReason, formatCandidateFilters(candidate), formatDrift(candidate.Drift))
+				humanSize(candidate.Size), candidateLabel(candidate), formatActivity(candidate, now), candidate.Path+candidateLogicalNote(candidate), candidate.WithheldReason, formatCandidateFilters(candidate), formatDrift(candidate.Drift))
 		}
 		_, _ = fmt.Fprintln(w, rule)
 		_, _ = fmt.Fprintf(w, "Withheld total: %s\n", humanSize(withheldBytes))
@@ -447,6 +461,17 @@ func writePrunePlanJSON(w io.Writer, plan PrunePlan, loadedPath string, execute 
 	}
 	_, err = fmt.Fprintf(w, "%s\n", payload)
 	return err
+}
+
+// candidateLogicalNote appends the logical figure after the path when it
+// sits more than 10% from the allocated headline.
+func candidateLogicalNote(c PruneCandidate) string {
+	logical := c.LogicalBytes
+	return engine.LogicalNote(c.SizeBasis, c.Size, &logical, c.SizeIncomplete)
+}
+
+func int64Ptr(v int64) *int64 {
+	return &v
 }
 
 func boolPtr(v bool) *bool {

@@ -9,6 +9,8 @@ import (
 )
 
 func TestAnalyze_OnPartialBeforeVerified(t *testing.T) {
+	// Home caches are walked; keep them off the real home directory.
+	t.Setenv("HOME", t.TempDir())
 	tmp := t.TempDir()
 	writeFile(t, filepath.Join(tmp, "app", "Cargo.toml"), 32)
 	writeFile(t, filepath.Join(tmp, "app", "target", "debug", "a"), 2048)

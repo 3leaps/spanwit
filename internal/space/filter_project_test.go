@@ -13,6 +13,8 @@ import (
 )
 
 func TestAnalyze_ClassFilterPrunable_NoDiagnosticsInReport(t *testing.T) {
+	// Home caches are walked; keep them off the real home directory.
+	t.Setenv("HOME", t.TempDir())
 	tmp := t.TempDir()
 	writeFile(t, filepath.Join(tmp, "app", "Cargo.toml"), 32)
 	writeFile(t, filepath.Join(tmp, "app", "target", "debug", "a"), 4096)
@@ -77,6 +79,8 @@ func TestAnalyze_ClassFilterPrunable_NoDiagnosticsInReport(t *testing.T) {
 }
 
 func TestAnalyze_ClassDiagnosticOnly_NoPrunableHandoff(t *testing.T) {
+	// Home caches are walked; keep them off the real home directory.
+	t.Setenv("HOME", t.TempDir())
 	tmp := t.TempDir()
 	writeFile(t, filepath.Join(tmp, "app", "Cargo.toml"), 32)
 	writeFile(t, filepath.Join(tmp, "app", "target", "debug", "a"), 4096)
@@ -319,7 +323,7 @@ func TestAnalyze_TopPerActionSection_WithheldVisible(t *testing.T) {
 	// Three prunable cargo targets above min_size.
 	for _, name := range []string{"a", "b", "c"} {
 		writeFile(t, filepath.Join(tmp, name, "Cargo.toml"), 32)
-		writeFile(t, filepath.Join(tmp, name, "target", "debug", "x"), 4096)
+		writeFile(t, filepath.Join(tmp, name, "target", "debug", "x"), 128*1024)
 	}
 	// One withheld under min_size.
 	writeFile(t, filepath.Join(tmp, "tiny", "Cargo.toml"), 32)
@@ -327,7 +331,7 @@ func TestAnalyze_TopPerActionSection_WithheldVisible(t *testing.T) {
 
 	report, err := Analyze(context.Background(), Options{
 		Path:              tmp,
-		MinSize:           "1K",
+		MinSize:           "64K",
 		Top:               1,
 		SortMode:          "size",
 		IncludeHomeCaches: false,

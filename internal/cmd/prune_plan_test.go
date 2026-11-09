@@ -50,16 +50,26 @@ func TestBuildPrunePlan_UsesTargetsAndIgnores(t *testing.T) {
 	}
 	assertCandidate(t, plan.Candidates, filepath.Join(tmp, "old-rust", "target"))
 	assertCandidate(t, plan.Candidates, filepath.Join(tmp, "old-js", "node_modules"))
-	if plan.TotalSize != 3072 {
-		t.Fatalf("expected total size 3072, got %d", plan.TotalSize)
+	// TotalSize is on the plan's basis (allocated where st_blocks exists);
+	// the logical sums still add up to the fixture bytes.
+	var logical, headline int64
+	for _, c := range plan.Candidates {
+		logical += c.LogicalBytes
+		headline += c.Size
+	}
+	if logical != 3072 {
+		t.Fatalf("expected logical total 3072, got %d", logical)
+	}
+	if plan.TotalSize != headline {
+		t.Fatalf("TotalSize %d != sum of candidate sizes %d", plan.TotalSize, headline)
 	}
 }
 
 func TestBuildPrunePlan_RespectsThresholdsAndDepth(t *testing.T) {
 	tmp := t.TempDir()
 	writeFile(t, filepath.Join(tmp, "small", "target", "debug", "app.o"), 32)
-	writeFile(t, filepath.Join(tmp, "deep", "nested", "project", "target", "debug", "app.o"), 2048)
-	writeFile(t, filepath.Join(tmp, "recent", "target", "debug", "app.o"), 2048)
+	writeFile(t, filepath.Join(tmp, "deep", "nested", "project", "target", "debug", "app.o"), 128*1024)
+	writeFile(t, filepath.Join(tmp, "recent", "target", "debug", "app.o"), 128*1024)
 
 	old := time.Now().Add(-48 * time.Hour)
 	mustChtimes(t, filepath.Join(tmp, "small", "target"), old)
@@ -68,7 +78,7 @@ func TestBuildPrunePlan_RespectsThresholdsAndDepth(t *testing.T) {
 	cfg := &config.Config{
 		Version: 1,
 		Defaults: config.Defaults{
-			MinSize: "1K",
+			MinSize: "64K",
 			MinAge:  "24h",
 		},
 		Paths: []config.PathProfile{{
@@ -102,11 +112,11 @@ func TestBuildPrunePlan_RespectsThresholdsAndDepth(t *testing.T) {
 	if recent.WithheldReason != withheldReasonAge {
 		t.Fatalf("recent target: want reason %q, got %q", withheldReasonAge, recent.WithheldReason)
 	}
-	if plan.EffectiveFilters.MinSize != "1K" || plan.EffectiveFilters.MinAge != "24h" {
+	if plan.EffectiveFilters.MinSize != "64K" || plan.EffectiveFilters.MinAge != "24h" {
 		t.Fatalf("effective filters: got %#v", plan.EffectiveFilters)
 	}
 	for _, c := range plan.Candidates {
-		if c.EffectiveMinSize != "1K" || c.EffectiveMinAge != "24h" {
+		if c.EffectiveMinSize != "64K" || c.EffectiveMinAge != "24h" {
 			t.Fatalf("candidate filters: got min_size=%q min_age=%q", c.EffectiveMinSize, c.EffectiveMinAge)
 		}
 	}
@@ -161,15 +171,15 @@ func TestBuildPrunePlan_TargetOverrideMinSizeIsResolved(t *testing.T) {
 	writeFile(t, filepath.Join(tmp, "proj", "build", "out.bin"), 512)
 	mustChtimes(t, filepath.Join(tmp, "proj", "build"), time.Now().Add(-48*time.Hour))
 
-	// Global min_size none; target min_size 1K must withhold the small dir and
-	// surface effective_min_size=1K on the candidate and plan aggregate.
+	// Global min_size none; target min_size 64K must withhold the small dir and
+	// surface effective_min_size=64K on the candidate and plan aggregate.
 	cfg := &config.Config{
 		Version:  1,
 		Defaults: config.Defaults{},
 		Paths: []config.PathProfile{{
 			Path:     tmp,
 			MaxDepth: 4,
-			Targets:  []config.Target{{Pattern: "**/build", MinSize: "1K"}},
+			Targets:  []config.Target{{Pattern: "**/build", MinSize: "64K"}},
 		}},
 	}
 
@@ -184,11 +194,11 @@ func TestBuildPrunePlan_TargetOverrideMinSizeIsResolved(t *testing.T) {
 	if c.State != candidateStateWithheld || c.WithheldReason != withheldReasonMinSize {
 		t.Fatalf("expected withheld/min_size, got state=%q reason=%q", c.State, c.WithheldReason)
 	}
-	if c.EffectiveMinSize != "1K" {
-		t.Fatalf("candidate effective min_size: want 1K, got %q", c.EffectiveMinSize)
+	if c.EffectiveMinSize != "64K" {
+		t.Fatalf("candidate effective min_size: want 64K, got %q", c.EffectiveMinSize)
 	}
-	if plan.EffectiveFilters.MinSize != "1K" {
-		t.Fatalf("plan aggregate min_size: want 1K, got %q", plan.EffectiveFilters.MinSize)
+	if plan.EffectiveFilters.MinSize != "64K" {
+		t.Fatalf("plan aggregate min_size: want 64K, got %q", plan.EffectiveFilters.MinSize)
 	}
 }
 
@@ -267,7 +277,7 @@ func TestBuildPrunePlan_MinSizeWithheldIsVisible(t *testing.T) {
 
 	cfg := &config.Config{
 		Version:  1,
-		Defaults: config.Defaults{MinSize: "1K", MinAge: "24h"},
+		Defaults: config.Defaults{MinSize: "64K", MinAge: "24h"},
 		Paths: []config.PathProfile{{
 			Path:     tmp,
 			MaxDepth: 4,

@@ -130,8 +130,13 @@ cannot turn off:
   recorded. A newer descendant mtime than the report's `last_activity_at`
   withholds the row as `activity_after_plan`. Any change in a complete size,
   up or down, withholds it as `size_drift`; this catches copies that preserve
-  timestamps. When either side is incomplete the comparison is `unknown`,
-  which does not withhold by itself. The common unknown case is a tree deeper
+  timestamps. A report on the allocated basis carries both sums, and each is
+  compared on its own (`drift.size_allocated`, `drift.size_logical`): a change
+  in either is `size_drift`, so an append that stays inside the last block is
+  still caught. Reports written before size bases existed compare logical
+  bytes only. When either side of a sum is incomplete, or this host cannot
+  read allocated bytes, that comparison is `unknown`, which does not withhold
+  by itself. The common unknown case is a tree deeper
   than the sizing walk: only the age floor guards it, and `--min-age none`
   leaves it unguarded. Drift is reported on every row, including rows
   withheld for another reason, and totalled in the JSON `freshness` block. A
@@ -151,6 +156,27 @@ is not a lock held until deletion finishes.
 Replay takes its policy from the report, so `--config`/`-c` is refused in
 these modes. A `SPANWIT_CONFIG_PATH` set in the environment is noted on stderr
 and not used.
+
+**Size basis.** Every sized row in `space` and `prune` (hotspot, verified,
+name-shaped unverified, unknown, handoff and prune candidates) reports
+allocated bytes: `st_blocks` x 512 summed over regular files, which is what
+deleting the tree returns. A sparse VM disk image reads as the bytes it
+occupies, not its logical size. Each row carries `size_basis: allocated` and
+`logical_bytes` (the `st_size` sum, sharing the row's bound). Text shows the
+logical figure after the path only when it is more than 10% away from the
+allocated one. Where a build cannot read allocation (Windows), every row is
+`size_basis: apparent` instead; one report never mixes the two. Hard links are
+not deduplicated: each link counts its inode's blocks, so a tree full of hard
+links reads high.
+
+`min_size` is decided on the report's basis, at scan time and at replay, so a
+sparse tree between its allocated and logical sizes is withheld (or kept) the
+same way both times. Replay of an allocated report on a host that cannot read
+allocation reports its rows as apparent and treats `min_size` as undecidable
+(`indeterminate`). Replay refuses a plan whose rows carry different bases
+(across the primary and temp plans of one report too), and an allocated row
+that does not carry `logical_bytes`.
+Reports written before size bases existed replay on logical bytes.
 
 **Temp planes.** `temp_plane_coverage` appears only under warn/critical
 pressure. Each plane carries a canonical root, `size_status`
@@ -241,8 +267,8 @@ this window; deletion is **not** claimed to be race-free.
   `--backend auto|serial|parallel` control hotspot, unverified, and unknown
   observation. Discovery and sizing retain their depth bounds; critical pressure
   reduces discovery depth and skips unknown, but is not a total run deadline.
-  Observation sizes sum regular-file apparent bytes; symlinks are not followed
-  or counted and are disclosed as coverage gaps. Verified discovery, sizing, and
+  Observation sizes sum regular-file allocated bytes (see _Size basis_ above);
+  symlinks are not followed or counted and are disclosed as coverage gaps. Verified discovery, sizing, and
   prune handoff use their existing engine independently of these controls.
 - **Remote and stalled observation**: automatically selected catalog/discovered
   roots stay subject to remote/cloud exclusion **where the classifier recognizes

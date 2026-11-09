@@ -100,6 +100,8 @@ func BuildPruneHandoff(in HandoffInput) PruneHandoff {
 			SizeBytes:          e.SizeBytes,
 			SizeHuman:          e.SizeHuman,
 			SizeIncomplete:     e.SizeIncomplete,
+			SizeBasis:          e.SizeBasis,
+			LogicalBytes:       e.LogicalBytes,
 			ReclaimScope:       cp.ReclaimScope,
 			ParentPath:         cp.ParentPath,
 			LastActivityAt:     e.LastActivityAt,
@@ -267,6 +269,8 @@ func ExactPlanToEngine(p *ExactPlan) engine.ExactPlanInput {
 			Baseline: &engine.ExactBaseline{
 				SizeBytes:          c.SizeBytes,
 				SizeIncomplete:     c.SizeIncomplete,
+				SizeBasis:          c.SizeBasis,
+				LogicalBytes:       c.LogicalBytes,
 				LastActivityAt:     c.LastActivityAt,
 				ActivityBasis:      c.ActivityBasis,
 				ActivityIncomplete: c.ActivityIncomplete,

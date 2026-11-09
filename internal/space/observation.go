@@ -128,9 +128,20 @@ func (w *observationWalker) size(ctx context.Context, rows []Entry, depth int, m
 		if !ok || r.Observed == nil || !*r.Observed {
 			continue
 		}
-		row.SizeBytes = r.MatchedApparentBytes
+		walkIncomplete := r.Lifecycle != inventory.LifecycleComplete || r.RemoteSkipCount > 0
+		// One basis per report, the same one the verified walk uses:
+		// allocated where st_blocks exists, so a sparse disk image reads as
+		// what it occupies. An unreadable allocation makes it a lower bound.
+		row.SizeBasis = engine.DefaultSizeBasis()
+		row.LogicalBytes = i64p(r.MatchedApparentBytes)
+		if row.SizeBasis == engine.SizeBasisAllocated {
+			row.SizeBytes = r.MatchedAllocatedBytes
+			row.SizeIncomplete = walkIncomplete || r.AllocatedUnmeasuredCount > 0
+		} else {
+			row.SizeBytes = r.MatchedApparentBytes
+			row.SizeIncomplete = walkIncomplete
+		}
 		row.SizeHuman = engine.HumanSize(row.SizeBytes)
-		row.SizeIncomplete = r.Lifecycle != inventory.LifecycleComplete || r.RemoteSkipCount > 0
 		if includeMeasuredSize(row.SizeBytes, row.SizeIncomplete, minSize) {
 			out = append(out, row)
 			emitted[row.Path] = true

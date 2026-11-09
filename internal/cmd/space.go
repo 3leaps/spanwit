@@ -431,7 +431,7 @@ func runSpace(identity *appidentity.Identity, stdout, stderr io.Writer, opts spa
 			} else {
 				for _, e := range u.Hotspots {
 					_, _ = fmt.Fprintf(stdout, "%-12s  %-8s  %-36s  %s\n",
-						boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), e.RebuildExpectation, e.Label, e.Path)
+						boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), e.RebuildExpectation, e.Label, e.Path+entryLogicalNote(e))
 				}
 			}
 			_, _ = fmt.Fprintln(stdout)
@@ -938,7 +938,7 @@ func writeSpaceText(w io.Writer, report space.Report, earlyTriageAlreadyPrinted 
 		} else {
 			for _, e := range report.Hotspots {
 				_, _ = fmt.Fprintf(w, "%-12s  %-8s  %-36s  %s\n",
-					boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), e.RebuildExpectation, e.Label, e.Path)
+					boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), e.RebuildExpectation, e.Label, e.Path+entryLogicalNote(e))
 			}
 		}
 		_, _ = fmt.Fprintln(w)
@@ -962,7 +962,7 @@ func writeSpaceText(w io.Writer, report space.Report, earlyTriageAlreadyPrinted 
 		}
 	} else {
 		for _, e := range u.Entries {
-			_, _ = fmt.Fprintf(w, "%-12s  %s\n", boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), e.Path)
+			_, _ = fmt.Fprintf(w, "%-12s  %s\n", boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), e.Path+entryLogicalNote(e))
 		}
 	}
 	_, _ = fmt.Fprintln(w)
@@ -978,7 +978,7 @@ func writeSpaceText(w io.Writer, report space.Report, earlyTriageAlreadyPrinted 
 		}
 	} else {
 		for _, e := range report.Unknown {
-			_, _ = fmt.Fprintf(w, "%-12s  %s\n", boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), e.Path)
+			_, _ = fmt.Fprintf(w, "%-12s  %s\n", boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), e.Path+entryLogicalNote(e))
 		}
 	}
 
@@ -1028,7 +1028,7 @@ func writeVerifiedLine(w io.Writer, e space.Entry) {
 	} else if e.ActivityIncomplete || e.ActivityBasis == "unknown" {
 		extra += "  activity=unknown"
 	}
-	_, _ = fmt.Fprintf(w, "%-12s  %-40s  %s\n", boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), extra, e.Path)
+	_, _ = fmt.Fprintf(w, "%-12s  %-40s  %s\n", boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), extra, e.Path+entryLogicalNote(e))
 }
 
 func emptySectionMsg(filtered bool) string {
@@ -1229,6 +1229,12 @@ func writeTempPlanesText(w io.Writer, cov *space.TempPlaneCoverage) {
 	_, _ = fmt.Fprintln(w)
 }
 
+// entryLogicalNote appends the logical figure after the path when it sits
+// more than 10% from the allocated headline.
+func entryLogicalNote(e space.Entry) string {
+	return engine.LogicalNote(e.SizeBasis, e.SizeBytes, e.LogicalBytes, e.SizeIncomplete)
+}
+
 // boundAwareSizeHuman renders incomplete measurements as lower bounds (e.g. ≥1.2G)
 // so human output never presents depth-bounded sizes as exact totals. Machine JSON
 // keeps size_human numeric + size_incomplete as the single incompleteness signal.
@@ -1276,7 +1282,7 @@ func writePruneHandoffText(w io.Writer, h *space.PruneHandoff) {
 			sig = e.Pattern
 		}
 		_, _ = fmt.Fprintf(w, "%-12s  prunable  %-36s  %s\n",
-			boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), sig, e.Path)
+			boundAwareSizeHuman(e.SizeHuman, e.SizeIncomplete), sig, e.Path+entryLogicalNote(e))
 	}
 	partial := ""
 	if h.SizeIncomplete {

@@ -50,8 +50,15 @@ const (
 // authenticated: a forged baseline can suppress drift withholding, but it
 // cannot lower any age floor.
 type ExactBaseline struct {
+	// SizeBytes is the planned headline on SizeBasis.
 	SizeBytes      int64
 	SizeIncomplete bool
+	// SizeBasis is allocated or apparent; empty is a legacy carrier, which
+	// was always apparent.
+	SizeBasis string
+	// LogicalBytes is the planned apparent sum carried beside an allocated
+	// headline (nil when not carried). It shares SizeIncomplete.
+	LogicalBytes *int64
 	// LastActivityAt is the carrier text verbatim (RFC3339 or RFC3339Nano).
 	// Its precision decides the comparison precision.
 	LastActivityAt     string
@@ -63,11 +70,92 @@ type ExactBaseline struct {
 // the carried baseline. It is set on every exact-plan candidate, including
 // rows withheld for another reason.
 type CandidateDrift struct {
+	// Size is changed when any compared axis changed, unchanged when every
+	// axis the baseline carries compared unchanged, and unknown otherwise.
 	Size string
-	// SizeDeltaBytes is remeasured minus planned bytes, set only when both
-	// sides are complete (never a fabricated delta).
+	// SizeLogical and SizeAllocated are the per-axis outcomes. Empty means
+	// the baseline does not carry that axis (a legacy carrier has no
+	// allocated axis).
+	SizeLogical   string
+	SizeAllocated string
+	// SizeDeltaBytes is remeasured minus planned bytes on the row's
+	// size basis, set only when both sides of that axis are complete
+	// (never a fabricated delta).
 	SizeDeltaBytes *int64
 	Activity       string
+}
+
+// sizeAxis is one measured sum and whether it is complete.
+type sizeAxis struct {
+	present  bool
+	bytes    int64
+	complete bool
+}
+
+// baselineAxes splits a carried baseline into its logical and allocated
+// sums. A legacy or apparent carrier has only the logical axis. An
+// allocated carrier always has both: spanwit writes logical_bytes beside
+// every allocated headline, so a missing one is carried as unknown (never
+// absent), and the row can no longer compare unchanged. Dropping one field
+// must not switch off the axis that catches sub-block appends.
+func baselineAxes(b *ExactBaseline) (logical, allocated sizeAxis) {
+	if b.SizeBasis == SizeBasisAllocated {
+		allocated = sizeAxis{present: true, bytes: b.SizeBytes, complete: !b.SizeIncomplete}
+		logical = sizeAxis{present: true, complete: false}
+		if b.LogicalBytes != nil {
+			logical = sizeAxis{present: true, bytes: *b.LogicalBytes, complete: !b.SizeIncomplete}
+		}
+		return logical, allocated
+	}
+	return sizeAxis{present: true, bytes: b.SizeBytes, complete: !b.SizeIncomplete}, sizeAxis{}
+}
+
+// compareAxis returns "" when the baseline lacks the axis, unknown when
+// either side is a lower bound, else changed or unchanged (zero tolerance).
+func compareAxis(planned sizeAxis, bytes int64, complete bool) (string, *int64) {
+	if !planned.present {
+		return "", nil
+	}
+	if !planned.complete || !complete {
+		return DriftUnknown, nil
+	}
+	delta := bytes - planned.bytes
+	if delta != 0 {
+		return DriftChanged, &delta
+	}
+	return DriftUnchanged, &delta
+}
+
+// CheckExactPlanSizeBasis refuses entries that do not share one size basis.
+// Callers that replay several exact plans from one report pass the union of
+// their entries, so the basis is checked across the report, not per plan.
+func CheckExactPlanSizeBasis(entries []ExactEntry) error {
+	_, err := exactPlanSizeBasis(entries)
+	return err
+}
+
+// exactPlanSizeBasis returns the one basis the carried baselines were
+// reviewed on: apparent for legacy carriers, this build's default when no
+// entry carries a baseline. Mixed bases are refused.
+func exactPlanSizeBasis(entries []ExactEntry) (string, error) {
+	basis := ""
+	for _, e := range entries {
+		if e.Baseline == nil {
+			continue
+		}
+		b := e.Baseline.SizeBasis
+		if b == "" {
+			b = SizeBasisApparent
+		}
+		if b != SizeBasisApparent && b != SizeBasisAllocated {
+			return "", fmt.Errorf("exact plan: invalid size_basis %q (want allocated|apparent)", e.Baseline.SizeBasis)
+		}
+		if basis != "" && basis != b {
+			return "", fmt.Errorf("exact plan mixes size bases (%s and %s); regenerate it with spanwit space", basis, b)
+		}
+		basis = b
+	}
+	return basis, nil
 }
 
 // Freshness records the execute-time age policy and drift totals for an
@@ -158,17 +246,40 @@ func compareDrift(c PruneCandidate, b *ExactBaseline) CandidateDrift {
 	if b == nil {
 		return d
 	}
-	if !b.SizeIncomplete && !c.SizeIncomplete {
-		delta := c.Size - b.SizeBytes
-		d.SizeDeltaBytes = &delta
-		if delta != 0 {
-			d.Size = DriftChanged
-		} else {
-			d.Size = DriftUnchanged
-		}
+	plannedLogical, plannedAllocated := baselineAxes(b)
+	var logicalDelta, allocatedDelta *int64
+	d.SizeLogical, logicalDelta = compareAxis(plannedLogical, c.LogicalBytes, !c.LogicalIncomplete)
+	d.SizeAllocated, allocatedDelta = compareAxis(plannedAllocated, c.AllocatedBytes, !c.AllocatedIncomplete)
+	if c.SizeBasis == SizeBasisAllocated {
+		d.SizeDeltaBytes = allocatedDelta
+	} else {
+		d.SizeDeltaBytes = logicalDelta
 	}
+	d.Size = combineAxes(d.SizeLogical, d.SizeAllocated)
 	d.Activity = compareActivity(c, b)
 	return d
+}
+
+// combineAxes: changed if any axis changed; unchanged only when every
+// carried axis compared unchanged; unknown otherwise. An axis that could
+// not be measured is never size drift by itself.
+func combineAxes(axes ...string) string {
+	carried, unchanged := 0, 0
+	for _, a := range axes {
+		switch a {
+		case DriftChanged:
+			return DriftChanged
+		case DriftUnchanged:
+			unchanged++
+			carried++
+		case DriftUnknown:
+			carried++
+		}
+	}
+	if carried > 0 && unchanged == carried {
+		return DriftUnchanged
+	}
+	return DriftUnknown
 }
 
 // compareActivity compares at the precision the carrier retained. Legacy

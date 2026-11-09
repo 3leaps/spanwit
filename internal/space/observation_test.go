@@ -37,8 +37,18 @@ func TestObservationSizingPreservesDepthBoundsAndEmptyZero(t *testing.T) {
 			}
 			for _, row := range rows {
 				legacy, err := engine.DirSizeContext(context.Background(), row.Path, depth)
-				if err != nil || row.SizeBytes != legacy.Bytes || row.SizeIncomplete != legacy.Incomplete {
-					t.Fatalf("depth semantics changed: depth=%d row=%+v legacy=%+v err=%v", depth, row, legacy, err)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Observation and the engine walk agree on both sums and on
+				// the bound for the report's basis.
+				wantBytes, wantIncomplete := legacy.Bytes, legacy.Incomplete
+				if row.SizeBasis == engine.SizeBasisAllocated {
+					wantBytes, wantIncomplete = legacy.AllocatedBytes, legacy.Incomplete || legacy.AllocatedUnmeasured
+				}
+				if row.SizeBasis != engine.DefaultSizeBasis() || row.SizeBytes != wantBytes || row.SizeIncomplete != wantIncomplete ||
+					row.LogicalBytes == nil || *row.LogicalBytes != legacy.Bytes {
+					t.Fatalf("depth semantics changed: depth=%d row=%+v legacy=%+v", depth, row, legacy)
 				}
 				if row.Path == empty && (row.SizeBytes != 0 || row.SizeIncomplete) {
 					t.Fatalf("measured empty is not exact zero: %+v", row)
@@ -54,7 +64,8 @@ func TestObservationAdmissionGapsDoNotFabricateZerosOrLoseSiblings(t *testing.T)
 	writeFile(t, filepath.Join(good, "f"), 17)
 	coverage := newObservationCoverage()
 	rows := newObservationWalker(Options{}).size(context.Background(), []Entry{{Path: missing}, {Path: good}}, -1, 0, coverage)
-	if len(rows) != 1 || rows[0].Path != good || rows[0].SizeBytes != 17 || rows[0].SizeIncomplete {
+	// Both sums against the engine walk are pinned by the depth-bounds test.
+	if len(rows) != 1 || rows[0].Path != good || rows[0].LogicalBytes == nil || *rows[0].LogicalBytes != 17 || rows[0].SizeIncomplete {
 		t.Fatalf("bad accounting: %+v", rows)
 	}
 	warnings := coverage.warnings("test")
@@ -258,7 +269,57 @@ func TestObservationWalkerOptionsReachInventory(t *testing.T) {
 		IncludeRemote: true, StallTimeout: -1, MutationContract: inventory.MutationContractReadOnly,
 		OnStall: func(inventory.StallAlert) { alerts++ }})
 	rows := walker.size(context.Background(), []Entry{{Path: root}}, 2, 0, newObservationCoverage())
-	if calls != 1 || alerts != 1 || len(rows) != 1 || rows[0].SizeBytes != 17 {
+	if calls != 1 || alerts != 1 || len(rows) != 1 || rows[0].LogicalBytes == nil || *rows[0].LogicalBytes != 17 {
 		t.Fatalf("vacuous wiring: calls=%d alerts=%d rows=%+v", calls, alerts, rows)
+	}
+}
+
+// unmeasuredAllocationSink reports every root as if no file's allocation
+// could be read (a filesystem without st_blocks): allocated sum zero, one
+// unmeasured file. Logical bytes and lifecycle are left as walked.
+type unmeasuredAllocationSink struct{ inventory.Sink }
+
+func (s unmeasuredAllocationSink) Summary(summary inventory.Summary) error {
+	for i := range summary.Roots {
+		summary.Roots[i].MatchedAllocatedBytes = 0
+		summary.Roots[i].AllocatedUnmeasuredCount++
+	}
+	return s.Sink.Summary(summary)
+}
+
+// An unreadable allocation is an unknown zero (a lower bound), never an exact
+// zero: under a positive floor it stays visible as a lower bound, while a
+// measured empty root is excluded as exactly zero.
+func TestObservationUnmeasuredAllocationIsLowerBoundNotZero(t *testing.T) {
+	if !engine.AllocatedSizesSupported {
+		t.Skip("apparent-only build: allocation is never the headline")
+	}
+	empty := t.TempDir()
+	if rows := newObservationWalker(Options{}).size(context.Background(), []Entry{{Path: empty}}, -1, 1, newObservationCoverage()); len(rows) != 0 {
+		t.Fatalf("measured exact zero must be excluded under a positive floor: %+v", rows)
+	}
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "f"), 17)
+	orig := observationInventoryRun
+	t.Cleanup(func() { observationInventoryRun = orig })
+	observationInventoryRun = func(ctx context.Context, opts inventory.Options, sink inventory.Sink) (inventory.Summary, error) {
+		return orig(ctx, opts, unmeasuredAllocationSink{Sink: sink})
+	}
+	rows := newObservationWalker(Options{}).size(context.Background(), []Entry{{Path: root}}, -1, 1, newObservationCoverage())
+	if len(rows) != 1 {
+		t.Fatalf("unknown zero must survive a positive floor as a lower bound: %+v", rows)
+	}
+	r := rows[0]
+	if r.SizeBasis != engine.SizeBasisAllocated || r.SizeBytes != 0 || !r.SizeIncomplete ||
+		r.LogicalBytes == nil || *r.LogicalBytes != 17 {
+		t.Fatalf("row=%+v", r)
+	}
+	raw, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(raw, []byte(`"size_bound":"lower"`)) {
+		t.Fatalf("json row must carry a lower bound: %s", raw)
 	}
 }

@@ -440,6 +440,8 @@ func TestLoadSpaceReportJSON_RejectsInjectedHotspotUnderPrunableFilter(t *testin
 }
 
 func TestLoadSpaceReportJSON_RejectsPositivePrunableAggregateUnderDiagnosticFilter(t *testing.T) {
+	// Home caches are walked; keep them off the real home directory.
+	t.Setenv("HOME", t.TempDir())
 	// Entarch repro: classes=["diagnostic-only"] with empty handoff but positive
 	// verified prunable aggregates — contradictory carrier must fail closed.
 	tmp := t.TempDir()

@@ -357,6 +357,8 @@ func Analyze(ctx context.Context, opts Options) (Report, error) {
 			SizeBytes:          c.Size,
 			SizeHuman:          engine.HumanSize(c.Size),
 			SizeIncomplete:     c.SizeIncomplete,
+			SizeBasis:          c.SizeBasis,
+			LogicalBytes:       i64p(c.LogicalBytes),
 			State:              c.State,
 			WithheldReason:     c.WithheldReason,
 			Signature:          c.Signature,
