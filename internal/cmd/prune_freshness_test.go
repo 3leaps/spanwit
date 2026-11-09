@@ -118,7 +118,13 @@ func TestFreshnessE2E_WriteAfterPlanWithheld(t *testing.T) {
 	}
 	var out bytes.Buffer
 	writePlanText(&out, plan)
-	for _, want := range []string{"Freshness: handoff floor 1h", "1 activity_after_plan, 1 size_drift", "[drift size=changed(+1.0K) activity=changed]"} {
+	// The delta is on the plan's size basis: on the allocated basis a 1K
+	// write reads as the blocks it took, which depends on the filesystem.
+	if c.Drift.SizeDeltaBytes == nil || *c.Drift.SizeDeltaBytes < 1024 {
+		t.Fatalf("delta=%v, want at least the 1K written", c.Drift.SizeDeltaBytes)
+	}
+	delta := "[drift size=changed(+" + humanSize(*c.Drift.SizeDeltaBytes) + ") activity=changed]"
+	for _, want := range []string{"Freshness: handoff floor 1h", "1 activity_after_plan, 1 size_drift", delta} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("text missing %q:\n%s", want, out.String())
 		}

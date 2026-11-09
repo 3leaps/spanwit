@@ -380,8 +380,9 @@
     },
     "size_basis": {
       "type": "string",
-      "description": "Size basis for temp planes.",
+      "description": "Basis of a byte figure: allocated (st_blocks; what deletion returns) or apparent (st_size). Temp planes are always apparent.",
       "enum": [
+        "allocated",
         "apparent"
       ]
     },

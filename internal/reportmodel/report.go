@@ -173,7 +173,14 @@ type Entry struct {
 	// observation candidates have no Entry; they appear in coverage warnings.
 	SizeIncomplete bool `json:"size_incomplete,omitempty"`
 	// SizeBound restates SizeIncomplete as a byte bound; derived on marshal.
-	SizeBound          string   `json:"size_bound,omitempty"`
+	SizeBound string `json:"size_bound,omitempty"`
+	// SizeBasis is the basis SizeBytes is on: allocated (st_blocks, what
+	// deletion returns) or apparent (st_size, only where allocation cannot
+	// be read). One report never mixes bases.
+	SizeBasis string `json:"size_basis,omitempty"`
+	// LogicalBytes is the apparent (st_size) sum for the same row; it shares
+	// SizeIncomplete. Equal to SizeBytes on an apparent row.
+	LogicalBytes       *int64   `json:"logical_bytes,omitempty"`
 	State              string   `json:"state"`
 	WithheldReason     string   `json:"withheld_reason,omitempty"`
 	Signature          string   `json:"signature,omitempty"`

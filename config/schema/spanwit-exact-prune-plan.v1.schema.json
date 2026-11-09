@@ -111,6 +111,19 @@
           ],
           "description": "Bound of the size figure: exact, or lower when size_incomplete is true (the figure is an observed minimum). Optional in the schema so reports written before bounds existed still load; every report spanwit emits carries it."
         },
+        "size_basis": {
+          "type": "string",
+          "enum": [
+            "allocated",
+            "apparent"
+          ],
+          "description": "Basis of size_bytes: allocated (st_blocks; what deletion returns) or apparent (st_size; only where allocation cannot be read). One document never mixes bases."
+        },
+        "logical_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Apparent (st_size) sum for the same row; shares size_incomplete. Equal to size_bytes on an apparent row."
+        },
         "reclaim_scope": {
           "type": "string",
           "enum": [

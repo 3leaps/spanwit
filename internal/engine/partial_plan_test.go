@@ -378,7 +378,7 @@ func TestSizeCandidateJobs_DirSizeErrorOmitsCandidate(t *testing.T) {
 		EffectiveMaxAge:  FilterDisplayNone,
 		ReclaimScope:     ReclaimScopeWhole,
 	}}
-	cands, warnings := sizeCandidateJobs(context.Background(), jobs, -1)
+	cands, warnings := sizeCandidateJobs(context.Background(), jobs, -1, sizePolicy{headline: SizeBasisApparent, gate: SizeBasisApparent})
 	if len(cands) != 0 {
 		t.Fatalf("expected 0 candidates after DirSize error, got %+v", cands)
 	}

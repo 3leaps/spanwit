@@ -80,6 +80,19 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 		sortMode = SortSize
 	}
 
+	// One basis per replay: the basis the operator reviewed, from the
+	// carried baselines (never the caller's options). A plan that mixes
+	// bases has no single reviewed basis and fails closed.
+	basis, err := exactPlanSizeBasis(in.Entries)
+	if err != nil {
+		return plan, err
+	}
+	policy, err := resolveSizePolicy(basis)
+	if err != nil {
+		return plan, err
+	}
+	plan.SizeBasis = policy.headline
+
 	signatures := config.MergeSignatureCatalogs(config.BuiltInSignatures(), in.Signatures)
 	// Authorization boundary: the carried analysis_root. Validate the RAW carrier
 	// value as already absolute and clean — never expand/normalize it first, or a
@@ -336,7 +349,7 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 	}
 
 	plan.EffectiveFilters = aggregateEffectiveFilters(jobs, config.Defaults{})
-	candidates, warnings := sizeCandidateJobs(ctx, jobs, sizeMaxDepth)
+	candidates, warnings := sizeCandidateJobs(ctx, jobs, sizeMaxDepth, policy)
 	applyDrift(candidates, baselines, plan.Freshness)
 	if n := plan.Freshness.RequestedBelowFloor; n > 0 {
 		warnings = append(warnings, fmt.Errorf(

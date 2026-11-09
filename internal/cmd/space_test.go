@@ -1048,3 +1048,44 @@ func TestRunSpaceCompareContainerRuntimeRelief(t *testing.T) {
 		}
 	})
 }
+
+// Text keeps the allocated figure as the headline; the logical figure is
+// shown after the path only when it sits more than 10% away.
+func TestWriteSpaceText_LogicalShownOnlyWhenDivergent(t *testing.T) {
+	logical := func(n int64) *int64 { return &n }
+	var buf bytes.Buffer
+	report := space.Report{
+		Root:     "/tmp/root",
+		MinSize:  "none",
+		Top:      5,
+		MaxDepth: 2,
+		Pressure: space.Pressure{Level: "ok", TotalHuman: "1G", UsedHuman: "1G", AvailHuman: "0B"},
+		Hotspots: []space.Entry{
+			{
+				Path: "/tmp/sparse-disks", SizeBytes: 55 << 30, SizeHuman: "55.0G", State: "diagnostic-only",
+				Label: "vm", SizeBasis: "allocated", LogicalBytes: logical(125 << 30),
+			},
+			{
+				Path: "/tmp/dense-cache", SizeBytes: 100 << 20, SizeHuman: "100.0M", State: "diagnostic-only",
+				Label: "cache", SizeBasis: "allocated", LogicalBytes: logical(95 << 20),
+			},
+		},
+	}
+	writeSpaceText(&buf, report, false)
+	out := buf.String()
+	var sparse, dense string
+	for _, line := range strings.Split(out, "\n") {
+		switch {
+		case strings.Contains(line, "/tmp/sparse-disks"):
+			sparse = line
+		case strings.Contains(line, "/tmp/dense-cache"):
+			dense = line
+		}
+	}
+	if !strings.HasPrefix(sparse, "55.0G") || !strings.Contains(sparse, "/tmp/sparse-disks  (125.0G logical)") {
+		t.Fatalf("sparse row: %q", sparse)
+	}
+	if !strings.HasPrefix(dense, "100.0M") || strings.Contains(dense, "logical") {
+		t.Fatalf("dense row (5%% apart) should not show logical: %q", dense)
+	}
+}

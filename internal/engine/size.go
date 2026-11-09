@@ -15,8 +15,18 @@ import (
 // beneath the path: idle ranking reads them, and an effective min_age
 // withholds on them (they never admit a candidate on their own).
 type SizeResult struct {
+	// Bytes is the logical (apparent) sum of file sizes: st_size.
 	Bytes      int64
 	Incomplete bool // true if maxDepth stopped descent before the full tree
+	// AllocatedBytes is the sum of bytes allocated to the same files
+	// (st_blocks x 512). It is a lower bound when Incomplete is true, and
+	// meaningless when AllocatedUnmeasured is true. Hardlinks are not
+	// deduplicated: every link counts its inode's blocks.
+	AllocatedBytes int64
+	// AllocatedUnmeasured is true when at least one file's allocation could
+	// not be read (or the build cannot read allocation at all), so
+	// AllocatedBytes understates the tree by an unknown amount.
+	AllocatedUnmeasured bool
 	// NewestMtime is the newest mtime observed under path: every file and every
 	// nested directory, not path itself (zero if none).
 	// Symlink directories are not followed; encountering one marks activity incomplete.
@@ -49,6 +59,7 @@ func DirSize(path string) (int64, error) {
 // Symlink children are not followed; they stop descent and mark activity incomplete.
 func DirSizeContext(ctx context.Context, path string, maxDepth int) (SizeResult, error) {
 	var result SizeResult
+	result.AllocatedUnmeasured = !AllocatedSizesSupported
 	fullDepth := maxDepth < 0
 	err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -107,6 +118,11 @@ func DirSizeContext(ctx context.Context, path string, maxDepth int) (SizeResult,
 				return nil
 			}
 			result.Bytes += info.Size()
+			if a, ok := allocatedBytes(info); ok {
+				result.AllocatedBytes += a
+			} else {
+				result.AllocatedUnmeasured = true
+			}
 			mt := info.ModTime()
 			if result.NewestMtime.IsZero() || mt.After(result.NewestMtime) {
 				result.NewestMtime = mt

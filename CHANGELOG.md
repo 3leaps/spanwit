@@ -42,6 +42,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Sizes are allocated bytes.** Hotspot, verified, unverified, unknown,
+  handoff and prune rows report the bytes allocated on disk (`st_blocks`)
+  instead of the logical file size, so a sparse VM disk reads as what it
+  occupies. Each row adds `size_basis` and `logical_bytes`; text shows the
+  logical figure after the path when it differs by more than 10%. `min_size`,
+  totals and replay use the same basis. Replay compares allocated and logical
+  sums separately and withholds on a change in either; a plan that mixes bases
+  is refused. Builds that cannot read allocation (Windows) stay on apparent
+  bytes, and older reports replay on logical bytes. Small trees now read
+  larger (a 100-byte file occupies one block), so a low `min_size` floor may
+  admit rows it previously withheld.
 - **Replay freshness gate.** `prune --from-space-report` and
   `prune --from-exact-plan` apply a 1h minimum idle age to every candidate,
   including reports that carry `min_age: none`. New `--min-age DUR` raises
