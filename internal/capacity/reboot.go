@@ -35,8 +35,6 @@ type MountEntry struct {
 // device's absence.
 type MountTableFunc func() ([]MountEntry, error)
 
-var errSwapUsageUnsupported = errors.New("swap usage probe unsupported on this platform")
-
 // targetDevices is the set of st_dev values of the target container's
 // mounted volumes. complete is false when the volumes plane is not measured
 // or any mounted volume could not be statted; then no "other container"

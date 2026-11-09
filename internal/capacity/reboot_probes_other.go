@@ -2,7 +2,12 @@
 
 package capacity
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+var errSwapUsageUnsupported = errors.New("swap usage probe unsupported on this platform")
 
 // Off darwin there is no releasable swap store and no held-open plane, so
 // the probes are never consulted; they fail closed if they are.
