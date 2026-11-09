@@ -492,3 +492,23 @@ func TestReboot_MalformedVolumeIDBlocksOtherContainer(t *testing.T) {
 		}
 	}
 }
+
+// The live VM binding is an exact mount-point match. A row on a lookalike
+// path (prefix or child) with a foreign device must never bind (devrev P3).
+func TestReboot_VMBindingIsExactMountPoint(t *testing.T) {
+	lookalikes := []string{darwinVMMount + "x", darwinVMMount + "/sub", darwinVMMount + "/"}
+	for _, on := range lookalikes {
+		t.Run("beside exact row "+on, func(t *testing.T) {
+			f := liveTarget() // exact VM row on the target container
+			f.mounts = append(f.mounts, MountEntry{From: "/dev/disk7s1", On: on, Dev: devVM7})
+			r := runReboot(t, f)
+			wantSwap(t, r, StatusMeasured, "", RebootScopeTargetContainer, i64(6<<30), StatusMeasured)
+		})
+		t.Run("alone "+on, func(t *testing.T) {
+			f := liveTarget()
+			f.mounts[2] = MountEntry{From: "/dev/disk7s1", On: on, Dev: devVM7} // no exact row
+			r := runReboot(t, f)
+			wantSwap(t, r, StatusMeasured, "", RebootScopeUnknown, nil, StatusPartial)
+		})
+	}
+}
