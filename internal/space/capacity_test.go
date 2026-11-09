@@ -62,12 +62,18 @@ func TestAnalyzeCapacityOnlyOneObservationFeedsPressureAndPlane(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Deep inventory sections are top-level keys; checking keys (not
+	// substrings) keeps enum values such as scope "unknown" from colliding.
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		t.Fatal(err)
+	}
 	for _, forbidden := range []string{
-		`"verified_reclaimable"`, `"hotspots"`, `"unverified"`, `"unknown"`,
-		`"prune_handoff"`, `"min_size"`, `"top"`, `"max_depth"`,
+		"verified_reclaimable", "hotspots", "unverified", "unknown",
+		"prune_handoff", "min_size", "top", "max_depth",
 	} {
-		if strings.Contains(string(raw), forbidden) {
-			t.Fatalf("capacity-only report contains deep inventory key %s", forbidden)
+		if _, ok := top[forbidden]; ok {
+			t.Fatalf("capacity-only report contains deep inventory key %q", forbidden)
 		}
 	}
 }

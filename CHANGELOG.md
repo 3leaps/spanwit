@@ -14,6 +14,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Reboot-releasable view.** `space --capacity-only` reports
+  `capacity_accounting.reboot_releasable`: gross observations a reboot may
+  release, each on its own basis and never summed.
+  - Swap shows the current `vm.swapusage` reservation, only when the live swap
+    volume (`/System/Volumes/VM`) is in the target's APFS container.
+  - Held-open shows the logical bytes of deleted-but-open files on that
+    container (with `--held-open`).
+  - Temp planes may be cleared; purgeable space is unavailable.
+  - Linux swap is reported as static.
+  - Text labels every figure as observed now, not a guaranteed gain.
+  - Default `space` prints only a pointer to this view at critical pressure.
+  - No paths or process names appear in any disclosure mode.
 - **Go module cache recipe.** When `~/go/pkg` exists, `space` offers a
   print-only `go clean -modcache` (`go-mod-cache`) linked to the module cache
   hotspot. The rationale names the re-download cost and that the command clears

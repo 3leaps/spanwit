@@ -19,11 +19,14 @@ import (
 // byteFigureBoundExceptions lists byte figures that carry their bound inside
 // the referenced object rather than in a sibling property. Each needs a reason.
 var byteFigureBoundExceptions = map[string]string{
-	"/$defs/snapshot_entry/properties/bytes":           "byte_claim: the claim object carries its own bound",
-	"/$defs/snapshots_plane/properties/bytes":          "byte_claim: the claim object carries its own bound",
-	"/$defs/held_open_object/properties/logical_bytes": "held_open_byte_claim: bound is const lower inside the claim",
-	"/$defs/held_open_group/properties/logical_bytes":  "held_open_byte_claim: bound is const lower inside the claim",
-	"/$defs/held_open_plane/properties/logical_bytes":  "held_open_byte_claim: bound is const lower inside the claim",
+	"/$defs/snapshot_entry/properties/bytes":                                 "byte_claim: the claim object carries its own bound",
+	"/$defs/snapshots_plane/properties/bytes":                                "byte_claim: the claim object carries its own bound",
+	"/$defs/held_open_object/properties/logical_bytes":                       "held_open_byte_claim: bound is const lower inside the claim",
+	"/$defs/held_open_group/properties/logical_bytes":                        "held_open_byte_claim: bound is const lower inside the claim",
+	"/$defs/held_open_plane/properties/logical_bytes":                        "held_open_byte_claim: bound is const lower inside the claim",
+	"/$defs/reboot_releasable/properties/swap/properties/bytes":              "byte_claim: the claim carries its own bound (exact, on basis vm_swapusage_total)",
+	"/$defs/reboot_releasable/properties/held_open/properties/logical_bytes": "byte_claim: bound is const lower inside the claim",
+	"/$defs/reboot_releasable/properties/temp_planes/properties/bytes":       "byte_claim: the claim carries its own bound (required when bytes are present)",
 }
 
 func loadSchemaDoc(t *testing.T, raw []byte) map[string]any {

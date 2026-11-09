@@ -36,6 +36,12 @@ type Collector struct {
 	ManagedObjectLimit  int
 	PlatformVersion     PlatformVersionFunc
 	BootMetadata        BootMetadataFunc
+	// Reboot-releasable probes. When Platform is set (tests), nil probes stay
+	// nil and the block reports unknown/unavailable; real probes are used
+	// only for a live run (Platform empty).
+	SwapUsage  SwapUsageFunc
+	DeviceOf   DeviceOfFunc
+	MountTable MountTableFunc
 }
 
 type Request struct {
@@ -210,6 +216,7 @@ func (c Collector) Collect(ctx context.Context, req Request) (Result, error) {
 		accounting.Planes.SystemManaged = collectManagedRoots(collectCtx, roots, limit, measurer)
 	}
 
+	var heldParsed *heldOpenParseResult
 	if req.HeldOpen {
 		if platform != "darwin" {
 			accounting.Planes.HeldOpen = HeldOpenPlane{
@@ -230,7 +237,7 @@ func (c Collector) Collect(ctx context.Context, req Request) (Result, error) {
 					PermissionWarnings: true,
 				}
 			}
-			accounting.Planes.HeldOpen = collectHeldOpen(
+			accounting.Planes.HeldOpen, heldParsed = collectHeldOpenWithParse(
 				heldCtx,
 				runner,
 				req.Disclosure,
@@ -240,6 +247,7 @@ func (c Collector) Collect(ctx context.Context, req Request) (Result, error) {
 		}
 	}
 
+	accounting.RebootReleasable = c.rebootReleasable(collectCtx, platform, accounting.Planes, req.HeldOpen, heldParsed)
 	accounting.Narrative = buildNarrative(accounting.Planes)
 	if analysisGap != nil {
 		accounting.Narrative.Unavailable = append(

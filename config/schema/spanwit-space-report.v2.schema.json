@@ -3166,6 +3166,9 @@
         },
         "narrative": {
           "$ref": "#/$defs/capacity_narrative"
+        },
+        "reboot_releasable": {
+          "$ref": "#/$defs/reboot_releasable"
         }
       }
     },
@@ -4455,6 +4458,270 @@
         },
         "process_identity": {
           "type": "boolean"
+        }
+      }
+    },
+    "reboot_releasable": {
+      "type": "object",
+      "description": "Gross observations a reboot may release, each with its own basis. Derived, not a plane; nothing here is summed, and a present number is not a guaranteed reboot gain. Aggregate only: no paths, devices or process names in any disclosure mode.",
+      "required": [
+        "status",
+        "semantics",
+        "swap",
+        "held_open",
+        "temp_planes",
+        "purgeable"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "measured",
+            "partial",
+            "unsupported"
+          ]
+        },
+        "semantics": {
+          "type": "string",
+          "const": "observed_gross_not_net_gain"
+        },
+        "swap": {
+          "type": "object",
+          "required": [
+            "status",
+            "scope"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "measured",
+                "not_releasable",
+                "unavailable",
+                "unsupported"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "static_swap",
+                "probe_failed",
+                "not_boot_container"
+              ]
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "target_container",
+                "other_container",
+                "unknown"
+              ]
+            },
+            "bytes": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/byte_claim"
+                },
+                {
+                  "properties": {
+                    "basis": {
+                      "const": "vm_swapusage_total"
+                    }
+                  }
+                }
+              ],
+              "description": "Kernel swap reservation (vm.swapusage total); not labelled physical allocation."
+            }
+          },
+          "allOf": [
+            {
+              "description": "bytes only when measured and attributed to the target container",
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "measured"
+                  },
+                  "scope": {
+                    "const": "target_container"
+                  }
+                },
+                "required": [
+                  "status",
+                  "scope"
+                ]
+              },
+              "then": {
+                "required": [
+                  "bytes"
+                ]
+              },
+              "else": {
+                "not": {
+                  "required": [
+                    "bytes"
+                  ]
+                }
+              }
+            },
+            {
+              "description": "reason is absent when measured and present otherwise",
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "measured"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "not": {
+                  "required": [
+                    "reason"
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "not_releasable",
+                      "unavailable"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          ]
+        },
+        "held_open": {
+          "type": "object",
+          "required": [
+            "status",
+            "scope_filter"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "measured",
+                "partial",
+                "not_requested",
+                "unsupported"
+              ]
+            },
+            "scope_filter": {
+              "type": "string",
+              "const": "target_container"
+            },
+            "logical_bytes": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/byte_claim"
+                },
+                {
+                  "properties": {
+                    "basis": {
+                      "const": "lsof_file_size_dedup_device_inode"
+                    },
+                    "bound": {
+                      "const": "lower"
+                    }
+                  }
+                }
+              ],
+              "description": "Logical sizes of deleted-but-open objects on the target container's devices; not releasable allocation."
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "not_requested",
+                      "unsupported"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "not": {
+                  "required": [
+                    "logical_bytes"
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "measured"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "required": [
+                  "logical_bytes"
+                ]
+              }
+            }
+          ]
+        },
+        "temp_planes": {
+          "type": "object",
+          "required": [
+            "disposition"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "disposition": {
+              "type": "string",
+              "const": "may_be_cleared"
+            },
+            "bytes": {
+              "$ref": "#/$defs/byte_claim"
+            }
+          }
+        },
+        "purgeable": {
+          "type": "object",
+          "required": [
+            "status",
+            "reason"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "unavailable"
+            },
+            "reason": {
+              "type": "string",
+              "const": "no_unprivileged_source"
+            }
+          }
         }
       }
     }

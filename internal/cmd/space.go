@@ -420,6 +420,7 @@ func runSpace(identity *appidentity.Identity, stdout, stderr io.Writer, opts spa
 			}
 			writePressureBlock(stdout, "Primary write volume pressure (early triage)", *u.Pressure)
 			writeTempPlanesText(stdout, u.TempPlanes)
+			writeRebootPointer(stdout, u.Pressure.Level)
 			_, _ = fmt.Fprintln(stdout, "Known cache/toolchain hotspots (early — deep root scan continues):")
 			_, _ = fmt.Fprintln(stdout, "------------------------------------------------------------")
 			if len(u.Hotspots) == 0 {
@@ -627,8 +628,70 @@ func writeCapacityText(w io.Writer, report space.CapacityOnlyReport) {
 			optionalInt(planes.HeldOpen.HolderProcesses),
 		)
 	}
+	writeRebootReleasableText(w, report.CapacityAccounting.RebootReleasable)
 	writeCapacityNarrative(w, report.CapacityAccounting.Narrative)
 	writeContainerRuntimeText(w, report.ContainerRuntime)
+}
+
+// writeRebootPointer is the only reboot line default space prints: at
+// critical pressure, a pointer with no figure and no probe.
+func writeRebootPointer(w io.Writer, level string) {
+	if level != space.PressureCritical {
+		return
+	}
+	_, _ = fmt.Fprintln(w, "Reboot-releasable space: see spanwit space --capacity-only")
+	_, _ = fmt.Fprintln(w)
+}
+
+// writeRebootReleasableText lists gross observations, each on its own basis.
+// It never adds figures and never words a figure as a guaranteed return.
+func writeRebootReleasableText(w io.Writer, r *capacity.RebootReleasable) {
+	if r == nil {
+		return
+	}
+	_, _ = fmt.Fprintln(w, "Reboot-releasable (observed now; not a guaranteed gain, swap may be re-created after boot):")
+	_, _ = fmt.Fprintf(w, "  %-22s %s\n", "swap reserved", rebootSwapText(r.Swap))
+	_, _ = fmt.Fprintf(w, "  %-22s %s\n", "held-open, deleted", rebootHeldOpenText(r.HeldOpen))
+	temp := "not measured in this view (see spanwit space)"
+	if b := r.TempPlanes.Bytes; b != nil && b.Bytes != nil {
+		temp = "≥" + b.Human + " (may be cleared at boot)"
+	}
+	_, _ = fmt.Fprintf(w, "  %-22s %s\n", "temp planes", temp)
+	_, _ = fmt.Fprintf(w, "  %-22s %s\n", "purgeable", r.Purgeable.Status)
+}
+
+func rebootSwapText(s capacity.RebootSwap) string {
+	switch {
+	case s.Status == capacity.StatusMeasured && s.Bytes != nil && s.Bytes.Bytes != nil:
+		return s.Bytes.Human + " (this container; basis vm.swapusage total)"
+	case s.Status == capacity.StatusMeasured:
+		return "not attributed (container unknown)"
+	case s.Reason == capacity.RebootReasonNotBootContainer:
+		return "none (swap is on another container)"
+	case s.Reason == capacity.RebootReasonStaticSwap:
+		return "none (swap is static on this platform)"
+	case s.Reason == capacity.RebootReasonProbeFailed:
+		return "unavailable (probe failed)"
+	default:
+		return s.Status
+	}
+}
+
+func rebootHeldOpenText(h capacity.RebootHeldOpen) string {
+	switch h.Status {
+	case capacity.StatusNotRequested:
+		return "not scanned (add --held-open)"
+	case capacity.StatusUnsupported:
+		return "unsupported"
+	}
+	if h.LogicalBytes == nil || h.LogicalBytes.Bytes == nil {
+		return "partial (no figure for this container)"
+	}
+	note := "logical; may share blocks; not counted as allocation"
+	if h.Status == capacity.StatusPartial {
+		note = "logical, partial; may share blocks; not counted as allocation"
+	}
+	return "≥" + h.LogicalBytes.Human + " (" + note + ")"
 }
 
 func optionalInt(value *int) int {
@@ -886,6 +949,7 @@ func writeSpaceText(w io.Writer, report space.Report, earlyTriageAlreadyPrinted 
 			writePressureBlock(w, "Analysis root volume pressure", *report.AnalysisPressure)
 		}
 		writeTempPlanesText(w, report.TempPlaneCoverage)
+		writeRebootPointer(w, report.Pressure.Level)
 	} else if report.AnalysisPressure != nil {
 		writePressureBlock(w, "Analysis root volume pressure", *report.AnalysisPressure)
 	}
