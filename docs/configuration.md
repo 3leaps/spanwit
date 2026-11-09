@@ -267,7 +267,7 @@ this window; deletion is **not** claimed to be race-free.
   `--backend auto|serial|parallel` control hotspot, unverified, and unknown
   observation. Discovery and sizing retain their depth bounds; critical pressure
   reduces discovery depth and skips unknown, but is not a total run deadline.
-  Observation sizes sum regular-file allocated bytes (see *Size basis* below);
+  Observation sizes sum regular-file allocated bytes (see _Size basis_ above);
   symlinks are not followed or counted and are disclosed as coverage gaps. Verified discovery, sizing, and
   prune handoff use their existing engine independently of these controls.
 - **Remote and stalled observation**: automatically selected catalog/discovered
