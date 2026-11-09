@@ -296,13 +296,34 @@ func buildPrunePlanFromSpaceReport(ctx context.Context, path, minAge string, opt
 	}
 	merged := append([]engine.PlanOptions{engine.WithSortMode(carrierSort)}, opts...)
 
+	// One reviewed basis for the whole report: the primary and every temp
+	// plan are replayed separately and summed, so a per-plan check alone
+	// would let a report mix bases. Checked before anything is measured.
+	var all []engine.ExactEntry
+	if h.ExactPlan != nil {
+		all = append(all, space.ExactPlanToEngine(h.ExactPlan).Entries...)
+	}
+	for i := range h.TempExactPlans {
+		all = append(all, space.ExactPlanToEngine(&h.TempExactPlans[i]).Entries...)
+	}
+	if err := engine.CheckExactPlanSizeBasis(all); err != nil {
+		return PrunePlan{}, fmt.Errorf("space report prune_handoff: %w", err)
+	}
+
 	var out PrunePlan
 	have := false
-	add := func(p PrunePlan) {
+	add := func(p PrunePlan) error {
+		// Backstop: never sum plans resolved on different bases.
+		if p.SizeBasis != "" && out.SizeBasis != "" && p.SizeBasis != out.SizeBasis {
+			return fmt.Errorf("space report prune_handoff: plans resolved to different size bases (%s and %s)", out.SizeBasis, p.SizeBasis)
+		}
 		if !have {
 			out = p
 			have = true
-			return
+			return nil
+		}
+		if out.SizeBasis == "" {
+			out.SizeBasis = p.SizeBasis
 		}
 		out.Candidates = append(out.Candidates, p.Candidates...)
 		out.TotalSize += p.TotalSize
@@ -313,6 +334,7 @@ func buildPrunePlanFromSpaceReport(ctx context.Context, path, minAge string, opt
 		} else {
 			out.Freshness.Merge(p.Freshness)
 		}
+		return nil
 	}
 	if h.ExactPlan != nil {
 		in := space.ExactPlanToEngine(h.ExactPlan)
@@ -321,7 +343,9 @@ func buildPrunePlanFromSpaceReport(ctx context.Context, path, minAge string, opt
 		if err != nil {
 			return PrunePlan{}, err
 		}
-		add(p)
+		if err := add(p); err != nil {
+			return PrunePlan{}, err
+		}
 	}
 	// Each temp plan is revalidated under its own root, and only after that
 	// root is re-admitted now: ownership and mode may have changed since the
@@ -336,7 +360,9 @@ func buildPrunePlanFromSpaceReport(ctx context.Context, path, minAge string, opt
 			}
 			dropped := PrunePlan{Warnings: []error{fmt.Errorf(
 				"temp root %s no longer admitted (%s); its %d candidate(s) are not included", tp.AnalysisRoot, reason, len(tp.Candidates))}}
-			add(dropped)
+			if err := add(dropped); err != nil {
+				return PrunePlan{}, err
+			}
 			continue
 		}
 		in := space.ExactPlanToEngine(tp)
@@ -346,7 +372,9 @@ func buildPrunePlanFromSpaceReport(ctx context.Context, path, minAge string, opt
 		if err != nil {
 			return PrunePlan{}, err
 		}
-		add(p)
+		if err := add(p); err != nil {
+			return PrunePlan{}, err
+		}
 	}
 	// A dropped temp root contributes no revalidation; still report policy.
 	if out.Freshness == nil {

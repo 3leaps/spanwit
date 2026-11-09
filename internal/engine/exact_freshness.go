@@ -121,6 +121,14 @@ func compareAxis(planned sizeAxis, bytes int64, complete bool) (string, *int64) 
 	return DriftUnchanged, &delta
 }
 
+// CheckExactPlanSizeBasis refuses entries that do not share one size basis.
+// Callers that replay several exact plans from one report pass the union of
+// their entries, so the basis is checked across the report, not per plan.
+func CheckExactPlanSizeBasis(entries []ExactEntry) error {
+	_, err := exactPlanSizeBasis(entries)
+	return err
+}
+
 // exactPlanSizeBasis returns the one basis the carried baselines were
 // reviewed on: apparent for legacy carriers, this build's default when no
 // entry carries a baseline. Mixed bases are refused.
