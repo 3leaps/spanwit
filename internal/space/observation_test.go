@@ -273,3 +273,53 @@ func TestObservationWalkerOptionsReachInventory(t *testing.T) {
 		t.Fatalf("vacuous wiring: calls=%d alerts=%d rows=%+v", calls, alerts, rows)
 	}
 }
+
+// unmeasuredAllocationSink reports every root as if no file's allocation
+// could be read (a filesystem without st_blocks): allocated sum zero, one
+// unmeasured file. Logical bytes and lifecycle are left as walked.
+type unmeasuredAllocationSink struct{ inventory.Sink }
+
+func (s unmeasuredAllocationSink) Summary(summary inventory.Summary) error {
+	for i := range summary.Roots {
+		summary.Roots[i].MatchedAllocatedBytes = 0
+		summary.Roots[i].AllocatedUnmeasuredCount++
+	}
+	return s.Sink.Summary(summary)
+}
+
+// An unreadable allocation is an unknown zero (a lower bound), never an exact
+// zero: under a positive floor it stays visible as a lower bound, while a
+// measured empty root is excluded as exactly zero.
+func TestObservationUnmeasuredAllocationIsLowerBoundNotZero(t *testing.T) {
+	if !engine.AllocatedSizesSupported {
+		t.Skip("apparent-only build: allocation is never the headline")
+	}
+	empty := t.TempDir()
+	if rows := newObservationWalker(Options{}).size(context.Background(), []Entry{{Path: empty}}, -1, 1, newObservationCoverage()); len(rows) != 0 {
+		t.Fatalf("measured exact zero must be excluded under a positive floor: %+v", rows)
+	}
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "f"), 17)
+	orig := observationInventoryRun
+	t.Cleanup(func() { observationInventoryRun = orig })
+	observationInventoryRun = func(ctx context.Context, opts inventory.Options, sink inventory.Sink) (inventory.Summary, error) {
+		return orig(ctx, opts, unmeasuredAllocationSink{Sink: sink})
+	}
+	rows := newObservationWalker(Options{}).size(context.Background(), []Entry{{Path: root}}, -1, 1, newObservationCoverage())
+	if len(rows) != 1 {
+		t.Fatalf("unknown zero must survive a positive floor as a lower bound: %+v", rows)
+	}
+	r := rows[0]
+	if r.SizeBasis != engine.SizeBasisAllocated || r.SizeBytes != 0 || !r.SizeIncomplete ||
+		r.LogicalBytes == nil || *r.LogicalBytes != 17 {
+		t.Fatalf("row=%+v", r)
+	}
+	raw, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(raw, []byte(`"size_bound":"lower"`)) {
+		t.Fatalf("json row must carry a lower bound: %s", raw)
+	}
+}
