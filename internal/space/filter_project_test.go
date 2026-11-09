@@ -13,6 +13,8 @@ import (
 )
 
 func TestAnalyze_ClassFilterPrunable_NoDiagnosticsInReport(t *testing.T) {
+	// Home caches are walked; keep them off the real home directory.
+	t.Setenv("HOME", t.TempDir())
 	tmp := t.TempDir()
 	writeFile(t, filepath.Join(tmp, "app", "Cargo.toml"), 32)
 	writeFile(t, filepath.Join(tmp, "app", "target", "debug", "a"), 4096)
@@ -77,6 +79,8 @@ func TestAnalyze_ClassFilterPrunable_NoDiagnosticsInReport(t *testing.T) {
 }
 
 func TestAnalyze_ClassDiagnosticOnly_NoPrunableHandoff(t *testing.T) {
+	// Home caches are walked; keep them off the real home directory.
+	t.Setenv("HOME", t.TempDir())
 	tmp := t.TempDir()
 	writeFile(t, filepath.Join(tmp, "app", "Cargo.toml"), 32)
 	writeFile(t, filepath.Join(tmp, "app", "target", "debug", "a"), 4096)

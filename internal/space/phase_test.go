@@ -9,6 +9,8 @@ import (
 )
 
 func TestAnalyze_PhaseOrderPressureHotspotsBeforeVerified(t *testing.T) {
+	// Home caches are walked; keep them off the real home directory.
+	t.Setenv("HOME", t.TempDir())
 	tmp := t.TempDir()
 	// Deep-ish tree under analysis root so verified phase has work.
 	writeFile(t, filepath.Join(tmp, "app", "Cargo.toml"), 32)
