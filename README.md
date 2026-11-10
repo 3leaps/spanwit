@@ -153,6 +153,20 @@ claims; Spanwit does not stop processes or elevate privileges. Paths are absent
 by default, including basenames. `--disclose paths` is an explicit report-file
 disclosure choice.
 
+Capacity-only reports also list what a reboot may release, as
+`reboot_releasable`. These are gross observations made now, not a promise of
+free space after boot: swap can be re-created and other files written. Each
+figure keeps its own basis, and none are added together.
+
+- **Swap:** the kernel's current swap reservation (`vm.swapusage` total). It is
+  shown only when the live swap volume is in the target's APFS container.
+- **Held-open:** the logical size of deleted-but-open files on that container.
+- **Temp directories:** may be cleared.
+- **Purgeable space:** unavailable.
+
+On Linux, swap is static and is reported as not releasable. Default `space`
+prints only a pointer to this view at critical pressure.
+
 `space --containers` adds container engine storage headroom: how full the
 engine's data disk is and what fills it. It reads the Docker Engine API on the
 local socket (read-only; no docker CLI needed) and works with full and

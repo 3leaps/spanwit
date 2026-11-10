@@ -279,6 +279,68 @@ type Accounting struct {
 	Target    Target     `json:"target"`
 	Planes    Planes     `json:"planes"`
 	Narrative *Narrative `json:"narrative,omitempty"`
+	// RebootReleasable lists gross observations a reboot may release. It is
+	// derived, not a plane, and nothing in it is summed.
+	RebootReleasable *RebootReleasable `json:"reboot_releasable,omitempty"`
+}
+
+// Reboot-releasable vocabulary. Every value is a closed enum or a const;
+// no reason carries probe text, and no field names a path or process.
+const (
+	RebootSemanticsObservedGross = "observed_gross_not_net_gain"
+
+	RebootSwapNotReleasable = "not_releasable"
+
+	RebootReasonStaticSwap       = "static_swap"
+	RebootReasonProbeFailed      = "probe_failed"
+	RebootReasonNotBootContainer = "not_boot_container"
+
+	RebootScopeTargetContainer = "target_container"
+	RebootScopeOtherContainer  = "other_container"
+	RebootScopeUnknown         = "unknown"
+
+	RebootTempMayBeCleared        = "may_be_cleared"
+	RebootReasonNoUnprivilegedSrc = "no_unprivileged_source"
+
+	BasisVMSwapUsageTotal = "vm_swapusage_total"
+)
+
+// RebootReleasable is aggregate only: status, a const caveat, and four
+// independent components, each claim with its own basis.
+type RebootReleasable struct {
+	Status     string           `json:"status"`
+	Semantics  string           `json:"semantics"`
+	Swap       RebootSwap       `json:"swap"`
+	HeldOpen   RebootHeldOpen   `json:"held_open"`
+	TempPlanes RebootTempPlanes `json:"temp_planes"`
+	Purgeable  RebootPurgeable  `json:"purgeable"`
+}
+
+// RebootSwap: Bytes is present only when Status is measured and Scope is
+// target_container. Reason is absent when measured.
+type RebootSwap struct {
+	Status string     `json:"status"`
+	Reason string     `json:"reason,omitempty"`
+	Scope  string     `json:"scope"`
+	Bytes  *ByteClaim `json:"bytes,omitempty"`
+}
+
+// RebootHeldOpen carries logical bytes of deleted-but-open objects on the
+// target container's devices; it is never releasable allocation.
+type RebootHeldOpen struct {
+	Status       string     `json:"status"`
+	ScopeFilter  string     `json:"scope_filter"`
+	LogicalBytes *ByteClaim `json:"logical_bytes,omitempty"`
+}
+
+type RebootTempPlanes struct {
+	Disposition string     `json:"disposition"`
+	Bytes       *ByteClaim `json:"bytes,omitempty"`
+}
+
+type RebootPurgeable struct {
+	Status string `json:"status"`
+	Reason string `json:"reason"`
 }
 
 type BootMetadata struct {

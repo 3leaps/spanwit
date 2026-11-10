@@ -47,6 +47,19 @@ func collectHeldOpen(
 	disclosure string,
 	targetTree string,
 ) HeldOpenPlane {
+	plane, _ := collectHeldOpenWithParse(ctx, runner, disclosure, targetTree)
+	return plane
+}
+
+// collectHeldOpenWithParse also returns every parsed file record (nil when
+// the collector produced no output), so a container-scoped sum can be taken
+// from the full deduplicated set rather than from the capped plane entries.
+func collectHeldOpenWithParse(
+	ctx context.Context,
+	runner CommandRunner,
+	disclosure string,
+	targetTree string,
+) (HeldOpenPlane, *heldOpenParseResult) {
 	if disclosure == "" {
 		disclosure = DisclosureNone
 	}
@@ -64,7 +77,7 @@ func collectHeldOpen(
 	raw, runErr := runner.Run(ctx, lsofPath, "-nP", "+L1", "-F0pcuDiksn")
 	if runErr != nil && len(raw) == 0 {
 		base.Coverage.Gaps = append(base.Coverage.Gaps, heldOpenRunGap(runErr))
-		return base
+		return base, nil
 	}
 
 	parsed := parseHeldOpenLsof(raw)
@@ -80,7 +93,7 @@ func collectHeldOpen(
 			plane.ProcessesDenied = nil
 		}
 	}
-	return plane
+	return plane, &parsed
 }
 
 func heldOpenRunGap(err error) CoverageGap {

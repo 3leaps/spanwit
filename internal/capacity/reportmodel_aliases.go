@@ -30,6 +30,11 @@ type (
 	Narrative            = reportmodel.Narrative
 	OSIdentity           = reportmodel.OSIdentity
 	PlaneDelta           = reportmodel.PlaneDelta
+	RebootReleasable     = reportmodel.RebootReleasable
+	RebootSwap           = reportmodel.RebootSwap
+	RebootHeldOpen       = reportmodel.RebootHeldOpen
+	RebootTempPlanes     = reportmodel.RebootTempPlanes
+	RebootPurgeable      = reportmodel.RebootPurgeable
 	Planes               = reportmodel.Planes
 	RuntimeClaims        = reportmodel.RuntimeClaims
 	SnapshotEntry        = reportmodel.SnapshotEntry
@@ -44,6 +49,17 @@ type (
 
 const (
 	BoundExact                     = reportmodel.BoundExact
+	RebootSemanticsObservedGross   = reportmodel.RebootSemanticsObservedGross
+	RebootSwapNotReleasable        = reportmodel.RebootSwapNotReleasable
+	RebootReasonStaticSwap         = reportmodel.RebootReasonStaticSwap
+	RebootReasonProbeFailed        = reportmodel.RebootReasonProbeFailed
+	RebootReasonNotBootContainer   = reportmodel.RebootReasonNotBootContainer
+	RebootScopeTargetContainer     = reportmodel.RebootScopeTargetContainer
+	RebootScopeOtherContainer      = reportmodel.RebootScopeOtherContainer
+	RebootScopeUnknown             = reportmodel.RebootScopeUnknown
+	RebootTempMayBeCleared         = reportmodel.RebootTempMayBeCleared
+	RebootReasonNoUnprivilegedSrc  = reportmodel.RebootReasonNoUnprivilegedSrc
+	BasisVMSwapUsageTotal          = reportmodel.BasisVMSwapUsageTotal
 	BoundLower                     = reportmodel.BoundLower
 	BoundUnknown                   = reportmodel.BoundUnknown
 	BoundUpper                     = reportmodel.BoundUpper

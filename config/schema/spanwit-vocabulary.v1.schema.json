@@ -489,6 +489,53 @@
         "aggregate",
         "local"
       ]
+    },
+    "reboot_block_status": {
+      "type": "string",
+      "description": "Status of the reboot_releasable block: partial when swap is unavailable or unattributed, or held-open is partial.",
+      "enum": [
+        "measured",
+        "partial",
+        "unsupported"
+      ]
+    },
+    "reboot_held_open_status": {
+      "type": "string",
+      "description": "Held-open component of reboot_releasable (logical bytes on the target container; never releasable allocation).",
+      "enum": [
+        "measured",
+        "partial",
+        "not_requested",
+        "unsupported"
+      ]
+    },
+    "reboot_scope": {
+      "type": "string",
+      "description": "Whether the live swap store is in the target's container, bound by the live VM mount's device (never by volume role).",
+      "enum": [
+        "target_container",
+        "other_container",
+        "unknown"
+      ]
+    },
+    "reboot_swap_reason": {
+      "type": "string",
+      "description": "Closed reason for a non-measured swap component.",
+      "enum": [
+        "static_swap",
+        "probe_failed",
+        "not_boot_container"
+      ]
+    },
+    "reboot_swap_status": {
+      "type": "string",
+      "description": "Swap component of reboot_releasable. not_releasable = a known result that a reboot releases nothing on this target (static swap, or swap on another container).",
+      "enum": [
+        "measured",
+        "not_releasable",
+        "unavailable",
+        "unsupported"
+      ]
     }
   }
 }
