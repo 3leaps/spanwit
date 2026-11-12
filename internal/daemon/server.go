@@ -160,7 +160,15 @@ func coordinate(ctx context.Context, c *Coordinator, path string, ticks <-chan t
 	return coordinateRoots(ctx, c, path, ticks, done, nil)
 }
 
+type activityProbe interface {
+	Probe(context.Context, []string) (map[string]bool, error)
+}
+
 func coordinateRoots(ctx context.Context, c *Coordinator, path string, ticks <-chan time.Time, done <-chan error, observer *RootObserver) error {
+	return coordinateRootsWithActivity(ctx, c, path, ticks, done, observer, BuildActivityProbe{})
+}
+
+func coordinateRootsWithActivity(ctx context.Context, c *Coordinator, path string, ticks <-chan time.Time, done <-chan error, observer *RootObserver, probe activityProbe) error {
 	started := time.Now()
 	cadence := NewCadence(CadenceConfig{})
 	if observer != nil {
@@ -170,13 +178,21 @@ func coordinateRoots(ctx context.Context, c *Coordinator, path string, ticks <-c
 		if ctx.Err() != nil {
 			return nil
 		}
-		if c.Status().State != "journal_unavailable" {
+		if !journalStopped(c.Status().State) {
 			sampleCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			status, err := c.Sample(sampleCtx, path)
 			cancel()
 			if err == nil && observer != nil && status.Sample != nil {
 				if request := cadence.Heartbeat(time.Since(started), *status.Sample); request != nil {
-					complete, err := c.Attribute(ctx, observer, request.Reasons, nil)
+					var active map[string]bool
+					if probe != nil {
+						var probeErr error
+						active, probeErr = probe.Probe(ctx, observer.roots)
+						if probeErr != nil {
+							active = nil // Failure remains unknown, never idle.
+						}
+					}
+					complete, err := c.Attribute(ctx, observer, request.Reasons, active)
 					if err != nil && ctx.Err() == nil {
 						c.setAttributionState("unavailable")
 					}

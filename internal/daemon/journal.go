@@ -71,6 +71,10 @@ func Open(dir string, sampler observe.Sampler) (*Coordinator, error) {
 	} else if !errors.Is(err, os.ErrExist) {
 		return nil, err
 	}
+	// Refuse oversized stores before recordprims replays or rebuilds indexes.
+	if _, err := journalUsage(context.Background(), journal, journalWatermark); err != nil {
+		return nil, err
+	}
 	store, err := recordprims.Open(journal, recordprims.OpenOptions{})
 	if err != nil {
 		return nil, err
@@ -117,8 +121,11 @@ func (c *Coordinator) Sample(ctx context.Context, path string) (Status, error) {
 	if c.store == nil {
 		return Status{}, fmt.Errorf("coordinator_closed")
 	}
-	if c.Status().State == "journal_unavailable" {
-		return c.Status(), fmt.Errorf("journal_unavailable: restart required")
+	if journalStopped(c.Status().State) {
+		return c.Status(), fmt.Errorf("%s: operator intervention required", c.Status().State)
+	}
+	if err := c.admitJournal(ctx); err != nil {
+		return c.Status(), err
 	}
 	sample, err := c.sampler.Sample(ctx, path)
 	if err != nil {

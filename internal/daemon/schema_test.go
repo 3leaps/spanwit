@@ -21,7 +21,7 @@ func TestResponseContracts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeTest(t, c)
-	for _, state := range []string{"awaiting_sample", "observing", "sample_unavailable", "journal_unavailable"} {
+	for _, state := range []string{"awaiting_sample", "observing", "sample_unavailable", "journal_unavailable", "journal_capacity_reached"} {
 		if state == "observing" {
 			if _, err := c.Sample(context.Background(), dir); err != nil {
 				t.Fatal(err)

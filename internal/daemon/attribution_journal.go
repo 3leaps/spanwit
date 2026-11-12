@@ -58,6 +58,9 @@ func (c *Coordinator) Attribute(ctx context.Context, observer *RootObserver, rea
 	if observer == nil || len(reasons) == 0 || len(reasons) > 5 {
 		return false, fmt.Errorf("invalid attribution request")
 	}
+	if err := c.admitJournal(ctx); err != nil {
+		return false, err
+	}
 	rows, err := observer.Observe(ctx, active)
 	if err != nil {
 		return false, err
@@ -76,6 +79,9 @@ func (c *Coordinator) Attribute(ctx context.Context, observer *RootObserver, rea
 			a.Complete = false
 		}
 		a.Rows = append(a.Rows, out)
+	}
+	if err := c.admitJournal(ctx); err != nil {
+		return false, err
 	}
 	if c.attributionStream == nil {
 		stream, err := c.store.OpenStream("attribution", recordprims.ModeSingleRevision)

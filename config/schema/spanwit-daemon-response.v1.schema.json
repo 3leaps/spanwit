@@ -103,7 +103,8 @@
             "awaiting_sample",
             "observing",
             "sample_unavailable",
-            "journal_unavailable"
+            "journal_unavailable",
+            "journal_capacity_reached"
           ]
         },
         "sample": {

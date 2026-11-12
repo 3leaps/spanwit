@@ -56,8 +56,15 @@ Attribution leaves cached reads available, but runs serially with capacity
 sampling. The previous attribution remains visible between observations;
 inspect its timestamp and coverage rather than assuming it matches the latest
 capacity sample. Runtime baselines start empty on restart; the first observation
-has no delta. Activity is currently `unknown`: no live build detector is wired.
-The core can defer roots identified as active by a future activity adapter.
+has no delta. Immediately before a deep batch, a bounded `lsof` query looks for
+visible `go`, `cargo`, and `rustc` processes with a current directory or open path
+under a selected root. A positive match defers that root (`activity: active`,
+`coverage: deferred`); retry follows the normal cooldown. The query has a
+two-second deadline and 512 KiB output cap; inherited-pipe cleanup may add two
+seconds. No matches, denied visibility, missing tools and failed/truncated
+queries remain `unknown`, never proof of inactivity. Processes may start after
+the query, and cross-worktree cache consumers without a visible path are missed.
+This is a scheduling hint, not a complete build detector or cleanup guard.
 There is no trim or approval path.
 
 `--state-dir` selects an absolute, user-owned directory with mode 0700.
@@ -100,7 +107,23 @@ The journal uses durable-record/v1 and recordprims-fs/v2. Sample payload version
 0 is distinct from API protocol version 1. Existing observe JSON state is not
 migrated. Root payloads use `root-attribution/v0` on a separate journal stream.
 There is no snapshot-body retention, approval, grant, execution, or service
-installation in this experimental slice. Journal retention is not implemented;
-keep experiments bounded rather than installing an unattended service.
+installation in this experimental slice. Before opening a store and before
+appending observations, a bounded metadata walk checks aggregate logical file
+lengths (including indexes and temporary files) against a 16 MiB stop-admission
+watermark. Enumeration is limited to 4096 entries and eight directory levels;
+links, special files, public entries and mount crossings are refused.
+
+A running coordinator that reaches the watermark publishes
+`journal_capacity_reached`, preserves the last durable cached observations, and
+suspends sampling and deep walks. A pre-existing oversized store refuses startup.
+Restart alone does not reduce its size. This is not a hard physical quota: an
+admitted append and temporary index rewrites can cross the watermark; filesystem
+allocation and other processes are not bounded by it. Uncertain append outcomes
+still latch `journal_unavailable`.
+
+Journal history is never deleted, truncated or automatically reset. Recordprims
+retirement and stream continuation retain history and do not reclaim its bytes.
+Automatic history reclamation remains unavailable; keep experiments bounded
+rather than installing an unattended service.
 Native filesystem sampling is best-effort at the timeout boundary: a blocked
 kernel call cannot be forcibly interrupted by a Go context.
