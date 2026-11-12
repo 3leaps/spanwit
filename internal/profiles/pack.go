@@ -148,19 +148,24 @@ func (p *Pack) Preview(ctx context.Context, name string) (Preview, error) {
 		if err := ctx.Err(); err != nil {
 			return Preview{}, err
 		}
-		plan, err := engine.BuildPrunePlan(ctx, p.policies[id])
-		if err != nil {
-			return Preview{}, fmt.Errorf("recipe %s: %w", id, err)
-		}
+		// Resolve into a private copy: the planner and scope disclosure consume
+		// the same absolute values without changing the reviewed document.
+		policy := *p.policies[id]
+		policy.Paths = append([]config.PathProfile(nil), policy.Paths...)
 		row := RecipePreview{ID: id, State: "complete", Roots: []string{}, Candidates: []Candidate{}, Warnings: []string{}}
-		for _, path := range p.policies[id].Paths {
+		for i, path := range policy.Paths {
 			if path.IsEnabled() {
 				root, err := engine.CleanConfiguredPath(path.Path)
 				if err != nil {
 					return Preview{}, err
 				}
 				row.Roots = append(row.Roots, root)
+				policy.Paths[i].Path = root
 			}
+		}
+		plan, err := engine.BuildPrunePlan(ctx, &policy)
+		if err != nil {
+			return Preview{}, fmt.Errorf("recipe %s: %w", id, err)
 		}
 		for _, warning := range plan.Warnings {
 			row.Warnings = append(row.Warnings, warning.Error())

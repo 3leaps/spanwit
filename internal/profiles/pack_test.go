@@ -247,3 +247,58 @@ func TestSignatureNameCannotDisguisePatternOnlyPolicy(t *testing.T) {
 		t.Fatal("pattern-only policy gained a capability through a signature ID")
 	}
 }
+
+func TestPreviewHomeRootsFailClosedAndIgnoreWorkingDirectory(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(home, "cache")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	pack, err := Load(bytes.NewReader(fixture(t, "~/cache")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	absolute, err := Load(bytes.NewReader(fixture(t, root)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cwd := range []string{t.TempDir(), t.TempDir()} {
+		t.Run(filepath.Base(cwd), func(t *testing.T) {
+			t.Chdir(cwd)
+			// A real fallback directory makes silent cwd enrollment observable.
+			if err := os.Mkdir("cache", 0700); err != nil {
+				t.Fatal(err)
+			}
+			for _, state := range []string{"absent", "empty", "relative", "absolute"} {
+				t.Run(state, func(t *testing.T) {
+					t.Setenv("HOME", "")
+					switch state {
+					case "absent":
+						if err := os.Unsetenv("HOME"); err != nil {
+							t.Fatal(err)
+						}
+					case "relative":
+						t.Setenv("HOME", "relative-home")
+					case "absolute":
+						t.Setenv("HOME", home)
+					}
+					got, err := pack.Preview(context.Background(), "developer")
+					if state != "absolute" {
+						if err == nil || got.State != "" || len(got.Recipes) != 0 {
+							t.Fatalf("unresolved home produced success: %+v, %v", got, err)
+						}
+					} else if err != nil || got.State != "complete" || !reflect.DeepEqual(got.Recipes[0].Roots, []string{root}) {
+						t.Fatalf("wrong home scope: %+v, %v", got, err)
+					}
+					got, err = absolute.Preview(context.Background(), "developer")
+					if err != nil || got.State != "complete" || !reflect.DeepEqual(got.Recipes[0].Roots, []string{root}) {
+						t.Fatalf("absolute root depends on HOME: %+v, %v", got, err)
+					}
+					if pack.policies["cargo"].Paths[0].Path != "~/cache" {
+						t.Fatal("preview changed compiled source policy")
+					}
+				})
+			}
+		})
+	}
+}
