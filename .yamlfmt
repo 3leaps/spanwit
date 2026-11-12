@@ -18,6 +18,6 @@ formatter:
 exclude:
   - node_modules/**
   - vendor/**
-  - .git/**
+  - .git
   - dist/**
   - bin/**

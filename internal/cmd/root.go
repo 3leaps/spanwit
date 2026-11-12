@@ -92,6 +92,7 @@ func Initialize(ctx context.Context, identity *appidentity.Identity, logger *log
 	addClassified(newInventoryCmd(identity), CapabilityObservational)
 	addClassified(newDiagnoseCmd(identity), CapabilityObservational)
 	addClassified(newObserveCmd(identity), CapabilityMutating)
+	addClassified(newDaemonCmd(identity), CapabilityMutating)
 	// prune is planning by default; --execute elevates to mutating at enforce time.
 	addClassified(newPruneCmd(identity), CapabilityPlanning)
 }
