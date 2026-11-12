@@ -1,3 +1,7 @@
+github.com/3leaps/canonprims v0.1.4 h1:zkmFr0Ymi5nDOlXFwK/lPCx2/cfZCcoq1unWwOYNRiE=
+github.com/3leaps/canonprims v0.1.4/go.mod h1:sSaMwIuol+fkeWFWBaQh/OZH550t81yIlNJLEr8Pzu0=
+github.com/3leaps/recordprims v0.0.2-0.20261111192347-5aff73e61ba8 h1:WVT8Zf7s5adgeBORwUZuHIpyXoWWi5oKf1y4Aj5tf3Y=
+github.com/3leaps/recordprims v0.0.2-0.20261111192347-5aff73e61ba8/go.mod h1:OzzgzqPHnv0rIvpFVd7TdwK2ctF7OF3xP47HlUKCO3U=
 github.com/bmatcuk/doublestar/v4 v4.10.3 h1:1UIv1+fqH3++ViVkpnaPTB+Pi1UHycnPFAq14zgK+gI=
 github.com/bmatcuk/doublestar/v4 v4.10.3/go.mod h1:xBQ8jztBU6kakFMg+8WGxn0c6z1fTSPVIjEY1Wr7jzc=
 github.com/clipperhouse/uax29/v2 v2.2.0 h1:ChwIKnQN3kcZteTXMgb1wztSgaU+ZemkgWdohwgs8tY=

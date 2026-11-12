@@ -50,3 +50,9 @@ var Vocabulary []byte
 
 //go:embed spanwit-vocabulary-sitemap.v1.json
 var VocabularySitemap []byte
+
+//go:embed spanwit-growth-sample.v0.schema.json
+var SpanwitGrowthSampleV0 []byte
+
+//go:embed spanwit-daemon-response.v1.schema.json
+var SpanwitDaemonResponseV1 []byte

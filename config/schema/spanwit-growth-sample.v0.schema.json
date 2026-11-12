@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/growth-sample/v0.json",
+  "title": "Capacity growth sample",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "sample"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.3leaps.dev/spanwit/growth-sample/v0.json"
+    },
+    "version": {
+      "const": 0
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "captured_at",
+        "volume_id",
+        "basis",
+        "avail_bytes",
+        "total_bytes",
+        "used_bytes",
+        "used_percent",
+        "level",
+        "coverage",
+        "seq",
+        "size_complete"
+      ],
+      "properties": {
+        "captured_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "volume_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mount_path": {
+          "type": "string"
+        },
+        "basis": {
+          "const": "statfs_primary"
+        },
+        "avail_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "used_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "used_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "level": {
+          "enum": [
+            "ok",
+            "warn",
+            "critical"
+          ]
+        },
+        "coverage": {
+          "const": "complete"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source": {
+          "const": "capacity.SampleFilesystem"
+        },
+        "size_complete": {
+          "const": true
+        }
+      }
+    }
+  }
+}

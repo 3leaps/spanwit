@@ -23,6 +23,9 @@ func validMinimalReport(t *testing.T) Report {
 	// Immediate unknown child mass.
 	writeFile(t, filepath.Join(tmp, "misc", "blob"), 4096)
 	report, err := Analyze(context.Background(), Options{
+		// Schema fixtures must not repeatedly inspect the host's live temp
+		// directories when its disk happens to be under pressure.
+		DisableTempPlanes: true,
 		Path:              tmp,
 		MinSize:           "1K",
 		Top:               10,

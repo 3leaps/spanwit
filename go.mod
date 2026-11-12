@@ -3,8 +3,10 @@ module github.com/3leaps/spanwit
 go 1.26.10
 
 require (
+	github.com/3leaps/recordprims v0.0.2-0.20261111192347-5aff73e61ba8
 	github.com/bmatcuk/doublestar/v4 v4.10.3
 	github.com/fulmenhq/gofulmen v0.3.6
+	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.10.2
 	go.uber.org/zap v1.28.0
 	golang.org/x/sys v0.49.0
@@ -12,8 +14,8 @@ require (
 )
 
 require (
+	github.com/3leaps/canonprims v0.1.4 // indirect
 	github.com/fulmenhq/crucible v0.4.19 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
