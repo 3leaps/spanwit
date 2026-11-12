@@ -87,6 +87,7 @@ func Initialize(ctx context.Context, identity *appidentity.Identity, logger *log
 	addClassified(newDoctorCmd(identity), CapabilityObservational)
 	addClassified(newExampleCmd(identity), CapabilityObservational)
 	addClassified(newValidateCmd(identity), CapabilityObservational)
+	addClassified(newProfileCmd(), CapabilityObservational)
 	addClassified(newScanCmd(identity), CapabilityObservational)
 	addClassified(newSpaceCmd(identity), CapabilityObservational)
 	addClassified(newInventoryCmd(identity), CapabilityObservational)

@@ -198,12 +198,16 @@ func CleanConfiguredPath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("configured path is required")
 	}
-	if path == "~" {
-		homeDir, _ := os.UserHomeDir()
-		path = homeDir
-	} else if strings.HasPrefix(path, "~/") {
-		homeDir, _ := os.UserHomeDir()
-		path = filepath.Join(homeDir, path[2:])
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil || !filepath.IsAbs(homeDir) {
+			return "", fmt.Errorf("configured home-relative path requires an absolute user home")
+		}
+		if path == "~" {
+			path = homeDir
+		} else {
+			path = filepath.Join(homeDir, path[2:])
+		}
 	}
 	return filepath.Abs(path)
 }
