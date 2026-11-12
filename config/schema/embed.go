@@ -59,3 +59,6 @@ var SpanwitDaemonResponseV1 []byte
 
 //go:embed spanwit-profile-pack.v0.schema.json
 var SpanwitProfilePackV0 []byte
+
+//go:embed spanwit-root-attribution.v0.schema.json
+var SpanwitRootAttributionV0 []byte

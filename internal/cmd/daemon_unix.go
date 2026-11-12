@@ -25,6 +25,8 @@ func newDaemonCmd(identity *appidentity.Identity) *cobra.Command {
 	parent.PersistentFlags().StringVar(&dir, "state-dir", dir, "private coordinator state directory")
 	run := &cobra.Command{Use: "run", Args: cobra.NoArgs, Short: "Sample capacity and serve read-only local status"}
 	var interval time.Duration
+	var roots []string
+	run.Flags().StringArrayVar(&roots, "root", nil, "explicit attribution root (repeatable, maximum 16; opt-in deep walks)")
 	run.Flags().DurationVar(&interval, "interval", 5*time.Minute, "capacity sample interval (minimum 60s)")
 	run.Flags().StringVar(&path, "path", path, "filesystem to sample without walking")
 	run.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -33,7 +35,7 @@ func newDaemonCmd(identity *appidentity.Identity) *cobra.Command {
 		}
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return daemon.Run(ctx, dir, path, interval)
+		return daemon.RunWithRoots(ctx, dir, path, interval, roots)
 	}
 	setCommandCapability(run, CapabilityMutating)
 	once := &cobra.Command{Use: "once", Args: cobra.NoArgs, Short: "Append one offline sample under exclusive writer ownership", RunE: func(cmd *cobra.Command, _ []string) error {

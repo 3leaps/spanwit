@@ -41,11 +41,19 @@ func run() error {
 	dir := flag.String("state-dir", filepath.Join(home, ".local", "state", identity.BinaryName, "daemon"), "private coordinator state directory")
 	path := flag.String("path", home, "filesystem to sample")
 	interval := flag.Duration("interval", 5*time.Minute, "sample interval (minimum 60s)")
+	var roots []string
+	flag.Func("root", "explicit attribution root (repeatable, maximum 16; opt-in deep walks)", func(root string) error {
+		if len(roots) >= daemon.MaxAttributionRoots {
+			return fmt.Errorf("too many attribution roots")
+		}
+		roots = append(roots, root)
+		return nil
+	})
 	flag.Parse()
 	if flag.NArg() != 0 {
 		return fmt.Errorf("unexpected positional argument")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return daemon.Run(ctx, *dir, *path, *interval)
+	return daemon.RunWithRoots(ctx, *dir, *path, *interval, roots)
 }
