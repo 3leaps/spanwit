@@ -61,7 +61,7 @@ func Acquire(dir string) (*Ownership, error) {
 	if err = unix.Fstat(fd, &ds); err != nil {
 		return nil, err
 	}
-	if ds.Uid != uint32(os.Getuid()) || ds.Mode&0777 != 0700 {
+	if int64(ds.Uid) != int64(os.Getuid()) || ds.Mode&0777 != 0700 {
 		return nil, fmt.Errorf("state directory must be owned by this user with mode 0700")
 	}
 	lock, err := unix.Openat(fd, "coordinator.lock", unix.O_CREAT|unix.O_RDWR|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK, 0600)
@@ -74,7 +74,7 @@ func Acquire(dir string) (*Ownership, error) {
 		_ = f.Close()
 		return nil, err
 	}
-	if fs.Uid != uint32(os.Getuid()) || fs.Mode&unix.S_IFMT != unix.S_IFREG || fs.Mode&0777 != 0600 || fs.Nlink != 1 {
+	if int64(fs.Uid) != int64(os.Getuid()) || fs.Mode&unix.S_IFMT != unix.S_IFREG || fs.Mode&0777 != 0600 || fs.Nlink != 1 {
 		_ = f.Close()
 		return nil, fmt.Errorf("unsafe coordinator lock")
 	}
@@ -97,7 +97,7 @@ func (o *Ownership) Close() error {
 }
 
 func admitAncestor(st unix.Stat_t) error {
-	if st.Mode&unix.S_IFMT != unix.S_IFDIR || (st.Uid != 0 && st.Uid != uint32(os.Getuid())) {
+	if st.Mode&unix.S_IFMT != unix.S_IFDIR || (st.Uid != 0 && int64(st.Uid) != int64(os.Getuid())) {
 		return fmt.Errorf("untrusted state ancestor")
 	}
 	if st.Mode&0022 != 0 && (st.Uid != 0 || st.Mode&unix.S_ISVTX == 0) {

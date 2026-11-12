@@ -28,7 +28,7 @@ func verifyPeer(c *net.UnixConn) error {
 	err = raw.Control(func(fd uintptr) {
 		uid, e := peerUID(int(fd))
 		peerErr = e
-		if e == nil && uid != uint32(os.Getuid()) {
+		if e == nil && int64(uid) != int64(os.Getuid()) {
 			peerErr = fmt.Errorf("peer_uid_mismatch")
 		}
 	})
