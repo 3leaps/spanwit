@@ -69,6 +69,75 @@ jobs:
         run: make build
       - name: Standalone binary works outside repo
         run: make test-standalone-binary
+  # Bounded Debian-userspace qualification. It runs as an ordinary user after
+  # root only provisions CI-owned diagnostics and permissions. This is not a
+  # bare-metal, systemd, or unattended-service qualification.
+  debian-daemon-qualification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    container:
+      image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.14@sha256:2a98d8e9169d0b55f88ef7dbf3d26b05ec4780f1be8fc6672887d64831b60a13
+      options: --user root
+      volumes:
+        - /tmp/spanwit-ci:/tmp
+    env:
+      FULMEN_WORKSPACE_ROOT: ${{ github.workspace }}
+      SPANWIT_CI_IMAGE: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.14@sha256:2a98d8e9169d0b55f88ef7dbf3d26b05ec4780f1be8fc6672887d64831b60a13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Prepare Debian non-root qualification
+        run: |
+          set -euo pipefail
+          test "$(id -u)" = 0
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends lsof mawk util-linux
+          update-alternatives --set awk /usr/bin/mawk
+          command -v lsof mawk findmnt go python3 git runuser
+          test "$(readlink -f "$(command -v awk)")" = /usr/bin/mawk
+          chmod 1777 /tmp
+          evidence_parent="${GITHUB_WORKSPACE}/.ci-evidence"
+          if [ -e "$evidence_parent" ] || [ -L "$evidence_parent" ]; then
+            echo "refusing pre-existing evidence parent" >&2
+            exit 1
+          fi
+          install -d -o node -g node -m 0700 "$evidence_parent"
+      - name: Qualify daemon in Debian userspace as node
+        run: |
+          set -euo pipefail
+          evidence="${GITHUB_WORKSPACE}/.ci-evidence/daemon-qualification"
+          test ! -e "$evidence" && test ! -L "$evidence"
+          node_home="$(getent passwd node | cut -d: -f6)"
+          test -n "$node_home" -a -d "$node_home"
+          runuser -u node -- env \
+            HOME="$node_home" \
+            GOCACHE="$node_home/.cache/go-build" \
+            GOPATH="$node_home/go" \
+            TMPDIR=/tmp \
+            GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+            GIT_OPTIONAL_LOCKS=0 \
+            GIT_CONFIG_COUNT=1 \
+            GIT_CONFIG_KEY_0=safe.directory \
+            GIT_CONFIG_VALUE_0="${GITHUB_WORKSPACE}" \
+            SPANWIT_CI_IMAGE="${SPANWIT_CI_IMAGE}" \
+            SPANWIT_QUALIFICATION_EVIDENCE="$evidence" \
+            python3 scripts/qualify-daemon.py
+      - name: Emit finite qualification evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          evidence="${GITHUB_WORKSPACE}/.ci-evidence/daemon-qualification"
+          node_home="$(getent passwd node | cut -d: -f6)"
+          runuser -u node -- env \
+            HOME="$node_home" \
+            GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+            SPANWIT_QUALIFICATION_EVIDENCE="$evidence" \
+            timeout --kill-after=2s 15s python3 scripts/qualify-daemon.py --emit-evidence
   # Signed-tag ceremony regression tests run on the host runner, which provides
   # gpg; they use throwaway keys only and need no secrets.
   release-tag-tests:
