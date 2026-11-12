@@ -52,10 +52,11 @@ func (p BuildActivityProbe) Probe(ctx context.Context, roots []string) (map[stri
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, buildActivityTimeout)
 	defer cancel()
-	// -c narrows lsof at the source. lsof's command matching is prefix-based,
-	// so the parser still requires exact c fields from external output.
+	// One regex selection avoids lsof's exit 1 when any of several separate
+	// command selectors has no match. Real errors still discard all output.
+	// The parser independently requires an exact command field.
 	raw, err := runner.Run(probeCtx, buildActivityLsofPath(),
-		"-nP", "-F0pcfn", "-c", "go", "-c", "cargo", "-c", "rustc")
+		"-nP", "-F0pcfn", "-c", "/^(go|cargo|rustc)$/")
 	if err != nil {
 		return nil, fmt.Errorf("build activity probe unavailable: %w", err)
 	}

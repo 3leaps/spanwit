@@ -111,7 +111,8 @@ installation in this experimental slice. Before opening a store and before
 appending observations, a bounded metadata walk checks aggregate logical file
 lengths (including indexes and temporary files) against a 16 MiB stop-admission
 watermark. Enumeration is limited to 4096 entries and eight directory levels;
-links, special files, public entries and mount crossings are refused.
+links, special files, public entries and different-device entries are refused.
+Same-filesystem bind mounts are not separately detected by this check.
 
 A running coordinator that reaches the watermark publishes
 `journal_capacity_reached`, preserves the last durable cached observations, and

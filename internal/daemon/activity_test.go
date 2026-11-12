@@ -89,7 +89,7 @@ func TestBuildActivityProbe_UsesBoundedFixedLsofInvocation(t *testing.T) {
 		if program != buildActivityLsofPath() {
 			t.Fatalf("program=%q", program)
 		}
-		want := []string{"-nP", "-F0pcfn", "-c", "go", "-c", "cargo", "-c", "rustc"}
+		want := []string{"-nP", "-F0pcfn", "-c", "/^(go|cargo|rustc)$/"}
 		if !reflect.DeepEqual(args, want) {
 			t.Fatalf("args=%q want %q", args, want)
 		}
