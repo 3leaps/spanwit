@@ -19,6 +19,10 @@ jobs:
       image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.14@sha256:2a98d8e9169d0b55f88ef7dbf3d26b05ec4780f1be8fc6672887d64831b60a13
       # actions/checkout needs write access to /__w/_temp/_runner_file_commands/.
       options: --user root
+      # Journal tests require a local filesystem, not the container overlay.
+      # Docker creates this dedicated directory on the disposable runner host.
+      volumes:
+        - /tmp/spanwit-ci:/tmp
     env:
       # CI-only boundary hint for gofulmen/pathfinder repo-root discovery
       FULMEN_WORKSPACE_ROOT: ${{ github.workspace }}
