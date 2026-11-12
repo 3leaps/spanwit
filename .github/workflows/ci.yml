@@ -95,12 +95,13 @@ jobs:
         run: |
           set -euo pipefail
           test "$(id -u)" = 0
+          # The host bind must be writable by apt's unprivileged helpers too.
+          chmod 1777 /tmp
           apt-get update -q
           apt-get install -y -q --no-install-recommends lsof mawk util-linux
           update-alternatives --set awk /usr/bin/mawk
           command -v lsof mawk findmnt go python3 git runuser
           test "$(readlink -f "$(command -v awk)")" = /usr/bin/mawk
-          chmod 1777 /tmp
           evidence_parent="${GITHUB_WORKSPACE}/.ci-evidence"
           if [ -e "$evidence_parent" ] || [ -L "$evidence_parent" ]; then
             echo "refusing pre-existing evidence parent" >&2
