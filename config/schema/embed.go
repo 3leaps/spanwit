@@ -56,3 +56,6 @@ var SpanwitGrowthSampleV0 []byte
 
 //go:embed spanwit-daemon-response.v1.schema.json
 var SpanwitDaemonResponseV1 []byte
+
+//go:embed spanwit-profile-pack.v0.schema.json
+var SpanwitProfilePackV0 []byte

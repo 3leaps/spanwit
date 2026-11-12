@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schemas.3leaps.dev/spanwit/profile-pack/v0.json",
+  "version": 0,
+  "recipes": {
+    "grype-staging": {
+      "capability": "directory-prune",
+      "description": "Old Grype update staging beside an installed database.",
+      "policy": {
+        "version": 1,
+        "defaults": {
+          "min_age": "24h"
+        },
+        "paths": [
+          {
+            "path": "~/Library/Caches",
+            "max_depth": 4,
+            "targets": [
+              {
+                "signature": "development.security.grype-db-download"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "profiles": {
+    "developer": {
+      "label": "Developer",
+      "recipes": [
+        "grype-staging"
+      ]
+    },
+    "media": {
+      "label": "Media (no recipes enabled)",
+      "recipes": []
+    }
+  }
+}

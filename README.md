@@ -221,6 +221,10 @@ then the default `~/.config/spanwit/config.yaml`. Example profiles (crisis vs
 maintenance) and the full crisis recipe live in
 [docs/configuration.md](docs/configuration.md).
 
+Experimental [profile packs](docs/profile-packs.md) group signature policies into
+named personas. `profile validate`, `profile preview`, and `profile diff` are
+read-only; they do not activate policies or authorize deletion.
+
 ## Install
 
 Prebuilt, signed binaries are published for macOS (Apple Silicon), Linux

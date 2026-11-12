@@ -38,8 +38,18 @@ func LoadConfig(ctx context.Context, identity *appidentity.Identity, logger *log
 	if err != nil {
 		return nil, configPath, fmt.Errorf("failed to read config file: %w", err)
 	}
+	cfg, err := Parse(data)
+	if err != nil {
+		return nil, configPath, err
+	}
+	logger.Info("loaded config from file", zap.String("path", configPath))
+	return cfg, configPath, nil
+}
+
+// Parse validates an in-memory policy through the same contract as file loading.
+func Parse(data []byte) (*Config, error) {
 	if err := contract.ValidateYAML(spanwitschema.SpanwitConfigV1, data); err != nil {
-		return nil, configPath, fmt.Errorf("config does not match spanwit schema: %w", err)
+		return nil, fmt.Errorf("config does not match spanwit schema: %w", err)
 	}
 
 	// Decode into an empty shell so omitted defaults fields stay unset.
@@ -49,14 +59,13 @@ func LoadConfig(ctx context.Context, identity *appidentity.Identity, logger *log
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(cfg); err != nil {
-		return nil, configPath, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 	if err := validateConfig(cfg); err != nil {
-		return nil, configPath, err
+		return nil, err
 	}
 
-	logger.Info("loaded config from file", zap.String("path", configPath))
-	return cfg, configPath, nil
+	return cfg, nil
 }
 
 // DefaultPath returns the default config path. It delegates to gofulmen/config
