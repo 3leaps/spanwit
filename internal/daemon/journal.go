@@ -21,22 +21,27 @@ import (
 
 const ProtocolVersion = 1
 const SampleSchema = "https://schemas.3leaps.dev/spanwit/growth-sample/v0.json"
+const MaxResponseBytes = 65536
 
 // Status is a cached observation, not an authorization or reclaim estimate.
 type Status struct {
-	Protocol int             `json:"protocol"`
-	State    string          `json:"state"`
-	Sample   *observe.Sample `json:"sample,omitempty"`
-	RecordID string          `json:"record_id,omitempty"`
+	Protocol         int             `json:"protocol"`
+	State            string          `json:"state"`
+	Sample           *observe.Sample `json:"sample,omitempty"`
+	RecordID         string          `json:"record_id,omitempty"`
+	Attribution      *Attribution    `json:"attribution,omitempty"`
+	AttributionState string          `json:"attribution_state,omitempty"`
 }
 
 type Coordinator struct {
-	owner   *Ownership
-	store   *recordprims.Store
-	stream  sampleJournal
-	sampler observe.Sampler
-	mu      sync.Mutex
-	status  atomic.Pointer[Status]
+	owner             *Ownership
+	store             *recordprims.Store
+	stream            sampleJournal
+	sampler           observe.Sampler
+	mu                sync.Mutex
+	status            atomic.Pointer[Status]
+	baselines         map[string]rootBaseline
+	attributionStream sampleJournal
 }
 
 type sampleJournal interface {
@@ -64,6 +69,10 @@ func Open(dir string, sampler observe.Sampler) (*Coordinator, error) {
 			return nil, err
 		}
 	} else if !errors.Is(err, os.ErrExist) {
+		return nil, err
+	}
+	// Refuse oversized stores before recordprims replays or rebuilds indexes.
+	if _, err := journalUsage(context.Background(), journal, journalWatermark); err != nil {
 		return nil, err
 	}
 	store, err := recordprims.Open(journal, recordprims.OpenOptions{})
@@ -100,6 +109,7 @@ func (c *Coordinator) Status() Status {
 		sample := *s.Sample
 		s.Sample = &sample
 	}
+	s.Attribution = cloneAttribution(s.Attribution)
 	return s
 }
 
@@ -111,8 +121,11 @@ func (c *Coordinator) Sample(ctx context.Context, path string) (Status, error) {
 	if c.store == nil {
 		return Status{}, fmt.Errorf("coordinator_closed")
 	}
-	if c.Status().State == "journal_unavailable" {
-		return c.Status(), fmt.Errorf("journal_unavailable: restart required")
+	if journalStopped(c.Status().State) {
+		return c.Status(), fmt.Errorf("%s: operator intervention required", c.Status().State)
+	}
+	if err := c.admitJournal(ctx); err != nil {
+		return c.Status(), err
 	}
 	sample, err := c.sampler.Sample(ctx, path)
 	if err != nil {
@@ -124,6 +137,12 @@ func (c *Coordinator) Sample(ctx context.Context, path string) (Status, error) {
 	}
 	sample.CapturedAt = time.Now().UTC().Truncate(time.Microsecond)
 	id := uuid.NewString()
+	status := c.Status()
+	status.State, status.Sample, status.RecordID = "observing", &sample, id
+	if err := validateStatusSize(status); err != nil {
+		c.setState("sample_unavailable")
+		return c.Status(), err
+	}
 	payload := struct {
 		Schema  string         `json:"$schema"`
 		Version int            `json:"version"`
@@ -143,8 +162,21 @@ func (c *Coordinator) Sample(ctx context.Context, path string) (Status, error) {
 		c.setState("journal_unavailable")
 		return c.Status(), fmt.Errorf("journal outcome %s", receipt.Outcome)
 	}
-	c.status.Store(&Status{Protocol: ProtocolVersion, State: "observing", Sample: &sample, RecordID: id})
+	c.status.Store(&status)
 	return c.Status(), nil
 }
 
 func (c *Coordinator) setState(state string) { s := c.Status(); s.State = state; c.status.Store(&s) }
+
+func validateStatusSize(status Status) error {
+	raw, err := json.Marshal(status)
+	if err != nil {
+		return err
+	}
+	// Leave room for bounded failure-state labels without invalidating a
+	// previously published snapshot when a later observation fails.
+	if len(raw) > MaxResponseBytes-1024 {
+		return fmt.Errorf("status_response_too_large")
+	}
+	return nil
+}

@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/root-attribution/v0.json",
+  "title": "Bounded root allocation observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "record_id",
+    "capacity_record_id",
+    "captured_at",
+    "complete",
+    "reasons",
+    "rows"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.3leaps.dev/spanwit/root-attribution/v0.json"
+    },
+    "version": {
+      "const": 0
+    },
+    "record_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "capacity_record_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "reasons": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "initial_baseline",
+          "free_space_loss_since_baseline",
+          "free_space_loss_since_heartbeat",
+          "hourly_baseline",
+          "pressure_worsened"
+        ]
+      }
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observation"
+        ],
+        "properties": {
+          "observation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "basis",
+              "coverage",
+              "activity",
+              "captured_at",
+              "files",
+              "gaps"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "device_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "file_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "basis": {
+                "const": "path_entry_allocated_blocks_sum"
+              },
+              "coverage": {
+                "enum": [
+                  "complete",
+                  "partial",
+                  "unavailable",
+                  "incomparable",
+                  "deferred"
+                ]
+              },
+              "activity": {
+                "enum": [
+                  "active",
+                  "unknown"
+                ]
+              },
+              "captured_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "allocated_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "files": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "gaps": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "identity": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "coverage": {
+                      "const": "complete"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "device_id",
+                    "file_id",
+                    "allocated_bytes",
+                    "identity"
+                  ],
+                  "properties": {
+                    "gaps": {
+                      "const": 0
+                    }
+                  }
+                },
+                "else": {
+                  "not": {
+                    "required": [
+                      "allocated_bytes"
+                    ]
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "coverage": {
+                      "const": "deferred"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "activity": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "activity": {
+                      "const": "unknown"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "delta_bytes": {
+            "type": "integer"
+          },
+          "baseline_record_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "dependentRequired": {
+          "delta_bytes": [
+            "baseline_record_id"
+          ],
+          "baseline_record_id": [
+            "delta_bytes"
+          ]
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "delta_bytes"
+              ]
+            },
+            "then": {
+              "properties": {
+                "observation": {
+                  "properties": {
+                    "coverage": {
+                      "const": "complete"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "complete": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "rows": {
+            "items": {
+              "properties": {
+                "observation": {
+                  "properties": {
+                    "coverage": {
+                      "const": "complete"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "rows": {
+            "contains": {
+              "properties": {
+                "observation": {
+                  "properties": {
+                    "coverage": {
+                      "not": {
+                        "const": "complete"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

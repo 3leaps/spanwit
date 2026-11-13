@@ -105,8 +105,23 @@ func Handler(c *Coordinator) http.Handler {
 // Run owns the coordinator for its full lifetime. It refuses an existing socket
 // instead of unlinking a potentially live or spoofed endpoint.
 func Run(ctx context.Context, dir, path string, interval time.Duration) error {
+	return RunWithRoots(ctx, dir, path, interval, nil)
+}
+
+// RunWithRoots opts into bounded attribution of explicitly selected roots.
+// Empty roots preserve cheap-only sampling. No root is discovered implicitly.
+func RunWithRoots(ctx context.Context, dir, path string, interval time.Duration, roots []string) error {
 	if interval < time.Minute {
 		return fmt.Errorf("sample interval must be at least 60s")
+	}
+	var observer *RootObserver
+	if len(roots) > 0 {
+		var err error
+		observer, err = NewRootObserver(roots)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = observer.Close() }()
 	}
 	c, err := Open(dir, nil)
 	if err != nil {
@@ -136,20 +151,54 @@ func Run(ctx context.Context, dir, path string, interval time.Duration) error {
 	defer func() { _ = server.Close() }()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	return coordinate(ctx, c, path, ticker.C, done)
+	return coordinateRoots(ctx, c, path, ticker.C, done, observer)
 }
 
 // coordinate keeps reads available during transient observation failures. An
 // uncertain journal outcome suspends writes until an explicit restart.
 func coordinate(ctx context.Context, c *Coordinator, path string, ticks <-chan time.Time, done <-chan error) error {
+	return coordinateRoots(ctx, c, path, ticks, done, nil)
+}
+
+type activityProbe interface {
+	Probe(context.Context, []string) (map[string]bool, error)
+}
+
+func coordinateRoots(ctx context.Context, c *Coordinator, path string, ticks <-chan time.Time, done <-chan error, observer *RootObserver) error {
+	return coordinateRootsWithActivity(ctx, c, path, ticks, done, observer, BuildActivityProbe{})
+}
+
+func coordinateRootsWithActivity(ctx context.Context, c *Coordinator, path string, ticks <-chan time.Time, done <-chan error, observer *RootObserver, probe activityProbe) error {
+	started := time.Now()
+	cadence := NewCadence(CadenceConfig{})
+	if observer != nil {
+		c.setAttributionState("awaiting_attribution")
+	}
 	for {
 		if ctx.Err() != nil {
 			return nil
 		}
-		if c.Status().State != "journal_unavailable" {
+		if !journalStopped(c.Status().State) {
 			sampleCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			_, _ = c.Sample(sampleCtx, path)
+			status, err := c.Sample(sampleCtx, path)
 			cancel()
+			if err == nil && observer != nil && status.Sample != nil {
+				if request := cadence.Heartbeat(time.Since(started), *status.Sample); request != nil {
+					var active map[string]bool
+					if probe != nil {
+						var probeErr error
+						active, probeErr = probe.Probe(ctx, observer.roots)
+						if probeErr != nil {
+							active = nil // Failure remains unknown, never idle.
+						}
+					}
+					complete, err := c.Attribute(ctx, observer, request.Reasons, active)
+					if err != nil && ctx.Err() == nil {
+						c.setAttributionState("unavailable")
+					}
+					cadence.Complete(time.Since(started), *status.Sample, err == nil && complete)
+				}
+			}
 		}
 		if ctx.Err() != nil {
 			return nil
@@ -199,11 +248,11 @@ func Read(ctx context.Context, dir, operation string) (json.RawMessage, error) {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 65537))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBytes+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) > 65536 {
+	if len(raw) > MaxResponseBytes {
 		return nil, fmt.Errorf("response_too_large")
 	}
 	if resp.StatusCode != 200 {
