@@ -2,7 +2,7 @@
 .PHONY: lint fmt-check test build install build-all package clean fmt validate-schemas check-all precommit prepush pr-final license-audit
 .PHONY: release-check release-prepare release-build
 .PHONY: release-preflight release-clean release-create-draft release-guard-tag-name release-guard-tag-version release-checksums release-verify-checksums release-download release-sign release-export-keys release-verify-keys release-verify-signatures release-notes release-upload-provenance release-upload release-upload-all release-publish
-.PHONY: sync-embedded-identity verify-embedded-identity test-standalone-binary
+.PHONY: sync-embedded-identity verify-embedded-identity test-standalone-binary test-install-binary
 .PHONY: release-tag-tests release-prepare-tag-message release-tag release-push-tag release-verify-tag release-verify-remote-tag
 .PHONY: release-export-pin release-validate-pin release-insert-anchors release-verify-published-tag
 
@@ -196,11 +196,14 @@ build: verify-embedded-identity  ## Build binary for current platform
 install: build  ## Install binary to BINDIR (default: ~/.local/bin)
 	@echo "→ Installing $(BINARY_NAME) to $(BINDIR)..."
 	@mkdir -p "$(BINDIR)"
-	@# Remove destination first (no-op if missing). On macOS, overwriting an
-	@# existing binary in-place can fail or leave a stale mapped image ("Text
-	@# file busy" / confused local bin). Unlink-then-copy is safe and portable.
+ifneq ($(filter Darwin Linux,$(UNAME_S_RAW)),)
+	@./scripts/install-binary.sh "bin/$(BINARY_NAME)$(BINARY_EXT)" \
+		"$(BINDIR)/$(BINARY_NAME)$(BINARY_EXT)"
+else
+	@# Preserve the existing installation path on other hosts.
 	@rm -f "$(BINDIR)/$(BINARY_NAME)$(BINARY_EXT)"
-	@cp bin/$(BINARY_NAME)$(BINARY_EXT) "$(BINDIR)/$(BINARY_NAME)$(BINARY_EXT)"
+	@cp "bin/$(BINARY_NAME)$(BINARY_EXT)" "$(BINDIR)/$(BINARY_NAME)$(BINARY_EXT)"
+endif
 	@echo "✓ Installed: $(BINDIR)/$(BINARY_NAME)$(BINARY_EXT)"
 
 test-standalone-binary: build  ## Verify built binary runs outside repo
@@ -229,9 +232,16 @@ package: build-all  ## Package release archives + checksum manifests to dist/rel
 	@BINARY_NAME=$(BINARY_NAME) ./scripts/package-artifacts.sh
 	@$(MAKE) release-checksums
 
-test: verify-embedded-identity  ## Run all tests
+test: verify-embedded-identity test-install-binary  ## Run all tests
 	@echo "Running test suite..."
 	$(GOTEST) ./... -v -cover
+
+test-install-binary:  ## Test staged macOS/Linux binary replacement
+ifneq ($(filter Darwin Linux,$(UNAME_S_RAW)),)
+	@./scripts/install-binary.test.sh
+else
+	@echo "Staged binary fixture is only applicable to macOS/Linux"
+endif
 
 lint:  ## Run lint checks with goneat
 	@if [ -z "$(GONEAT_BIN)" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi

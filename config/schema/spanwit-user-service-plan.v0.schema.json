@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/user-service-plan/v0.json",
+  "title": "Manual user-service definition preview",
+  "description": "Preparation only; command arguments are a first-start example after separately installing the definition. No host action or executable validation is attested. Serialized output is bounded to 128 KiB by the producer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "manager",
+    "label",
+    "definition_path",
+    "content",
+    "start_commands",
+    "stop_commands",
+    "definition_written",
+    "commands_executed"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.3leaps.dev/spanwit/user-service-plan/v0.json"
+    },
+    "version": {
+      "const": 0
+    },
+    "manager": {
+      "enum": [
+        "launchd",
+        "systemd-user"
+      ]
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "definition_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "pattern": "^/"
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 131072
+    },
+    "start_commands": {
+      "$ref": "#/$defs/commands"
+    },
+    "stop_commands": {
+      "$ref": "#/$defs/commands"
+    },
+    "definition_written": {
+      "const": false
+    },
+    "commands_executed": {
+      "const": false
+    }
+  },
+  "$defs": {
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 8,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        }
+      }
+    }
+  }
+}
