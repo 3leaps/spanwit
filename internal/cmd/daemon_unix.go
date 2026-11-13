@@ -55,7 +55,7 @@ func newDaemonCmd(identity *appidentity.Identity) *cobra.Command {
 	}}
 	once.Flags().StringVar(&path, "path", path, "filesystem to sample without walking")
 	setCommandCapability(once, CapabilityMutating)
-	parent.AddCommand(run, once)
+	parent.AddCommand(run, once, newDaemonServiceCmd(identity, &dir))
 	for _, op := range []string{"status", "capabilities", "proposals"} {
 		command := &cobra.Command{Use: op, Args: cobra.NoArgs, Short: "Read cached daemon " + op, RunE: func(cmd *cobra.Command, _ []string) error {
 			raw, err := daemon.Read(cmd.Context(), dir, cmd.Name())

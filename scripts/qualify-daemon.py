@@ -29,6 +29,8 @@ evidence_report_names = (
     "status.json",
     "capabilities.json",
     "input-hashes.json",
+    "service-foundations.json",
+    "service-verification.json",
 )
 evidence_log_names = ("daemon-tests.jsonl", "daemon.log")
 evidence_emit_limit = 64 << 10
@@ -128,7 +130,16 @@ def run_daemon_tests(evidence: pathlib.Path, workspace: pathlib.Path) -> None:
     result_path = evidence / "daemon-tests.jsonl"
     with result_path.open("w") as output:
         process = subprocess.Popen(
-            ["go", "test", "-json", "-race", "-count=1", "./internal/daemon"],
+            [
+                "go",
+                "test",
+                "-json",
+                "-race",
+                "-count=1",
+                "./internal/daemon",
+                "./internal/serviceexec",
+                "./internal/userservice",
+            ],
             cwd=workspace,
             stdout=output,
             stderr=subprocess.STDOUT,
@@ -175,6 +186,14 @@ def run_daemon_tests(evidence: pathlib.Path, workspace: pathlib.Path) -> None:
         "TestBuildActivityRealProcessDefersOnlyItsRoot",
         "TestAttributionRestartKeepsHistoryAndResetsBaseline",
         "TestAttributionCancellationKeepsCachedReadsAndBaseline",
+        "TestExecRunnerDoesNotStartCanceledContextOrInheritEnvironment",
+        "TestExecRunnerDrainsFastExitOutputBeforeClassifyingResult",
+        "TestExecRunnerCleansDescendantsAfterLeaderExit",
+        "TestExecRunnerBoundsInheritedPipeDescendant",
+        "TestExecRunnerNonzeroLeaderWithPipeDescendantIsUncertain",
+        "TestCleanupGroupWithAndResultClassification",
+        "TestRenderLinuxEscapesUnitArguments",
+        "TestPreviewContractRefusesEffectClaims",
     ):
         require(
             any(
@@ -312,6 +331,134 @@ def smoke(binary: pathlib.Path, evidence: pathlib.Path, fixture: pathlib.Path) -
     )
 
 
+def qualify_service_foundations(
+    binary: pathlib.Path,
+    evidence: pathlib.Path,
+    fixture: pathlib.Path,
+    workspace: pathlib.Path,
+) -> None:
+    # systemd restricts executable names more than ordinary argument paths.
+    # Reject unsupported names without emitting a usable plan.
+    for name in ('program "quote"', "program 'quote'", r"program back\slash"):
+        rejected = run(
+            [
+                str(binary),
+                "daemon",
+                "service",
+                "preview",
+                "--platform",
+                "linux",
+                "--executable",
+                str(fixture / name),
+                "--state-dir",
+                str(fixture / "s"),
+                "--path",
+                str(fixture / "r"),
+            ],
+            timeout=10,
+            cwd=workspace,
+            check=False,
+        )
+        require(
+            rejected.returncode != 0 and not rejected.stdout,
+            "unsupported systemd executable emitted a plan",
+        )
+        require(
+            "systemd executable path" in rejected.stderr,
+            "unsupported executable failed for an unexpected reason",
+        )
+    # Exercise the real parser with supported literal executable characters and
+    # quote/backslash argument paths. This copied executable is never run.
+    preview_binary = fixture / "program $%"
+    shutil.copy2(binary, preview_binary)
+    preview = json.loads(
+        run(
+            [
+                str(binary),
+                "daemon",
+                "service",
+                "preview",
+                "--platform",
+                "linux",
+                "--executable",
+                str(preview_binary),
+                "--state-dir",
+                str(fixture / 'state $% "quote" \\slash'),
+                "--path",
+                str(fixture / "r"),
+                "--root",
+                str(fixture / "root $% 'quote' \\slash"),
+            ],
+            timeout=10,
+            cwd=workspace,
+        ).stdout
+    )
+    require(
+        all(
+            preview.get(key) is False
+            for key in ("definition_written", "commands_executed")
+        ),
+        "service preview claimed effects",
+    )
+    require(preview.get("manager") == "systemd-user", "unexpected service manager")
+    # Verify only a private fixture copy, never install into a manager search path.
+    unit = fixture / "qualification.service"
+    unit.write_text(preview["content"])
+    runtime_dir = fixture / "runtime"
+    runtime_dir.mkdir(mode=0o700)
+    verification = run(
+        [
+            "/usr/bin/env",
+            f"XDG_RUNTIME_DIR={runtime_dir}",
+            "/usr/bin/systemd-analyze",
+            "--user",
+            "--man=no",
+            "verify",
+            str(unit),
+        ],
+        timeout=15,
+        cwd=workspace,
+        check=False,
+    )
+    # Retain bounded parser diagnostics before refusing a failed verification.
+    # Each tail is at most 2048 characters (at most 24576 JSON-escaped bytes).
+    (evidence / "service-verification.json").write_text(
+        json.dumps(
+            {
+                "exit_code": verification.returncode,
+                "stdout_tail": verification.stdout[-2048:],
+                "stderr_tail": verification.stderr[-2048:],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    require(
+        verification.returncode == 0,
+        "systemd-analyze verification failed; see service-verification.json",
+    )
+    install_test = run(
+        ["/bin/bash", str(workspace / "scripts/install-binary.test.sh")],
+        timeout=30,
+        cwd=workspace,
+    )
+    (evidence / "service-foundations.json").write_text(
+        json.dumps(
+            {
+                "preview": preview,
+                "unit_syntax_verified": verification.returncode == 0,
+                "unsupported_executable_paths_rejected": 3,
+                "installer_fixture_test_passed": install_test.returncode == 0,
+                "service_manager_invoked": False,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+
 def emit_evidence() -> int:
     require(os.geteuid() != 0, "evidence emission must run as an ordinary user")
     workspace = pathlib.Path(os.environ["GITHUB_WORKSPACE"]).resolve()
@@ -383,6 +530,7 @@ def main() -> int:
         "findmnt",
         "dpkg-query",
         "python3",
+        "systemd-analyze",
     ):
         require(shutil.which(command) is not None, f"missing prerequisite: {command}")
     require(
@@ -436,6 +584,7 @@ def main() -> int:
                     "lsof",
                     "mawk",
                     "util-linux",
+                    "systemd",
                 ]
             ).stdout.splitlines(),
             "os_release": os_release,
@@ -458,6 +607,7 @@ def main() -> int:
             cwd=workspace,
         )
         run_daemon_tests(evidence, workspace)
+        qualify_service_foundations(binary, evidence, fixture, workspace)
         smoke(binary, evidence, fixture)
     finally:
         # Only remove the short private fixture this process created under /tmp.

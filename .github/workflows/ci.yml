@@ -98,9 +98,9 @@ jobs:
           # The host bind must be writable by apt's unprivileged helpers too.
           chmod 1777 /tmp
           apt-get update -q
-          apt-get install -y -q --no-install-recommends lsof mawk util-linux
+          apt-get install -y -q --no-install-recommends lsof mawk util-linux systemd
           update-alternatives --set awk /usr/bin/mawk
-          command -v lsof mawk findmnt go python3 git runuser
+          command -v lsof mawk findmnt go python3 git runuser systemd-analyze
           test "$(readlink -f "$(command -v awk)")" = /usr/bin/mawk
           evidence_parent="${GITHUB_WORKSPACE}/.ci-evidence"
           if [ -e "$evidence_parent" ] || [ -L "$evidence_parent" ]; then

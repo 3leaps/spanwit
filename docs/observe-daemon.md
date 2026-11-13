@@ -128,3 +128,45 @@ Automatic history reclamation remains unavailable; keep experiments bounded
 rather than installing an unattended service.
 Native filesystem sampling is best-effort at the timeout boundary: a blocked
 kernel call cannot be forcibly interrupted by a Go context.
+
+## Prepare a user service
+
+`daemon service preview` renders a launchd agent or systemd user unit as a
+versioned `user-service-plan/v0` JSON document (maximum 128 KiB),
+including the definition text and explicit manager command arguments. The
+commands describe a first start after separately installing the definition;
+they are not an idempotent lifecycle transaction. It does
+not write a definition, invoke a service manager, or enable login persistence.
+The executable path is an explicit input; preview does not verify the binary
+or establish that it is installed or compatible. Use a stable installed
+executable, not a checkout or temporary build.
+Linux previews reject executable paths containing single quotes, double quotes,
+or backslashes, which systemd does not support. These characters remain
+supported in ordinary argument paths and in launchd executable paths.
+
+```sh
+spanwit daemon service preview --executable /absolute/installed/spanwit \
+  --path /absolute/observed/filesystem --root /absolute/observation/root
+```
+
+The platform defaults to the current OS; `--platform darwin` and
+`--platform linux` allow inspecting either format. Linux definition paths honor
+`XDG_CONFIG_HOME` when set; it must be an absolute clean path. Otherwise they
+use the home directory’s `.config` directory. Attribution roots remain
+explicit and optional. The inherited `--state-dir` selects the private daemon
+state directory. The capacity interval defaults to five minutes. Definitions
+use argument arrays, disable automatic restart, and do not enable login
+startup. Installing, starting, stopping, and upgrading a managed service remain
+separate lifecycle operations; preview alone performs none of them.
+
+`make install BINDIR=/absolute/bin` deploys only the CLI executable. On macOS
+and Linux it stages
+a fresh executable beside the destination and replaces the destination only
+after staging succeeds. A running process continues using its old executable;
+binary deployment does not restart it. Other hosts retain their existing
+unlink-and-copy installation path; the staged replacement tests are limited
+to macOS and Linux. A service upgrade therefore requires
+an explicit stop, deployment, start, and health check.
+
+The Linux qualification uses [`systemd-analyze verify`](https://manpages.debian.org/bookworm/systemd/systemd-analyze.1.en.html)
+on a private fixture definition. Syntax validation does not start a service.
