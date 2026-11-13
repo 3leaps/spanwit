@@ -337,9 +337,39 @@ def qualify_service_foundations(
     fixture: pathlib.Path,
     workspace: pathlib.Path,
 ) -> None:
-    # Exercise the actual systemd parser with literal metacharacters, not only
-    # a string comparison against the renderer. This executable is never run.
-    preview_binary = fixture / 'program $% "quote"'
+    # systemd restricts executable names more than ordinary argument paths.
+    # Reject unsupported names without emitting a usable plan.
+    for name in ('program "quote"', "program 'quote'", r"program back\slash"):
+        rejected = run(
+            [
+                str(binary),
+                "daemon",
+                "service",
+                "preview",
+                "--platform",
+                "linux",
+                "--executable",
+                str(fixture / name),
+                "--state-dir",
+                str(fixture / "s"),
+                "--path",
+                str(fixture / "r"),
+            ],
+            timeout=10,
+            cwd=workspace,
+            check=False,
+        )
+        require(
+            rejected.returncode != 0 and not rejected.stdout,
+            "unsupported systemd executable emitted a plan",
+        )
+        require(
+            "systemd executable path" in rejected.stderr,
+            "unsupported executable failed for an unexpected reason",
+        )
+    # Exercise the real parser with supported literal executable characters and
+    # quote/backslash argument paths. This copied executable is never run.
+    preview_binary = fixture / "program $%"
     shutil.copy2(binary, preview_binary)
     preview = json.loads(
         run(
@@ -353,9 +383,11 @@ def qualify_service_foundations(
                 "--executable",
                 str(preview_binary),
                 "--state-dir",
-                str(fixture / "s"),
+                str(fixture / 'state $% "quote" \\slash'),
                 "--path",
                 str(fixture / "r"),
+                "--root",
+                str(fixture / "root $% 'quote' \\slash"),
             ],
             timeout=10,
             cwd=workspace,
@@ -416,6 +448,7 @@ def qualify_service_foundations(
             {
                 "preview": preview,
                 "unit_syntax_verified": verification.returncode == 0,
+                "unsupported_executable_paths_rejected": 3,
                 "installer_fixture_test_passed": install_test.returncode == 0,
                 "service_manager_invoked": False,
             },

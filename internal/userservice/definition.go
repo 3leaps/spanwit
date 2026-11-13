@@ -74,6 +74,11 @@ func Validate(config Config) error {
 			return err
 		}
 	}
+	// systemd rejects these characters in the executable path even when
+	// quoted correctly. Ordinary argument paths do not have this restriction.
+	if config.Platform == PlatformLinux && strings.ContainsAny(config.Executable, "\"'\\") {
+		return fmt.Errorf("systemd executable path must not contain quotes or backslashes")
+	}
 	if config.ConfigHome != "" {
 		if err := validatePath("config home", config.ConfigHome, maxPathBytes); err != nil {
 			return err

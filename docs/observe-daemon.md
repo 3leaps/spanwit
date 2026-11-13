@@ -140,6 +140,9 @@ not write a definition, invoke a service manager, or enable login persistence.
 The executable path is an explicit input; preview does not verify the binary
 or establish that it is installed or compatible. Use a stable installed
 executable, not a checkout or temporary build.
+Linux previews reject executable paths containing single quotes, double quotes,
+or backslashes, which systemd does not support. These characters remain
+supported in ordinary argument paths and in launchd executable paths.
 
 ```sh
 spanwit daemon service preview --executable /absolute/installed/spanwit \

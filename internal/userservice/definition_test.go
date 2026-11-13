@@ -79,6 +79,26 @@ func TestValidateRejectsUnsafeOrAmbiguousInput(t *testing.T) {
 	}
 }
 
+func TestExecutablePathRestrictionsArePlatformSpecific(t *testing.T) {
+	for _, executable := range []string{`/opt/quote"/program`, `/opt/quote'/program`, `/opt/back\slash/program`} {
+		config := fixture(PlatformLinux)
+		config.Executable = executable
+		if _, err := Render(config); err == nil {
+			t.Fatalf("accepted unsupported systemd executable %q", executable)
+		}
+		config.Platform = PlatformDarwin
+		if _, err := Render(config); err != nil {
+			t.Fatalf("rejected launchd executable %q: %v", executable, err)
+		}
+		config = fixture(PlatformLinux)
+		config.StateDir = executable
+		config.Roots = []string{executable}
+		if _, err := Render(config); err != nil {
+			t.Fatalf("rejected ordinary systemd argument %q: %v", executable, err)
+		}
+	}
+}
+
 func TestRenderDoesNotUseHostState(t *testing.T) {
 	config := fixture(PlatformLinux)
 	first, err := Render(config)
