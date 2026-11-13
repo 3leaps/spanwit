@@ -190,7 +190,10 @@ func TestExecRunnerCleansDescendantsAfterLeaderExit(t *testing.T) {
 	// process-group cleanup rather than the race runtime's pre-exit grace.
 	result := runHelperWithEnv(t, "leader-exit-child", marker, 0, 0, "GORACE=atexit_sleep_ms=0")
 	runElapsed := time.Since(started)
-	cleanupUncertain := result.Outcome == Uncertain && result.Uncertain && errors.Is(result.Err, errOwnedGroupRemaining)
+	// A permission-denied cleanup observation remains uncertain. The late
+	// marker check must still show that the fixture child did not survive.
+	knownCleanupUncertainty := errors.Is(result.Err, errOwnedGroupRemaining) || errors.Is(result.Err, syscall.EPERM)
+	cleanupUncertain := result.Outcome == Uncertain && result.Uncertain && knownCleanupUncertainty
 	if result.ExitCode != 0 || (result.Outcome != Success && !cleanupUncertain) {
 		t.Fatalf("outcome=%q error=%v", result.Outcome, result.Err)
 	}
