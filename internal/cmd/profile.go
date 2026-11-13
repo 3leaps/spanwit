@@ -3,13 +3,18 @@ package cmd
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 
 	"github.com/3leaps/spanwit/internal/profiles"
 	"github.com/spf13/cobra"
 )
 
 func newProfileCmd() *cobra.Command {
-	parent := &cobra.Command{Use: "profile", Short: "Validate and preview experimental persona profiles"}
+	var stateDir string
+	home, _ := os.UserHomeDir()
+	stateDir = filepath.Join(home, ".local", "state", "spanwit", "daemon")
+	parent := &cobra.Command{Use: "profile", Short: "Validate, preview, and activate experimental persona profiles"}
+	parent.PersistentFlags().StringVar(&stateDir, "state-dir", stateDir, "private coordinator state directory")
 	validate := &cobra.Command{Use: "validate FILE", Short: "Validate a profile pack without activating it", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		pack, err := loadProfilePack(args[0])
 		if err != nil {
@@ -51,6 +56,7 @@ func newProfileCmd() *cobra.Command {
 	}}
 	setCommandCapability(diff, CapabilityObservational)
 	parent.AddCommand(validate, preview, diff)
+	addProfileActivationCommands(parent, &stateDir)
 	return parent
 }
 func loadProfilePack(path string) (*profiles.Pack, error) {

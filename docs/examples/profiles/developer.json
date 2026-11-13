@@ -22,14 +22,47 @@
           }
         ]
       }
+    },
+    "cargo-targets": {
+      "capability": "directory-prune",
+      "description": "Idle Cargo build targets under ~/dev, capped at a 40 GiB budget with oldest-first eviction proposals.",
+      "budget": {
+        "max_bytes": 42949672960,
+        "eviction_order": "idle-oldest-first",
+        "authority": "propose"
+      },
+      "policy": {
+        "version": 1,
+        "defaults": {
+          "min_age": "25h"
+        },
+        "paths": [
+          {
+            "path": "~/dev",
+            "max_depth": 5,
+            "targets": [
+              {
+                "signature": "development.rust.cargo-target"
+              }
+            ]
+          }
+        ]
+      }
     }
   },
   "profiles": {
     "developer": {
       "label": "Developer",
       "recipes": [
-        "grype-staging"
-      ]
+        "grype-staging",
+        "cargo-targets"
+      ],
+      "volume_objective": {
+        "path": "~",
+        "floor_bytes": 32212254720,
+        "recovery_target_bytes": 38654705664,
+        "max_sample_age": "15m"
+      }
     },
     "media": {
       "label": "Media (no recipes enabled)",

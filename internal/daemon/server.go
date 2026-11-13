@@ -79,8 +79,7 @@ func failure(w http.ResponseWriter, status int, code string) {
 	writeJSON(w, status, map[string]any{"protocol": ProtocolVersion, "error": code})
 }
 
-// Handler accepts only bodyless, queryless, versioned GET operations. Proposal
-// evaluation is unsupported in this spike; an empty list is labeled as such.
+// Handler accepts only bodyless, queryless, versioned GET operations.
 func Handler(c *Coordinator) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -93,11 +92,12 @@ func Handler(c *Coordinator) http.Handler {
 		}
 		switch r.URL.Path {
 		case "/v1/capabilities":
-			writeJSON(w, 200, map[string]any{"protocol": 1, "operations": []string{"capabilities", "status", "proposals.read"}, "sample_schema": SampleSchema, "journal_contract": "durable-record/v1", "proposal_evaluation": false, "mutation": false})
+			evalEnabled := c.Proposals().State != "not_evaluated"
+			writeJSON(w, 200, map[string]any{"protocol": 1, "operations": []string{"capabilities", "status", "proposals.read"}, "sample_schema": SampleSchema, "journal_contract": "durable-record/v1", "proposal_evaluation": evalEnabled, "mutation": false})
 		case "/v1/status":
 			writeJSON(w, 200, c.Status())
 		case "/v1/proposals":
-			writeJSON(w, 200, map[string]any{"protocol": 1, "state": "not_evaluated", "items": []any{}, "next_cursor": nil})
+			writeJSON(w, 200, c.Proposals())
 		default:
 			failure(w, 404, "unsupported_operation")
 		}
@@ -251,6 +251,9 @@ func coordinateRootsWithActivity(ctx context.Context, c *Coordinator, path strin
 					cadence.Complete(time.Since(started), *status.Sample, err == nil && complete)
 				}
 			}
+			evalCtx, evalCancel := context.WithTimeout(ctx, 15*time.Second)
+			_ = c.EvaluateProposals(evalCtx)
+			evalCancel()
 		}
 		if ctx.Err() != nil {
 			return nil

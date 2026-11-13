@@ -329,7 +329,7 @@
           "const": "durable-record/v1"
         },
         "proposal_evaluation": {
-          "const": false
+          "type": "boolean"
         },
         "mutation": {
           "const": false
@@ -350,14 +350,400 @@
           "const": 1
         },
         "state": {
-          "const": "not_evaluated"
+          "enum": [
+            "not_evaluated",
+            "evaluated",
+            "partial",
+            "unavailable"
+          ]
+        },
+        "profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pack_revision": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "compiled_policy_digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "capacity_record_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "execution_authorized": {
+          "const": false
+        },
+        "volume_objective": {
+          "$ref": "#/$defs/volume_objective_eval"
         },
         "items": {
           "type": "array",
-          "maxItems": 0
+          "items": {
+            "$ref": "#/$defs/proposal_item"
+          }
         },
         "next_cursor": {
           "type": "null"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "not_evaluated",
+                  "unavailable"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "evaluated",
+                  "partial"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "profile",
+              "pack_revision",
+              "compiled_policy_digest",
+              "evaluated_at"
+            ]
+          }
+        }
+      ]
+    },
+    "proposal_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipe_id",
+        "state",
+        "roots",
+        "proposed_items_count",
+        "proposed_reclaim_bytes",
+        "candidates",
+        "warnings"
+      ],
+      "properties": {
+        "recipe_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "enum": [
+            "complete",
+            "partial"
+          ]
+        },
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "proposed_items_digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "proposed_items_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "proposed_reclaim_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "budget": {
+          "$ref": "#/$defs/budget_eval"
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/proposal_candidate"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "proposal_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "state",
+        "signature",
+        "size_bytes",
+        "size_basis",
+        "size_incomplete"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "enum": [
+            "prunable",
+            "withheld"
+          ]
+        },
+        "signature": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size_basis": {
+          "type": "string"
+        },
+        "size_incomplete": {
+          "type": "boolean"
+        },
+        "withheld_reason": {
+          "type": "string"
+        },
+        "last_activity_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "activity_basis": {
+          "type": "string"
+        },
+        "budget_selected": {
+          "type": "boolean"
+        },
+        "budget_retained": {
+          "type": "boolean"
+        },
+        "dedupe_superseded_by": {
+          "type": "string"
+        }
+      }
+    },
+    "budget_eval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_bytes",
+        "eviction_order",
+        "authority",
+        "status",
+        "observed_bytes",
+        "protected_bytes",
+        "eligible_bytes",
+        "overage_bytes",
+        "selected_bytes",
+        "selected_count",
+        "retained_bytes",
+        "protected_overage_bytes",
+        "approval_state"
+      ],
+      "properties": {
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "eviction_order": {
+          "enum": [
+            "idle-oldest-first"
+          ]
+        },
+        "authority": {
+          "const": "propose"
+        },
+        "status": {
+          "enum": [
+            "within",
+            "exceeded",
+            "unknown"
+          ]
+        },
+        "size_basis": {
+          "type": "string"
+        },
+        "observed_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "protected_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "eligible_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "overage_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selected_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selected_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retained_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "protected_overage_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "approval_state": {
+          "enum": [
+            "not_needed",
+            "approval_required",
+            "blocked_by_protection",
+            "unknown_observation"
+          ]
+        }
+      }
+    },
+    "volume_objective_eval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "floor_bytes",
+        "recovery_target_bytes",
+        "observation_fresh",
+        "observation_complete",
+        "outcome",
+        "deduplicated_protected_bytes",
+        "deduplicated_eligible_bytes",
+        "deduplicated_selected_bytes",
+        "dropped_overlap_count",
+        "floor_shortfall_bytes",
+        "recovery_shortfall_bytes",
+        "uncovered_shortfall_bytes",
+        "approval_request_state"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "volume_id": {
+          "type": "string"
+        },
+        "captured_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "floor_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "recovery_target_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "avail_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "used_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "diagnostic_level": {
+          "enum": [
+            "ok",
+            "warn",
+            "critical"
+          ]
+        },
+        "observation_fresh": {
+          "type": "boolean"
+        },
+        "observation_complete": {
+          "type": "boolean"
+        },
+        "outcome": {
+          "enum": [
+            "met",
+            "evaluable",
+            "unmet_protected",
+            "unknown"
+          ]
+        },
+        "size_basis": {
+          "type": "string"
+        },
+        "deduplicated_protected_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deduplicated_eligible_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deduplicated_selected_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dropped_overlap_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "floor_shortfall_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recovery_shortfall_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uncovered_shortfall_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "approval_request_state": {
+          "enum": [
+            "not_needed",
+            "approval_required",
+            "blocked_by_protection",
+            "unknown_observation"
+          ]
         }
       }
     },

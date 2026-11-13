@@ -53,8 +53,11 @@ type Coordinator struct {
 	sampler           observe.Sampler
 	mu                sync.Mutex
 	status            atomic.Pointer[Status]
+	lastSamplePath    atomic.Value
+	proposals         atomic.Pointer[ProposalsResponse]
 	baselines         map[string]rootBaseline
 	attributionStream sampleJournal
+	profileStream     *recordprims.Stream
 }
 
 type sampleJournal interface {
@@ -103,6 +106,10 @@ func Open(dir string, sampler observe.Sampler) (*Coordinator, error) {
 	good = true
 	c := &Coordinator{owner: owner, store: store, stream: stream, sampler: sampler}
 	c.status.Store(&Status{Protocol: ProtocolVersion, State: "awaiting_sample"})
+	c.proposals.Store(&ProposalsResponse{Protocol: ProtocolVersion, State: "not_evaluated", Items: []ProposalItem{}, NextCursor: nil})
+	if profileStreamExistsOnDisk(journal) {
+		_, _, _, _ = c.loadAuthoritativeProfile(context.Background())
+	}
 	return c, nil
 }
 
@@ -193,6 +200,7 @@ func (c *Coordinator) Sample(ctx context.Context, path string) (Status, error) {
 		return c.Status(), fmt.Errorf("journal outcome %s", receipt.Outcome)
 	}
 	c.status.Store(&status)
+	c.lastSamplePath.Store(filepath.Clean(path))
 	return c.Status(), nil
 }
 
