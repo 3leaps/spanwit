@@ -65,3 +65,6 @@ var SpanwitRootAttributionV0 []byte
 
 //go:embed spanwit-user-service-plan.v0.schema.json
 var SpanwitUserServicePlanV0 []byte
+
+//go:embed spanwit-user-service-status.v0.schema.json
+var SpanwitUserServiceStatusV0 []byte

@@ -27,10 +27,23 @@ const MaxResponseBytes = 65536
 type Status struct {
 	Protocol         int             `json:"protocol"`
 	State            string          `json:"state"`
+	Instance         *Instance       `json:"instance,omitempty"`
 	Sample           *observe.Sample `json:"sample,omitempty"`
 	RecordID         string          `json:"record_id,omitempty"`
 	Attribution      *Attribution    `json:"attribution,omitempty"`
 	AttributionState string          `json:"attribution_state,omitempty"`
+}
+
+// Instance identifies the running coordinator process and its bound runtime
+// configuration so service-management health checks can distinguish the
+// intended managed process from an unrelated same-user daemon.
+type Instance struct {
+	InstanceID       string `json:"instance_id"`
+	PID              int    `json:"pid"`
+	StartedAt        string `json:"started_at"`
+	ExecutablePath   string `json:"executable_path,omitempty"`
+	ExecutableSHA256 string `json:"executable_sha256,omitempty"`
+	ConfigSHA256     string `json:"config_sha256"`
 }
 
 type Coordinator struct {
@@ -105,12 +118,29 @@ func (c *Coordinator) Close() error {
 }
 func (c *Coordinator) Status() Status {
 	s := *c.status.Load()
+	if s.Instance != nil {
+		inst := *s.Instance
+		s.Instance = &inst
+	}
 	if s.Sample != nil {
 		sample := *s.Sample
 		s.Sample = &sample
 	}
 	s.Attribution = cloneAttribution(s.Attribution)
 	return s
+}
+
+func (c *Coordinator) SetInstance(instance Instance) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s := c.Status()
+	inst := instance
+	s.Instance = &inst
+	if err := validateStatusSize(s); err != nil {
+		return err
+	}
+	c.status.Store(&s)
+	return nil
 }
 
 // Sample commits the observation before publishing it to readers. Failure leaves

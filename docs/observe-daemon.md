@@ -106,8 +106,8 @@ that the machine has no reclaimable files. No mutation socket methods exist.
 The journal uses durable-record/v1 and recordprims-fs/v2. Sample payload version
 0 is distinct from API protocol version 1. Existing observe JSON state is not
 migrated. Root payloads use `root-attribution/v0` on a separate journal stream.
-There is no snapshot-body retention, approval, grant, execution, or service
-installation in this experimental slice. Before opening a store and before
+There is no snapshot-body retention, approval, grant, or cleanup execution
+in this experimental slice. Before opening a store and before
 appending observations, a bounded metadata walk checks aggregate logical file
 lengths (including indexes and temporary files) against a 16 MiB stop-admission
 watermark. Enumeration is limited to 4096 entries and eight directory levels;
@@ -129,7 +129,7 @@ rather than installing an unattended service.
 Native filesystem sampling is best-effort at the timeout boundary: a blocked
 kernel call cannot be forcibly interrupted by a Go context.
 
-## Prepare a user service
+## Prepare and manage a user service
 
 `daemon service preview` renders a launchd agent or systemd user unit as a
 versioned `user-service-plan/v0` JSON document (maximum 128 KiB),
@@ -156,8 +156,45 @@ use the home directory’s `.config` directory. Attribution roots remain
 explicit and optional. The inherited `--state-dir` selects the private daemon
 state directory. The capacity interval defaults to five minutes. Definitions
 use argument arrays, disable automatic restart, and do not enable login
-startup. Installing, starting, stopping, and upgrading a managed service remain
-separate lifecycle operations; preview alone performs none of them.
+startup.
+
+Explicit manual-start lifecycle commands emit a versioned
+`user-service-status/v0` JSON report (maximum 128 KiB) separating definition
+integrity, service-manager observation, and daemon socket/instance health:
+
+```sh
+spanwit daemon service install --executable /absolute/installed/spanwit \
+  --path /absolute/observed/filesystem --root /absolute/observation/root
+spanwit daemon service start
+spanwit --read-only daemon service status
+spanwit daemon service stop
+spanwit daemon service uninstall
+```
+
+- `install` verifies that `--executable` is a symlink-free regular executable
+  in a non-writable directory owned by the user or root, computes its SHA-256
+  and runtime configuration digest, refuses foreign or externally modified unit
+  files, and publishes `<state-dir>/service-receipt.json` and the unit file in
+  two crash-consistent phases under a dedicated `<state-dir>/service-control.lock`
+  (never contending with `coordinator.lock`). It does not start the service.
+- `start` requires a verified installed definition and matching on-disk
+  executable, invokes fixed platform manager verbs without shell interpretation
+  or blind retries, and confirms that the running daemon’s `/v1/status`
+  `instance` (`pid`, `config_sha256`, `executable_sha256`) matches both the
+  service manager’s active PID and the ownership receipt.
+- `status` is strictly observational (`--read-only` compatible): it never
+  creates directories or locks, and reports `installed_stopped`, `healthy`,
+  `drifted` (such as when a binary is replaced on disk while the old process is
+  running), `conflict` (such as an unmanaged foreground process holding the
+  socket), `interrupted`, or `unknown` when manager state cannot be confirmed.
+- `stop` stops an owned service and requires independent confirmation that the
+  service manager reports an inactive state, `control.sock` has been removed by
+  the daemon, and any verified daemon PID has exited (`ESRCH`). It never deletes
+  `control.sock` or signals an unverified PID; timeouts and unconfirmed stops
+  report `outcome: "unconfirmed"` with `uncertain: true`.
+- `uninstall` requires the service to be confirmed stopped and removes only a
+  definition whose digest matches the ownership receipt, preserving
+  `<state-dir>/journal` and `coordinator.lock`.
 
 `make install BINDIR=/absolute/bin` deploys only the CLI executable. On macOS
 and Linux it stages
@@ -166,7 +203,8 @@ after staging succeeds. A running process continues using its old executable;
 binary deployment does not restart it. Other hosts retain their existing
 unlink-and-copy installation path; the staged replacement tests are limited
 to macOS and Linux. A service upgrade therefore requires
-an explicit stop, deployment, start, and health check.
+an explicit `stop`, binary deployment, `install` (to re-verify and bind the new
+executable digest), `start`, and health check.
 
 The Linux qualification uses [`systemd-analyze verify`](https://manpages.debian.org/bookworm/systemd/systemd-analyze.1.en.html)
 on a private fixture definition. Syntax validation does not start a service.

@@ -87,6 +87,52 @@
         }
       }
     },
+    "instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instance_id",
+        "pid",
+        "started_at",
+        "config_sha256"
+      ],
+      "properties": {
+        "instance_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "executable_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^/"
+        },
+        "executable_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "config_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "dependentRequired": {
+        "executable_path": [
+          "executable_sha256"
+        ],
+        "executable_sha256": [
+          "executable_path"
+        ]
+      }
+    },
     "status": {
       "type": "object",
       "additionalProperties": false,
@@ -106,6 +152,9 @@
             "journal_unavailable",
             "journal_capacity_reached"
           ]
+        },
+        "instance": {
+          "$ref": "#/$defs/instance"
         },
         "sample": {
           "$ref": "#/$defs/sample"

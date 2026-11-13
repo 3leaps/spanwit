@@ -369,6 +369,58 @@ func TestStateSymlinkRedirectRefused(t *testing.T) {
 	}
 }
 
+func TestExecutableInspectionAndSeparateServiceControlLock(t *testing.T) {
+	dir := privateDir(t)
+	coordLock, err := Acquire(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeTest(t, coordLock)
+
+	// Service-control lock must not contend with coordinator.lock.
+	svcLock, err := AcquireNamedLock(dir, "service-control.lock")
+	if err != nil {
+		t.Fatalf("service-control lock contended with coordinator lock: %v", err)
+	}
+	if _, err := AcquireNamedLock(dir, "service-control.lock"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("second service-control lock admitted: %v", err)
+	}
+	closeTest(t, svcLock)
+
+	binDir := filepath.Join(dir, "bin")
+	if err := os.Mkdir(binDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	execPath := filepath.Join(binDir, "spanwit")
+	if err := os.WriteFile(execPath, []byte("#!/bin/sh\necho ok\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	id, err := InspectExecutable(execPath)
+	if err != nil || len(id.SHA256) != 64 || id.Size == 0 {
+		t.Fatalf("InspectExecutable failed: %+v err=%v", id, err)
+	}
+
+	// Group-writable executable must be rejected.
+	if err := os.Chmod(execPath, 0720); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InspectExecutable(execPath); err == nil {
+		t.Fatal("accepted group-writable executable")
+	}
+	if err := os.Chmod(execPath, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InspectExecutable(execPath); err == nil {
+		t.Fatal("accepted non-executable file")
+	}
+	if err := os.Chmod(execPath, 0700|os.ModeSetuid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InspectExecutable(execPath); err == nil {
+		t.Fatal("accepted setuid executable")
+	}
+}
+
 func closeTest(t *testing.T, c interface{ Close() error }) {
 	t.Helper()
 	if err := c.Close(); err != nil {
