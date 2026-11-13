@@ -30,6 +30,7 @@ evidence_report_names = (
     "capabilities.json",
     "input-hashes.json",
     "service-foundations.json",
+    "service-verification.json",
 )
 evidence_log_names = ("daemon-tests.jsonl", "daemon.log")
 evidence_emit_limit = 64 << 10
@@ -385,6 +386,25 @@ def qualify_service_foundations(
         ],
         timeout=15,
         cwd=workspace,
+        check=False,
+    )
+    # Retain bounded parser diagnostics before refusing a failed verification.
+    # Each tail is at most 2048 characters (at most 24576 JSON-escaped bytes).
+    (evidence / "service-verification.json").write_text(
+        json.dumps(
+            {
+                "exit_code": verification.returncode,
+                "stdout_tail": verification.stdout[-2048:],
+                "stderr_tail": verification.stderr[-2048:],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    require(
+        verification.returncode == 0,
+        "systemd-analyze verification failed; see service-verification.json",
     )
     install_test = run(
         ["/bin/bash", str(workspace / "scripts/install-binary.test.sh")],
