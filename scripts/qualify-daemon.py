@@ -203,7 +203,7 @@ def run_daemon_tests(evidence: pathlib.Path, workspace: pathlib.Path) -> None:
         "TestUnmanagedProcessConflictAndUncertainOutcomes",
         "TestDaemonServiceCapabilitiesAndInstallLifecycle",
         "TestProfileActivateStatusDeactivateCLI",
-        "TestProposalEndpointReflectsActivationSwitchAndDeactivation",
+        "TestDaemonProposalsParityAndFailClosedOnMissingOrCorruptBody",
     ):
         require(
             any(
