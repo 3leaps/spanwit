@@ -22,7 +22,12 @@ clients can review the actual scope.
 The example selects old Grype staging with the existing signature and a 24-hour
 age floor. Its cache location is for macOS; select the appropriate cache root
 for your machine. Signature patterns are relative to the configured root, so
-retain the `grype/db` components beneath that root. The empty media persona
+retain the `grype/db` components beneath that root. On macOS, when a recipe
+roots at `~/Library/Caches` and runs under a `launchd` background user service,
+exclude Apple TCC-protected directories (`com.apple.*`, `CloudKit`,
+`FamilyCircle`, `GeoServices`, `PassKit`) and unrelated large caches (`go-build`,
+`uv`, `Homebrew`) via `ignores` so background proposal evaluation neither triggers
+TCC prompts nor walks unrelated cache trees. The empty media persona
 intentionally enables no cleanup rules.
 
 A recipe currently supports `directory-prune` only, with signature-backed

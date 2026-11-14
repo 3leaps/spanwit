@@ -251,7 +251,7 @@ func coordinateRootsWithActivity(ctx context.Context, c *Coordinator, path strin
 					cadence.Complete(time.Since(started), *status.Sample, err == nil && complete)
 				}
 			}
-			evalCtx, evalCancel := context.WithTimeout(ctx, 15*time.Second)
+			evalCtx, evalCancel := context.WithTimeout(ctx, 60*time.Second)
 			_ = c.EvaluateProposals(evalCtx)
 			evalCancel()
 		}

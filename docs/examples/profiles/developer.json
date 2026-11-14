@@ -14,6 +14,17 @@
           {
             "path": "~/Library/Caches",
             "max_depth": 4,
+            "ignores": [
+              "com.apple.*",
+              "CloudKit",
+              "FamilyCircle",
+              "GeoServices",
+              "PassKit",
+              "go-build",
+              "uv",
+              "Homebrew",
+              "ms-playwright"
+            ],
             "targets": [
               {
                 "signature": "development.security.grype-db-download"
