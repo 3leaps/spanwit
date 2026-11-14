@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/3leaps/spanwit/internal/serviceexec"
@@ -176,7 +177,14 @@ func TestDaemonServiceCapabilitiesAndInstallLifecycle(t *testing.T) {
 	root.SetOut(&installOut)
 	root.SetErr(&installOut)
 	root.SetArgs([]string{"--state-dir", stateDir, "service", "install", "--executable", execPath})
-	if err := root.Execute(); err != nil {
+	err = root.Execute()
+	if os.Geteuid() == 0 {
+		if err == nil || !strings.Contains(err.Error(), "run as an ordinary user") {
+			t.Fatalf("expected root user-service install refusal, got: %v", err)
+		}
+		return
+	}
+	if err != nil {
 		t.Fatalf("service install failed: %v", err)
 	}
 	var installReport userservice.Report

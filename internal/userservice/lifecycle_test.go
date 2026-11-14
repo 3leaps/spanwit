@@ -306,6 +306,12 @@ func TestManagedLifecycleInstallStartStatusStopUninstallAndUpgrade(t *testing.T)
 			if _, statErr := os.Stat(stateDir); !errors.Is(statErr, os.ErrNotExist) {
 				t.Fatalf("observational status created stateDir: %v", statErr)
 			}
+			if os.Geteuid() == 0 {
+				if _, err := Install(context.Background(), cfg, opts); err == nil || !strings.Contains(err.Error(), "run as an ordinary user") {
+					t.Fatalf("expected root install refusal, got %v", err)
+				}
+				return
+			}
 
 			// 2. Install writes definition + receipt without starting the service.
 			installed, err := Install(context.Background(), cfg, opts)
@@ -459,6 +465,20 @@ func TestCrashConsistencyAndForeignDefinitionProtection(t *testing.T) {
 	if err := os.WriteFile(plan.DefinitionPath, foreignBytes, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if os.Geteuid() == 0 {
+		foreignStatus, err := Status(context.Background(), opts)
+		if err != nil || foreignStatus.Installation.State != "foreign_definition" {
+			t.Fatalf("expected foreign_definition status under root: %+v err=%v", foreignStatus, err)
+		}
+		validateStatusReportContract(t, foreignStatus)
+		if _, err := Install(context.Background(), cfg, opts); err == nil || !strings.Contains(err.Error(), "run as an ordinary user") {
+			t.Fatalf("expected root install refusal, got %v", err)
+		}
+		if _, err := Uninstall(context.Background(), opts); err == nil || !strings.Contains(err.Error(), "run as an ordinary user") {
+			t.Fatalf("expected root uninstall refusal, got %v", err)
+		}
+		return
+	}
 	refusedInstall, err := Install(context.Background(), cfg, opts)
 	if err == nil || refusedInstall.Outcome != "refused" || refusedInstall.Installation.State != "foreign_definition" {
 		t.Fatalf("expected foreign_definition refusal on install: %+v err=%v", refusedInstall, err)
@@ -571,6 +591,15 @@ func TestUnmanagedProcessConflictAndUncertainOutcomes(t *testing.T) {
 		Runner:        runner,
 		HealthTimeout: 300 * time.Millisecond,
 		PollInterval:  20 * time.Millisecond,
+	}
+	if os.Geteuid() == 0 {
+		if _, err := Start(context.Background(), opts); err == nil || !strings.Contains(err.Error(), "run as an ordinary user") {
+			t.Fatalf("expected root start refusal, got %v", err)
+		}
+		if _, err := Stop(context.Background(), opts); err == nil || !strings.Contains(err.Error(), "run as an ordinary user") {
+			t.Fatalf("expected root stop refusal, got %v", err)
+		}
+		return
 	}
 	if _, err := Install(context.Background(), cfg, opts); err != nil {
 		t.Fatal(err)

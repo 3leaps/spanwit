@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -86,6 +87,17 @@ func TestProfileActivateStatusDeactivateCLI(t *testing.T) {
 	st0 := runProfile("status")
 	if st0["active"] != false || st0["state"] != "inactive" {
 		t.Fatalf("expected inactive, got %+v", st0)
+	}
+	if os.Geteuid() == 0 {
+		root := newProfileCmd()
+		var out bytes.Buffer
+		root.SetOut(&out)
+		root.SetErr(&out)
+		root.SetArgs([]string{"--state-dir", stateDir, "activate", "../../docs/examples/profiles/developer.json", "--name", "media", "--expected-revision", "none"})
+		if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "run as an ordinary user") {
+			t.Fatalf("expected root profile activate refusal, got: %v", err)
+		}
+		return
 	}
 
 	act := runProfile("activate", "../../docs/examples/profiles/developer.json", "--name", "media", "--expected-revision", "none")

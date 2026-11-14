@@ -515,7 +515,35 @@ func TestRecipeBudgetBlockedByProtectionAndUnknownOnIncompleteScan(t *testing.T)
 		t.Fatalf("expected blocked_by_protection when only protected candidates exceed ceiling: %+v", b)
 	}
 
-	// Now force an incomplete walk via an unreadable subdirectory inside the target so sizing/walk emits a warning.
+	// Direct unit verification of incomplete-scan and incomplete-size fail-closed
+	// budget evaluation (portable even when running as UID 0 in container CI).
+	incEval := evaluateRecipeBudget(RecipeBudget{
+		MaxBytes:      100,
+		EvictionOrder: EvictionOrderIdleOldestFirst,
+		Authority:     AuthorityPropose,
+	}, false, "allocated", pv.Recipes[0].Candidates)
+	if incEval.Status != BudgetStatusUnknown || incEval.ApprovalState != ApprovalStateUnknownObservation || incEval.SelectedCount != 0 {
+		t.Fatalf("expected incomplete scan to report unknown budget status, got %+v", incEval)
+	}
+	incCandEval := evaluateRecipeBudget(RecipeBudget{
+		MaxBytes:      100,
+		EvictionOrder: EvictionOrderIdleOldestFirst,
+		Authority:     AuthorityPropose,
+	}, true, "allocated", []Candidate{{
+		Path:           filepath.Join(root, "proj-recent", "target"),
+		State:          "prunable",
+		SizeBytes:      4096,
+		SizeBasis:      "allocated",
+		SizeIncomplete: true,
+		LastActivityAt: "2026-01-01T00:00:00Z",
+		ActivityBasis:  "descendant_mtime",
+	}})
+	if incCandEval.Status != BudgetStatusUnknown || incCandEval.ApprovalState != ApprovalStateUnknownObservation || incCandEval.SelectedCount != 0 {
+		t.Fatalf("expected incomplete candidate size to report unknown budget status, got %+v", incCandEval)
+	}
+
+	// End-to-end Preview check via unreadable subdirectory when filesystem permissions
+	// block ReadDir (non-root user).
 	unreadable := filepath.Join(root, "proj-recent", "target", "debug", "locked-sub")
 	if err := os.MkdirAll(unreadable, 0000); err != nil {
 		t.Fatal(err)
@@ -523,13 +551,15 @@ func TestRecipeBudgetBlockedByProtectionAndUnknownOnIncompleteScan(t *testing.T)
 	t.Cleanup(func() {
 		_ = os.Chmod(unreadable, 0700)
 	})
-	pvInc, err := pack.Preview(context.Background(), "developer")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bInc := pvInc.Recipes[0].Budget
-	if bInc == nil || bInc.Status != BudgetStatusUnknown || bInc.ApprovalState != ApprovalStateUnknownObservation {
-		t.Fatalf("expected incomplete scan to report unknown budget status, got %+v", bInc)
+	if _, readErr := os.ReadDir(unreadable); readErr != nil {
+		pvInc, err := pack.Preview(context.Background(), "developer")
+		if err != nil {
+			t.Fatal(err)
+		}
+		bInc := pvInc.Recipes[0].Budget
+		if bInc == nil || bInc.Status != BudgetStatusUnknown || bInc.ApprovalState != ApprovalStateUnknownObservation {
+			t.Fatalf("expected incomplete scan to report unknown budget status, got %+v", bInc)
+		}
 	}
 }
 
