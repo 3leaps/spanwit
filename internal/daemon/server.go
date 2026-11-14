@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const SocketName = "control.sock"
@@ -77,8 +79,7 @@ func failure(w http.ResponseWriter, status int, code string) {
 	writeJSON(w, status, map[string]any{"protocol": ProtocolVersion, "error": code})
 }
 
-// Handler accepts only bodyless, queryless, versioned GET operations. Proposal
-// evaluation is unsupported in this spike; an empty list is labeled as such.
+// Handler accepts only bodyless, queryless, versioned GET operations.
 func Handler(c *Coordinator) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -91,15 +92,26 @@ func Handler(c *Coordinator) http.Handler {
 		}
 		switch r.URL.Path {
 		case "/v1/capabilities":
-			writeJSON(w, 200, map[string]any{"protocol": 1, "operations": []string{"capabilities", "status", "proposals.read"}, "sample_schema": SampleSchema, "journal_contract": "durable-record/v1", "proposal_evaluation": false, "mutation": false})
+			evalEnabled := c.Proposals().State != "not_evaluated"
+			writeJSON(w, 200, map[string]any{"protocol": 1, "operations": []string{"capabilities", "status", "proposals.read"}, "sample_schema": SampleSchema, "journal_contract": "durable-record/v1", "proposal_evaluation": evalEnabled, "mutation": false})
 		case "/v1/status":
 			writeJSON(w, 200, c.Status())
 		case "/v1/proposals":
-			writeJSON(w, 200, map[string]any{"protocol": 1, "state": "not_evaluated", "items": []any{}, "next_cursor": nil})
+			writeJSON(w, 200, c.Proposals())
 		default:
 			failure(w, 404, "unsupported_operation")
 		}
 	})
+}
+
+// RunConfig supplies the runtime configuration and optional executable path
+// override for a foreground or managed daemon instance.
+type RunConfig struct {
+	StateDir       string
+	Path           string
+	Interval       time.Duration
+	Roots          []string
+	ExecutablePath string
 }
 
 // Run owns the coordinator for its full lifetime. It refuses an existing socket
@@ -111,23 +123,44 @@ func Run(ctx context.Context, dir, path string, interval time.Duration) error {
 // RunWithRoots opts into bounded attribution of explicitly selected roots.
 // Empty roots preserve cheap-only sampling. No root is discovered implicitly.
 func RunWithRoots(ctx context.Context, dir, path string, interval time.Duration, roots []string) error {
-	if interval < time.Minute {
+	return RunWithConfig(ctx, RunConfig{StateDir: dir, Path: path, Interval: interval, Roots: roots})
+}
+
+func RunWithConfig(ctx context.Context, cfg RunConfig) error {
+	if cfg.Interval < time.Minute {
 		return fmt.Errorf("sample interval must be at least 60s")
 	}
 	var observer *RootObserver
-	if len(roots) > 0 {
+	if len(cfg.Roots) > 0 {
 		var err error
-		observer, err = NewRootObserver(roots)
+		observer, err = NewRootObserver(cfg.Roots)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = observer.Close() }()
 	}
-	c, err := Open(dir, nil)
+	c, err := Open(cfg.StateDir, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = c.Close() }()
+	configDigest, err := RuntimeConfigDigest(c.owner.Dir, cfg.Path, cfg.Interval, cfg.Roots)
+	if err != nil {
+		return err
+	}
+	inst := Instance{
+		InstanceID:   uuid.NewString(),
+		PID:          os.Getpid(),
+		StartedAt:    time.Now().UTC().Truncate(time.Microsecond).Format("2006-01-02T15:04:05.000000Z"),
+		ConfigSHA256: configDigest,
+	}
+	if execID, ok := resolveCurrentExecutable(cfg.ExecutablePath); ok {
+		inst.ExecutablePath = execID.Path
+		inst.ExecutableSHA256 = execID.SHA256
+	}
+	if err := c.SetInstance(inst); err != nil {
+		return err
+	}
 	socket := filepath.Join(c.owner.Dir, SocketName)
 	if _, err := os.Lstat(socket); err == nil {
 		return fmt.Errorf("socket_exists: inspect stale endpoint before removing it")
@@ -149,9 +182,28 @@ func RunWithRoots(ctx context.Context, dir, path string, interval time.Duration,
 		done <- server.Serve(&boundedListener{UnixListener: l, slots: make(chan struct{}, MaxConnections)})
 	}()
 	defer func() { _ = server.Close() }()
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(cfg.Interval)
 	defer ticker.Stop()
-	return coordinateRoots(ctx, c, path, ticker.C, done, observer)
+	return coordinateRoots(ctx, c, cfg.Path, ticker.C, done, observer)
+}
+
+func resolveCurrentExecutable(override string) (ExecutableIdentity, bool) {
+	candidates := make([]string, 0, 3)
+	if override != "" {
+		candidates = append(candidates, override)
+	}
+	if len(os.Args) > 0 && filepath.IsAbs(os.Args[0]) && filepath.Clean(os.Args[0]) == os.Args[0] {
+		candidates = append(candidates, os.Args[0])
+	}
+	if exe, err := os.Executable(); err == nil && filepath.IsAbs(exe) && filepath.Clean(exe) == exe {
+		candidates = append(candidates, exe)
+	}
+	for _, candidate := range candidates {
+		if id, err := InspectExecutable(candidate); err == nil {
+			return id, true
+		}
+	}
+	return ExecutableIdentity{}, false
 }
 
 // coordinate keeps reads available during transient observation failures. An
@@ -199,6 +251,9 @@ func coordinateRootsWithActivity(ctx context.Context, c *Coordinator, path strin
 					cadence.Complete(time.Since(started), *status.Sample, err == nil && complete)
 				}
 			}
+			evalCtx, evalCancel := context.WithTimeout(ctx, 60*time.Second)
+			_ = c.EvaluateProposals(evalCtx)
+			evalCancel()
 		}
 		if ctx.Err() != nil {
 			return nil

@@ -1,9 +1,10 @@
 //go:build darwin || linux
 
-// Package userservice renders bounded, manual-start service definitions.
+// Package userservice renders and manages bounded, manual-start user-service
+// definitions and ownership receipts.
 //
-// It deliberately does not inspect, write, register, start, stop, or enable
-// a host service. A later lifecycle adapter owns every host action.
+// Preview rendering remains pure and host-independent; lifecycle actions in
+// lifecycle.go require explicit invocation and dedicated service-control state.
 package userservice
 
 import (

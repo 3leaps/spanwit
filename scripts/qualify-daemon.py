@@ -137,8 +137,10 @@ def run_daemon_tests(evidence: pathlib.Path, workspace: pathlib.Path) -> None:
                 "-race",
                 "-count=1",
                 "./internal/daemon",
+                "./internal/profiles",
                 "./internal/serviceexec",
                 "./internal/userservice",
+                "./internal/cmd",
             ],
             cwd=workspace,
             stdout=output,
@@ -194,6 +196,14 @@ def run_daemon_tests(evidence: pathlib.Path, workspace: pathlib.Path) -> None:
         "TestCleanupGroupWithAndResultClassification",
         "TestRenderLinuxEscapesUnitArguments",
         "TestPreviewContractRefusesEffectClaims",
+        "TestExecutableInspectionAndSeparateServiceControlLock",
+        "TestStatusReportSchemaEnforcesHealthAndActionInvariants",
+        "TestManagedLifecycleInstallStartStatusStopUninstallAndUpgrade",
+        "TestCrashConsistencyAndForeignDefinitionProtection",
+        "TestUnmanagedProcessConflictAndUncertainOutcomes",
+        "TestDaemonServiceCapabilitiesAndInstallLifecycle",
+        "TestProfileActivateStatusDeactivateCLI",
+        "TestDaemonProposalsParityAndFailClosedOnMissingOrCorruptBody",
     ):
         require(
             any(

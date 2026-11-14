@@ -59,7 +59,25 @@ func e2eCargo(t *testing.T, dir string) string {
 // returns its canonical path.
 func e2eTempRoot(t *testing.T) string {
 	t.Helper()
-	parent := filepath.Join(t.TempDir(), "p")
+	base := t.TempDir()
+	// On Linux when TMPDIR is /tmp or /var/tmp, t.TempDir() sits beneath a
+	// shared temp path that AdmitTempRoot refuses by design. Create the
+	// fixture beneath the user's home directory instead so it models a
+	// per-user temp root (like /var/folders/... on macOS or XDG_RUNTIME_DIR).
+	if strings.HasPrefix(base, "/tmp/") || strings.HasPrefix(base, "/var/tmp/") ||
+		strings.HasPrefix(base, "/private/tmp/") || strings.HasPrefix(base, "/private/var/tmp/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := os.MkdirTemp(home, ".spanwit-e2e-temproot-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(d) })
+		base = d
+	}
+	parent := filepath.Join(base, "p")
 	if err := os.Mkdir(parent, 0o700); err != nil {
 		t.Fatal(err)
 	}

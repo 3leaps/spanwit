@@ -1,0 +1,516 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/spanwit/user-service-status/v0.json",
+  "title": "Managed user-service lifecycle status and action report",
+  "description": "Reports separated definition/receipt integrity, service-manager observation, and daemon instance/config health for manual-start user-service lifecycle actions. Serialized output is bounded to 128 KiB by the producer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "action",
+    "outcome",
+    "uncertain",
+    "healthy",
+    "overall_state",
+    "definition_written",
+    "definition_removed",
+    "commands_executed",
+    "installation",
+    "manager",
+    "daemon"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.3leaps.dev/spanwit/user-service-status/v0.json"
+    },
+    "version": {
+      "const": 0
+    },
+    "action": {
+      "enum": [
+        "install",
+        "start",
+        "status",
+        "stop",
+        "uninstall"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "installed",
+        "started",
+        "already_running",
+        "observed",
+        "stopped",
+        "already_stopped",
+        "uninstalled",
+        "already_uninstalled",
+        "refused",
+        "failed",
+        "unconfirmed"
+      ]
+    },
+    "uncertain": {
+      "type": "boolean"
+    },
+    "healthy": {
+      "type": "boolean"
+    },
+    "overall_state": {
+      "enum": [
+        "healthy",
+        "installed_stopped",
+        "not_installed",
+        "starting",
+        "degraded",
+        "drifted",
+        "interrupted",
+        "conflict",
+        "unknown"
+      ]
+    },
+    "definition_written": {
+      "type": "boolean"
+    },
+    "definition_removed": {
+      "type": "boolean"
+    },
+    "commands_executed": {
+      "type": "boolean"
+    },
+    "installation": {
+      "$ref": "#/$defs/installation"
+    },
+    "manager": {
+      "$ref": "#/$defs/manager"
+    },
+    "daemon": {
+      "$ref": "#/$defs/daemon"
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/command_receipt"
+      }
+    },
+    "error": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "healthy": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "uncertain": {
+            "const": false
+          },
+          "overall_state": {
+            "const": "healthy"
+          },
+          "installation": {
+            "properties": {
+              "state": {
+                "const": "installed"
+              },
+              "on_disk_definition_matches": {
+                "const": true
+              },
+              "on_disk_executable_matches": {
+                "const": true
+              }
+            }
+          },
+          "manager": {
+            "required": [
+              "pid"
+            ],
+            "properties": {
+              "state": {
+                "const": "running"
+              }
+            }
+          },
+          "daemon": {
+            "required": [
+              "instance_id",
+              "pid",
+              "config_sha256",
+              "executable_sha256"
+            ],
+            "properties": {
+              "socket_present": {
+                "const": true
+              },
+              "reachable": {
+                "const": true
+              },
+              "state": {
+                "const": "observing"
+              },
+              "pid_matches_manager": {
+                "const": true
+              },
+              "config_matches_receipt": {
+                "const": true
+              },
+              "executable_matches_receipt": {
+                "const": true
+              },
+              "executable_matches_disk": {
+                "const": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "unconfirmed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "uncertain": {
+            "const": true
+          },
+          "healthy": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "status"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "definition_written": {
+            "const": false
+          },
+          "definition_removed": {
+            "const": false
+          },
+          "commands_executed": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "install"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "definition_removed": {
+            "const": false
+          },
+          "commands_executed": {
+            "const": false
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "installation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "state_dir",
+        "on_disk_definition_matches",
+        "on_disk_executable_matches"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "not_installed",
+            "installed",
+            "interrupted_install",
+            "interrupted_uninstall",
+            "foreign_definition",
+            "definition_missing",
+            "definition_drifted",
+            "executable_missing",
+            "executable_changed",
+            "invalid_receipt"
+          ]
+        },
+        "manager": {
+          "enum": [
+            "launchd",
+            "systemd-user"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "state_dir": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^/"
+        },
+        "definition_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "pattern": "^/"
+        },
+        "executable_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^/"
+        },
+        "sample_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^/"
+        },
+        "interval": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "roots": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^/"
+          }
+        },
+        "config_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "definition_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "executable_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "current_executable_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "on_disk_definition_matches": {
+          "type": "boolean"
+        },
+        "on_disk_executable_matches": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    },
+    "manager": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "manager": {
+          "enum": [
+            "launchd",
+            "systemd-user"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "state": {
+          "enum": [
+            "not_queried",
+            "not_loaded",
+            "stopped",
+            "running",
+            "failed",
+            "unknown"
+          ]
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sub_state": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "last_exit_code": {
+          "type": "integer"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    },
+    "daemon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "socket_present",
+        "reachable",
+        "state",
+        "pid_matches_manager",
+        "config_matches_receipt",
+        "executable_matches_receipt",
+        "executable_matches_disk"
+      ],
+      "properties": {
+        "socket_present": {
+          "type": "boolean"
+        },
+        "reachable": {
+          "type": "boolean"
+        },
+        "state": {
+          "enum": [
+            "socket_absent",
+            "unreachable",
+            "protocol_error",
+            "awaiting_sample",
+            "observing",
+            "sample_unavailable",
+            "journal_unavailable",
+            "journal_capacity_reached"
+          ]
+        },
+        "instance_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "executable_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^/"
+        },
+        "executable_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "config_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "pid_matches_manager": {
+          "type": "boolean"
+        },
+        "config_matches_receipt": {
+          "type": "boolean"
+        },
+        "executable_matches_receipt": {
+          "type": "boolean"
+        },
+        "executable_matches_disk": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    },
+    "command_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "argv",
+        "outcome",
+        "started",
+        "uncertain",
+        "exit_code"
+      ],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          }
+        },
+        "outcome": {
+          "enum": [
+            "not_started",
+            "success",
+            "failed",
+            "timed_out",
+            "canceled",
+            "output_limit",
+            "uncertain"
+          ]
+        },
+        "started": {
+          "type": "boolean"
+        },
+        "uncertain": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    }
+  }
+}
