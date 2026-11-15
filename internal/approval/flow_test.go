@@ -729,3 +729,64 @@ func TestNoManifestBoundariesProjectApprovedPlan(t *testing.T) {
 		assertFallback(t, r, p.ApprovalID)
 	})
 }
+
+// TestRetryPreservesStoppedOutcome executes each stopping branch for real,
+// then retries the operation exactly: the replayed report carries the
+// original stop reason and unattempted rows, and nothing is deleted again.
+func TestRetryPreservesStoppedOutcome(t *testing.T) {
+	ctx := context.Background()
+	cases := map[string]struct {
+		setup func(r *flowRig, ex *Executor, p Payload, cancel context.CancelFunc)
+		want  string
+	}{
+		"limits exceeded": {func(r *flowRig, ex *Executor, _ Payload, _ context.CancelFunc) { r.extra = 1 }, CodeLimitsExceeded},
+		"expired mid-run": {func(r *flowRig, ex *Executor, p Payload, _ context.CancelFunc) {
+			inner := ex.Delete
+			ex.Delete = func(c context.Context, cand *engine.PruneCandidate) (string, string) {
+				out, d := inner(c, cand)
+				r.now = p.ExpiresAt
+				return out, d
+			}
+		}, CodeGrantExpiredOrRevoked},
+		"cancelled": {func(r *flowRig, ex *Executor, _ Payload, cancel context.CancelFunc) {
+			inner := ex.Delete
+			ex.Delete = func(c context.Context, cand *engine.PruneCandidate) (string, string) {
+				out, d := inner(c, cand)
+				cancel()
+				return out, d
+			}
+		}, "cancelled"},
+		"planner failure": {func(r *flowRig, ex *Executor, _ Payload, _ context.CancelFunc) {
+			ex.Plan = func(context.Context, []byte, string) (engine.PrunePlan, error) {
+				return engine.PrunePlan{}, errors.New("refused")
+			}
+		}, "plan failed"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := newFlowRig(t)
+			p := r.approve(flowPlan, nil)
+			ex := r.executor()
+			runCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			c.setup(r, &ex, p, cancel)
+			res, err := ex.ExecuteApproved(runCtx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+			if err == nil {
+				t.Fatal("stopping branch reported success")
+			}
+			deleted := len(r.deleted)
+			r.extra = 0
+			again, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan), OperationID: res.OperationID})
+			if err != nil || !again.Replayed || again.Report == nil {
+				t.Fatalf("retry: %+v %v", again, err)
+			}
+			rep := again.Report
+			if !rep.Finished || !strings.Contains(rep.FinishDetail, c.want) {
+				t.Fatalf("finish detail %q, want %q", rep.FinishDetail, c.want)
+			}
+			if len(r.deleted) != deleted {
+				t.Fatalf("retry deleted more: %v", r.deleted)
+			}
+		})
+	}
+}
