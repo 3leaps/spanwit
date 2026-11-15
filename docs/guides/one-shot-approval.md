@@ -42,7 +42,10 @@ passphrase (the handle is useless without the device).
 ## Flow
 
 The daemon must be stopped for every step that writes the journal
-(`spanwit daemon service stop`; start it again afterwards).
+(`spanwit daemon service stop`; start it again afterwards). The journal lives
+in `~/.local/state/spanwit/daemon` (`--state-dir`), which must be a private
+directory on a local APFS or HFS+ (macOS) or ext4, XFS or Btrfs (Linux)
+filesystem.
 
 1. Anyone requests an approval for a plan:
 

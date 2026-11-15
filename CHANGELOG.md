@@ -12,7 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the coordinator store's lock and records each candidate's outcome
   (`applied`, `withheld`, `failed`, `partial`, `unattempted`). It refuses while
   the daemon is running; stop the daemon to prune and start it again
-  afterwards. If the store cannot be opened, nothing is deleted. The JSON
+  afterwards. If the store cannot be opened, nothing is deleted. The store
+  needs a local APFS or HFS+ (macOS) or ext4, XFS or Btrfs (Linux) filesystem;
+  elsewhere, point `--state-dir` at one. The JSON
   report's `execution` object gains `journal`, `operation_id`, `approval_id`
   and `assertion`.
 - **Platforms.** Journaled execution and approvals are available on macOS and
