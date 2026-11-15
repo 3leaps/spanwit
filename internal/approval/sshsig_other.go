@@ -7,9 +7,6 @@ import (
 	"errors"
 )
 
-// SignatureNamespace is the SSHSIG namespace every approval signature uses.
-const SignatureNamespace = "spanwit-approval"
-
 // Refusal classes from the approval contract.
 var (
 	ErrUnauthorizedPrincipal   = errors.New("unauthorized_principal")
