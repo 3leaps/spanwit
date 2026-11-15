@@ -657,6 +657,8 @@ func goEnvFileAt(file, key string) (value string, certain bool) {
 	if err != nil {
 		return "", false // a dangling or unreadable link: configuration unknown
 	}
+	// #nosec G703 -- the go env file's resolved path, metadata only; opened
+	// below without following links and identity-checked after open.
 	before, err := os.Lstat(resolved)
 	if err != nil || !before.Mode().IsRegular() {
 		return "", false
