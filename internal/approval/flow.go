@@ -57,8 +57,11 @@ func Request(ctx context.Context, c *daemon.Coordinator, in RequestInput) (Paylo
 		if !head.Active {
 			return Payload{}, nil, fmt.Errorf("no active profile to bind")
 		}
-		policy = &PolicyRef{PackRevision: head.PackRevision, CompiledPolicyDigest: head.CompiledPolicyDigest,
-			ProfileHead: HeadPin{Revision: head.Pin.Revision, Digest: head.Pin.Digest}}
+		hp, err := headPin(head.Pin.Revision, head.Pin.Digest)
+		if err != nil {
+			return Payload{}, nil, err
+		}
+		policy = &PolicyRef{PackRevision: head.PackRevision, CompiledPolicyDigest: head.CompiledPolicyDigest, ProfileHead: hp}
 	}
 	issued := in.Now.UTC().Truncate(time.Second)
 	p := Payload{
@@ -304,8 +307,11 @@ func (e Executor) ExecuteApproved(ctx context.Context, in ExecuteInput) (Result,
 			return Result{}, refuse(CodePersistenceUncertain, err, "read profile head")
 		}
 		if ph.Active {
-			currentPolicy = &PolicyRef{PackRevision: ph.PackRevision, CompiledPolicyDigest: ph.CompiledPolicyDigest,
-				ProfileHead: HeadPin{Revision: ph.Pin.Revision, Digest: ph.Pin.Digest}}
+			hp, err := headPin(ph.Pin.Revision, ph.Pin.Digest)
+			if err != nil {
+				return Result{}, refuse(CodeStalePlanOrDrift, err, "profile head")
+			}
+			currentPolicy = &PolicyRef{PackRevision: ph.PackRevision, CompiledPolicyDigest: ph.CompiledPolicyDigest, ProfileHead: hp}
 		}
 	}
 	fp, err := requestFingerprint(in.ApprovalID, jid, id.PlanDigest, in.MinAge, currentPolicy, catalog)
@@ -503,7 +509,7 @@ func requestFingerprint(approvalID, journalID, planDigest string, minAge *string
 	}
 	if policy != nil {
 		pol = canonjson.Object{"pack_revision": policy.PackRevision, "compiled_policy_digest": policy.CompiledPolicyDigest,
-			"profile_head": canonjson.Object{"revision": int64(policy.ProfileHead.Revision), "digest": policy.ProfileHead.Digest}}
+			"profile_head": canonjson.Object{"revision": policy.ProfileHead.Revision, "digest": policy.ProfileHead.Digest}}
 	}
 	d, err := canonjson.Digest(DomainRequest, canonjson.Object{
 		"approval_id": approvalID, "journal_id": journalID, "plan_digest": planDigest,

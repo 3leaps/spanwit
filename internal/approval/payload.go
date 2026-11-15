@@ -38,8 +38,17 @@ type PolicyRef struct {
 
 // HeadPin is the authoritative profile stream head at request time.
 type HeadPin struct {
-	Revision uint64
+	Revision int64
 	Digest   string
+}
+
+// headPin converts a journal pin revision, refusing one beyond the safe
+// integer range (a journal never reaches it; a corrupt one might).
+func headPin(revision uint64, digest string) (HeadPin, error) {
+	if revision == 0 || revision > canonjson.MaxSafeInteger {
+		return HeadPin{}, fmt.Errorf("%w: profile head revision %d out of range", ErrInvalidPayload, revision)
+	}
+	return HeadPin{Revision: int64(revision), Digest: digest}, nil
 }
 
 // EffectiveOptions is the closed set of behavior-changing execute options an
@@ -82,7 +91,7 @@ func (p Payload) Canonical() ([]byte, error) {
 			"pack_revision":          p.PolicyRef.PackRevision,
 			"compiled_policy_digest": p.PolicyRef.CompiledPolicyDigest,
 			"profile_head": canonjson.Object{
-				"revision": int64(p.PolicyRef.ProfileHead.Revision),
+				"revision": p.PolicyRef.ProfileHead.Revision,
 				"digest":   p.PolicyRef.ProfileHead.Digest,
 			},
 		}
@@ -132,7 +141,7 @@ func (p Payload) Validate() error {
 		return bad("negative limit")
 	}
 	if p.PolicyRef != nil && (!isDigest(p.PolicyRef.PackRevision) || !isDigest(p.PolicyRef.CompiledPolicyDigest) ||
-		p.PolicyRef.ProfileHead.Revision == 0 || p.PolicyRef.ProfileHead.Digest == "") {
+		p.PolicyRef.ProfileHead.Revision <= 0 || p.PolicyRef.ProfileHead.Digest == "") {
 		return bad("incomplete policy_ref")
 	}
 	return ValidateWindow(p.IssuedAt, p.ExpiresAt)
@@ -253,7 +262,7 @@ func ParsePayload(raw []byte) (Payload, error) {
 		if !ok1 || !ok2 || !ok3 || !ok4 || rev <= 0 {
 			return bad("policy_ref members of the wrong type")
 		}
-		p.PolicyRef = &PolicyRef{PackRevision: pack, CompiledPolicyDigest: comp, ProfileHead: HeadPin{Revision: uint64(rev), Digest: dig}}
+		p.PolicyRef = &PolicyRef{PackRevision: pack, CompiledPolicyDigest: comp, ProfileHead: HeadPin{Revision: rev, Digest: dig}}
 	default:
 		return bad("policy_ref must be an object or null")
 	}
