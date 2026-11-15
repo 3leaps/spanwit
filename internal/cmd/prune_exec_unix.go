@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/3leaps/spanwit/internal/approval"
@@ -25,6 +27,9 @@ type pruneSession struct {
 // work. A running daemon refuses with the remedy; a store that cannot be
 // initialised or admitted refuses (never delete unjournaled).
 func openPruneSession(stateDir, allowedSigners string) (*pruneSession, error) {
+	if err := checkStateFilesystem(stateDir); err != nil {
+		return nil, err
+	}
 	c, err := daemon.Open(stateDir, nil)
 	if err != nil {
 		if errors.Is(err, daemon.ErrBusy) {
@@ -102,4 +107,26 @@ func assertionLabel() string {
 		return engine.ExecutionAssertionApprovalBound
 	}
 	return engine.ExecutionAssertionOpen
+}
+
+// checkStateFilesystem refuses, before any discovery, a state directory
+// (or, on a fresh host, its nearest existing ancestor) on a filesystem the
+// journal store does not accept, naming the filesystem and the remedy.
+func checkStateFilesystem(stateDir string) error {
+	probe := filepath.Clean(stateDir)
+	for {
+		if _, err := os.Stat(probe); err == nil {
+			break
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			return nil // nothing exists; daemon.Open reports the real error
+		}
+		probe = parent
+	}
+	name, ok, err := stateFSType(probe)
+	if err != nil || ok {
+		return nil // daemon.Open performs the authoritative check
+	}
+	return fmt.Errorf("execution journal unavailable (nothing deleted): %s is on filesystem type %q; the journal needs APFS or HFS+ (macOS) or ext4, XFS or Btrfs (Linux). Use --state-dir to point at a private directory on one of those", stateDir, name)
 }
