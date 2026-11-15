@@ -157,3 +157,52 @@ func TestExecutionRecordsRoundTrip(t *testing.T) {
 		t.Fatal("outcome record rewritten")
 	}
 }
+
+// TestProfileHeadChangesOnSamePackReactivation is the negative control for
+// policy_ref.profile_head: deactivating and reactivating the same pack keeps
+// pack_revision and compiled_policy_digest but must change the head pin, so
+// an approval bound to the earlier activation no longer matches.
+func TestProfileHeadChangesOnSamePackReactivation(t *testing.T) {
+	ctx := context.Background()
+	stateDir := privateDir(t)
+	pack, _ := buildTestProfilePack(t, privateDir(t), 100)
+	head := func() ProfileHeadState {
+		t.Helper()
+		c, err := Open(stateDir, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = c.Close() }()
+		h, err := c.ProfileHead(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	if h := head(); h.Active {
+		t.Fatalf("initially active: %+v", h)
+	}
+	if _, err := ActivateProfile(ctx, stateDir, pack, ActivateProfileOptions{Profile: "developer"}); err != nil {
+		t.Fatal(err)
+	}
+	first := head()
+	if !first.Active || first.Pin.Revision == 0 {
+		t.Fatalf("after activation: %+v", first)
+	}
+	if _, err := DeactivateProfile(ctx, stateDir, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if h := head(); h.Active {
+		t.Fatalf("after deactivation: %+v", h)
+	}
+	if _, err := ActivateProfile(ctx, stateDir, pack, ActivateProfileOptions{Profile: "developer"}); err != nil {
+		t.Fatal(err)
+	}
+	second := head()
+	if second.PackRevision != first.PackRevision || second.CompiledPolicyDigest != first.CompiledPolicyDigest {
+		t.Fatalf("same pack changed content identity: %+v vs %+v", first, second)
+	}
+	if second.Pin == first.Pin {
+		t.Fatalf("reactivation kept the head pin %+v", second.Pin)
+	}
+}

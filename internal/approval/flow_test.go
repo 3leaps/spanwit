@@ -340,3 +340,21 @@ func TestPersistenceUncertainBeforeAnyEffect(t *testing.T) {
 		t.Fatalf("deleted %v", r.deleted)
 	}
 }
+
+func TestSamePolicyComparesHeadPin(t *testing.T) {
+	a := &PolicyRef{PackRevision: "p", CompiledPolicyDigest: "c", ProfileHead: HeadPin{Revision: 2, Digest: "d2"}}
+	reactivated := &PolicyRef{PackRevision: "p", CompiledPolicyDigest: "c", ProfileHead: HeadPin{Revision: 4, Digest: "d4"}}
+	if !samePolicy(nil, nil) || !samePolicy(nil, a) {
+		t.Fatal("hand-built plan must not depend on the profile")
+	}
+	if samePolicy(a, nil) {
+		t.Fatal("deactivated profile still matched")
+	}
+	if samePolicy(a, reactivated) {
+		t.Fatal("same pack reactivated still matched")
+	}
+	b := *a
+	if !samePolicy(a, &b) {
+		t.Fatal("identical policy did not match")
+	}
+}
