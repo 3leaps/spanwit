@@ -24,11 +24,19 @@ deleting; any difference refuses with `stale_plan_or_drift` and deletes nothing.
 ## Setup (once)
 
 The approval key must be an OpenSSH security-key key (`sk-ssh-ed25519` or
-`sk-ecdsa-sha2-nistp256`) that requires a touch. List it in
-`/etc/spanwit/allowed_signers` (or the file passed with `--allowed-signers`):
+`sk-ecdsa-sha2-nistp256`) that requires a touch. A key dedicated to spanwit
+is easiest to tell apart from other SSH keys:
+
+```sh
+ssh-keygen -t ed25519-sk -O application=ssh:spanwit -C spanwit-approver \
+  -f ~/.ssh/id_ed25519_sk_spanwit
+```
+
+List its public key in `/etc/spanwit/allowed_signers` (or the file passed with
+`--allowed-signers`):
 
 ```text
-maintainer@example sk-ssh-ed25519@openssh.com AAAA...
+spanwit-approver sk-ssh-ed25519@openssh.com AAAA...
 ```
 
 The file, and every directory above it, must not be writable by the user who
@@ -38,6 +46,16 @@ sign without the device makes the whole file untrusted.
 
 `approval sign` supports touch-only keys whose key handle file has no
 passphrase (the handle is useless without the device).
+
+### No security key?
+
+Approvals are only needed to let someone or something else run a prune.
+`spanwit prune --execute` run by you directly works without one.
+
+A passphrase-protected software key is not accepted: its signature does not
+show whether anyone was present, and a process running as the same user can
+often use the key through `ssh-agent` without the passphrase. A security-key
+signature carries a presence flag set by the device, which spanwit checks.
 
 ## Flow
 
@@ -58,7 +76,7 @@ filesystem.
 2. The maintainer, in their own terminal, reviews and signs:
 
    ```sh
-   spanwit approval sign --plan plan.json --payload payload.json --key ~/.ssh/id_ed25519_sk
+   spanwit approval sign --plan plan.json --payload payload.json --key ~/.ssh/id_ed25519_sk_spanwit
    ```
 
    `sign` reads both files once, checks the payload binds that plan, prints the
