@@ -562,11 +562,13 @@ func liveGoCacheLocations() (locations []string, certain bool) {
 // candidateGoRoots returns the GOROOTs the go command may use for this
 // user: GOROOT from the process environment and from the user's go env file
 // (`go env -w GOROOT=...`), and the root of the go binary on PATH (symlinks
-// resolved, two levels above the binary, holding VERSION or go.env). The go
+// resolved, two or three levels above the binary, holding VERSION, go.env or
+// pkg/tool). The go
 // command resolves a relative GOROOT against its own working directory,
 // which is unknown here, so a relative setting makes the result uncertain,
-// as does an env file that cannot be read completely. A go binary that is
-// not on PATH, relying on its compiled-in GOROOT, is not covered.
+// as does an env file that cannot be read completely. Not covered: a go
+// binary off PATH, or one whose install tree cannot be recognised (copied or
+// moved), that falls back to its compiled-in GOROOT.
 func candidateGoRoots() (roots []string, certain bool) {
 	certain = true
 	settings := []string{os.Getenv("GOROOT")}
@@ -587,15 +589,28 @@ func candidateGoRoots() (roots []string, certain bool) {
 	}
 	if bin, err := exec.LookPath("go"); err == nil {
 		if real, err := filepath.EvalSymlinks(bin); err == nil && filepath.IsAbs(real) {
-			root := filepath.Dir(filepath.Dir(real))
-			_, verr := os.Lstat(filepath.Join(root, "VERSION"))
-			_, eerr := os.Lstat(filepath.Join(root, "go.env"))
-			if verr == nil || eerr == nil {
-				roots = append(roots, root)
+			// As cmd/go's findGOROOT: two levels up (GOROOT/bin/go) and three
+			// (GOROOT/bin/GOOS_GOARCH/go), accepted when the directory looks
+			// like a Go root.
+			dir := filepath.Dir(real)
+			for i := 0; i < 2; i++ {
+				dir = filepath.Dir(dir)
+				if looksLikeGoRoot(dir) {
+					roots = append(roots, dir)
+				}
 			}
 		}
 	}
 	return roots, certain
+}
+
+func looksLikeGoRoot(dir string) bool {
+	for _, marker := range []string{"VERSION", "go.env", filepath.Join("pkg", "tool")} {
+		if _, err := os.Lstat(filepath.Join(dir, marker)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // goEnvFileLimit caps the go env file read; a larger file is not trusted as

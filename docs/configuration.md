@@ -492,14 +492,16 @@ marker selects them:
 - `development.go.build-cache-relocated`: a Go build cache (`GOCACHE`) at any
   name or place. `README` must start with Go's build-cache line, `trim.txt` must
   be a regular file, a two-hex-digit shard directory must exist, and nothing
-  outside Go's cache layout may sit at the top. The build cache the go command
-  would use is never matched: `$GOCACHE`, a `go env -w` setting, `GOCACHE` in
-  the `go.env` of any Go root (from `GOROOT`, a `go env -w` setting, or the go
-  binary on `PATH`), or the default under the user cache directory. It stays
-  diagnostic-only with the `go-build-cache` recipe. If that configuration
-  cannot be read completely, or names a relative `GOROOT`, no relocated Go
-  cache is matched. A go binary outside `PATH` that relies on its built-in
-  root is not consulted.
+  outside Go's cache layout may sit at the top. The live build cache is
+  excluded as far as spanwit can resolve the go command's configuration:
+  `$GOCACHE`, a `go env -w` setting, `GOCACHE` in the `go.env` of the Go roots
+  it can find (from `GOROOT`, a `go env -w` setting, or the install tree of
+  the go binary on `PATH`), and the default under the user cache directory.
+  It stays diagnostic-only with the `go-build-cache` recipe. If that
+  configuration cannot be read completely, or names a relative `GOROOT`, no
+  relocated Go cache is matched. Not resolved: a go binary off `PATH`, or
+  one whose install tree is not recognisable, that falls back to its
+  built-in root; the 1h activity floor still withholds a cache in use.
 
 A relocated Cargo target may hold only files Cargo writes there; a VCS
 directory or project manifest at its top, or directly inside any of its

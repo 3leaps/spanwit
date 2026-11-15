@@ -274,6 +274,17 @@ func TestGoEnv_GoRootEnvFile(t *testing.T) {
 			root := fakeGoRoot(t, base, "GOCACHE="+cache+"\n")
 			t.Setenv("PATH", filepath.Join(root, "bin"))
 		},
+		"three-level go binary (bin/GOOS_GOARCH/go)": func(t *testing.T, base, cache string) {
+			root := filepath.Join(base, "goroot3")
+			writeEnvFile(t, filepath.Join(root, "go.env"), "GOCACHE="+cache+"\n")
+			mkdirs(t, filepath.Join(root, "pkg", "tool"))
+			bin := filepath.Join(root, "bin", "linux_arm64", "go")
+			writeEnvFile(t, bin, "#!/bin/sh\n")
+			if err := os.Chmod(bin, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", filepath.Dir(bin))
+		},
 		"symlinked go binary on PATH": func(t *testing.T, base, cache string) {
 			root := fakeGoRoot(t, base, "GOCACHE="+cache+"\n")
 			linkDir := filepath.Join(base, "linkbin")

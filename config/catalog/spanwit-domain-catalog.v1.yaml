@@ -80,7 +80,7 @@ entries:
     rebuild_expectation: high
     signature: development.go.build-cache-relocated
     description: >-
-      A Go build cache at any name or place (GOCACHE under a scratch dir or a review HOME), recognised by Go's README marker, trim.txt and a shard directory, with nothing outside Go's cache layout, and never under a shared temp directory. The live build cache the go command would use ($GOCACHE, go env -w, any Go root's go.env, the user cache dir) is excluded and stays with development.go.go-build; an unreadable or relative configuration matches no relocated Go cache. Withheld until the newest write inside it is at least 1h old.
+      A Go build cache at any name or place (GOCACHE under a scratch dir or a review HOME), recognised by Go's README marker, trim.txt and a shard directory, with nothing outside Go's cache layout, and never under a shared temp directory. The live build cache is excluded as far as the go command's configuration can be resolved ($GOCACHE, go env -w, the go.env of the Go roots found, the user cache dir) and stays with development.go.go-build; an unreadable or relative configuration matches no relocated Go cache, and a go binary falling back to its built-in root is not resolved. Withheld until the newest write inside it is at least 1h old.
   - id: development.go.go-pkg
     label: Go module cache (GOPATH/pkg)
     class_ceiling: diagnostic-only
