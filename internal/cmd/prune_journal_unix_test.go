@@ -251,3 +251,33 @@ func TestApprovalInspectionRefusedUnderReadOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestReplayKeepsOriginalNonSuccess(t *testing.T) {
+	base := daemon.OperationReport{OperationID: "op", Started: true, ManifestKnown: true, Finished: true}
+	for name, mutate := range map[string]func(*daemon.OperationReport){
+		"limits exceeded": func(r *daemon.OperationReport) {
+			r.FinishDetail = "limits_exceeded"
+			r.Candidates = []daemon.CandidateResult{{Path: "/a", Outcome: "unattempted", Reason: "limits_exceeded", Recorded: true}}
+		},
+		"expired": func(r *daemon.OperationReport) {
+			r.FinishDetail = "grant_expired_or_revoked"
+			r.Candidates = []daemon.CandidateResult{{Path: "/a", Outcome: "applied", Recorded: true}, {Path: "/b", Outcome: "unattempted", Recorded: true}}
+		},
+		"cancelled": func(r *daemon.OperationReport) {
+			r.FinishDetail = "cancelled"
+			r.Candidates = []daemon.CandidateResult{{Path: "/a", Outcome: "unattempted", Recorded: true}}
+		},
+		"plan failed": func(r *daemon.OperationReport) { r.FinishDetail = "plan failed: x" },
+	} {
+		r := base
+		mutate(&r)
+		if err := reportError(&r); err == nil {
+			t.Errorf("%s replayed as success", name)
+		}
+	}
+	ok := base
+	ok.Candidates = []daemon.CandidateResult{{Path: "/a", Outcome: "applied", Recorded: true}, {Path: "/b", Outcome: "withheld", Reason: "age", Recorded: true}}
+	if err := reportError(&ok); err != nil {
+		t.Fatalf("clean run with a withheld row reported as failure: %v", err)
+	}
+}

@@ -135,20 +135,31 @@ func checkStateFilesystem(stateDir string) error {
 	return fmt.Errorf("execution journal unavailable (nothing deleted): %s is on filesystem type %q; the journal needs APFS or HFS+ (macOS) or ext4, XFS or Btrfs (Linux). Use --state-dir to point at a private directory on one of those", stateDir, name)
 }
 
-// reportError is non-nil when a recorded operation did not fully apply:
-// a failed or partial outcome, or a candidate with no recorded outcome.
+// reportError is non-nil when a recorded operation did not fully succeed:
+// a failed, partial or unattempted outcome, a candidate with no recorded
+// outcome, an unfinished run, or a run that finished with a stop reason
+// (limits exceeded, expiry, cancellation, plan failure). A retry never turns
+// the original refusal into success.
 func reportError(r *daemon.OperationReport) error {
 	if r == nil {
 		return fmt.Errorf("recorded result unavailable")
 	}
-	var bad int
+	var bad, unattempted int
 	for _, c := range r.Candidates {
-		if c.Outcome == approval.OutcomeFailed || c.Outcome == approval.OutcomePartial {
+		switch c.Outcome {
+		case approval.OutcomeFailed, approval.OutcomePartial:
 			bad++
+		case approval.OutcomeUnattempted:
+			unattempted++
 		}
 	}
-	if bad > 0 || r.Unknown > 0 || !r.Finished {
-		return fmt.Errorf("operation %s: %d failed or partial, %d unknown, finished=%v (recorded result; nothing re-executed)", r.OperationID, bad, r.Unknown, r.Finished)
+	if bad > 0 || unattempted > 0 || r.Unknown > 0 || !r.Finished || r.FinishDetail != "" {
+		detail := r.FinishDetail
+		if detail == "" {
+			detail = "none"
+		}
+		return fmt.Errorf("operation %s: %d failed or partial, %d unattempted, %d unknown, finished=%v, stop=%s (recorded result; nothing re-executed)",
+			r.OperationID, bad, unattempted, r.Unknown, r.Finished, detail)
 	}
 	return nil
 }
