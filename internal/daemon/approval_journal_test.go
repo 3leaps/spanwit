@@ -4,9 +4,7 @@ package daemon
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -231,89 +229,31 @@ func TestStorePlanReusesImmutablePlanRecord(t *testing.T) {
 	}
 }
 
-func snapshotTree(t *testing.T, root string) map[string]string {
-	t.Helper()
-	out := map[string]string{}
-	_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
-		if err != nil {
-			out[p] = "err:" + err.Error()
-			return nil
-		}
-		sum := ""
-		if info.Mode().IsRegular() {
-			b, _ := os.ReadFile(p)
-			sum = fmt.Sprintf("%x", sha256.Sum256(b))
-		}
-		out[p] = fmt.Sprintf("%v %d %d %s", info.Mode(), info.Size(), info.ModTime().UnixNano(), sum)
-		return nil
-	})
-	return out
-}
-
-// TestInspectionIsReadOnly: inspecting creates nothing when there is no
-// state and changes nothing (bytes, sizes, modes, mtimes) when there is.
-func TestInspectionIsReadOnly(t *testing.T) {
-	ctx := context.Background()
+// TestStoreExistsCreatesNothing: asking about an absent store never creates
+// one; an existing store is reported.
+func TestStoreExistsCreatesNothing(t *testing.T) {
 	base := privateDir(t)
 	absent := filepath.Join(base, "state")
-	if _, err := InspectApproval(ctx, absent, "x"); !errors.Is(err, ErrApprovalNotFound) {
-		t.Fatalf("absent: %v", err)
-	}
-	if _, err := InspectOperation(ctx, absent, "op"); err == nil {
-		t.Fatal("absent operation reported")
+	if ok, err := StoreExists(absent); err != nil || ok {
+		t.Fatalf("absent: %v %v", ok, err)
 	}
 	if _, err := os.Lstat(absent); !os.IsNotExist(err) {
-		t.Fatalf("inspection created %s: %v", absent, err)
+		t.Fatalf("StoreExists created %s: %v", absent, err)
 	}
-
 	dir := privateDir(t)
 	c, err := Open(dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.RequestApproval(ctx, "a-1", []byte(`{}`)); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.AppendExecution(ctx, ExecutionRecord{OperationID: "op", Kind: "started"}); err != nil {
-		t.Fatal(err)
-	}
-	_ = c.Close()
-	before := snapshotTree(t, dir)
-	insp, err := InspectApproval(ctx, dir, "a-1")
-	if err != nil || insp.State != ApprovalRequested {
-		t.Fatalf("inspect: %+v %v", insp, err)
-	}
-	if _, err := InspectApproval(ctx, dir, "missing"); !errors.Is(err, ErrApprovalNotFound) {
-		t.Fatalf("missing: %v", err)
-	}
-	if rep, err := InspectOperation(ctx, dir, "op"); err != nil || !rep.Started {
-		t.Fatalf("operation: %+v %v", rep, err)
-	}
-	after := snapshotTree(t, dir)
-	for p, v := range before {
-		if after[p] != v {
-			t.Errorf("changed %s:\n  %s\n  %s", p, v, after[p])
-		}
-	}
-	for p := range after {
-		if _, ok := before[p]; !ok {
-			t.Errorf("created %s", p)
-		}
-	}
-}
-
-// TestInspectionWhileCoordinatorRuns refuses cleanly rather than racing.
-func TestInspectionWhileCoordinatorRuns(t *testing.T) {
-	dir := privateDir(t)
-	c, err := Open(dir, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = c.Close() }()
 	if _, err := c.RequestApproval(context.Background(), "a-1", []byte(`{}`)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := InspectApproval(context.Background(), dir, "a-1"); err != nil && !errors.Is(err, ErrStoreHeld) {
-		t.Fatalf("while held: %v", err)
+	insp, err := c.InspectApproval(context.Background(), "a-1")
+	if err != nil || insp.State != ApprovalRequested || insp.Operation != nil {
+		t.Fatalf("inspect: %+v %v", insp, err)
+	}
+	_ = c.Close()
+	if ok, err := StoreExists(dir); err != nil || !ok {
+		t.Fatalf("existing: %v %v", ok, err)
 	}
 }

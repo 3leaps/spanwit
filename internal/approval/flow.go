@@ -332,7 +332,7 @@ func (e Executor) ExecuteApproved(ctx context.Context, in ExecuteInput) (Result,
 			if err != nil {
 				return Result{}, refuse(CodePersistenceUncertain, err, "read original outcomes")
 			}
-			report, err := e.Coord.OperationReport(ctx, cons.OperationID)
+			report, err := e.Coord.OperationReport(ctx, cons.OperationID, in.ApprovalID)
 			if err != nil {
 				return Result{}, refuse(CodePersistenceUncertain, err, "project original outcomes")
 			}

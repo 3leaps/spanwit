@@ -14,6 +14,7 @@ import (
 
 	"github.com/fulmenhq/gofulmen/appidentity"
 	"github.com/fulmenhq/gofulmen/logging"
+	"github.com/spf13/cobra"
 
 	"github.com/3leaps/spanwit/internal/daemon"
 )
@@ -184,7 +185,7 @@ func TestPruneSortRefusedUnderApproval(t *testing.T) {
 	}
 }
 
-func TestApprovalStatusIsReadOnly(t *testing.T) {
+func TestApprovalStatusCreatesNothing(t *testing.T) {
 	_, _, _, stateDir := journalRig(t)
 	if _, err := runApprovalCmd(t, "status", "--state-dir", stateDir, "missing"); err == nil {
 		t.Fatal("missing approval reported")
@@ -228,5 +229,25 @@ func TestReplayRendersRecordedResult(t *testing.T) {
 	_ = writeOperationReport(&gapText, &gap, "text")
 	if !strings.Contains(gapText.String(), "unknown      /r/b") {
 		t.Fatalf("gap text %q", gapText.String())
+	}
+}
+
+func TestApprovalInspectionRefusedUnderReadOnly(t *testing.T) {
+	resetPolicyForTest(t)
+	root := &cobra.Command{Use: "spanwit"}
+	root.PersistentFlags().Bool(readOnlyFlagName, false, "")
+	root.PersistentFlags().Bool(approvedOnlyFlagName, false, "")
+	group := newApprovalCmd(&appidentity.Identity{BinaryName: "spanwit"})
+	setCommandCapability(group, CapabilityMutating)
+	root.AddCommand(group)
+	t.Setenv("SPANWIT_READ_ONLY", "1")
+	for _, name := range []string{"status", "operation"} {
+		sub, _, err := group.Find([]string{name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := enforceMutationPolicy(sub); err == nil || !strings.Contains(err.Error(), "forbids mutating") {
+			t.Fatalf("%s under read_only: %v", name, err)
+		}
 	}
 }

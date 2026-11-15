@@ -118,7 +118,9 @@ candidates it will attempt, so after an interruption
 `spanwit approval operation <operation-id>` reports every candidate, with
 `unknown` for any whose outcome was not recorded; nothing is re-executed and
 the original plan file is not needed. `approval status` and `approval
-operation` only read the journal (they work under `--read-only`) and refuse
-while the daemon holds it. `--operation-id <id>` with the original plan
+operation` read the journal through the same store lock as other journal
+commands (the store may rebuild its indexes while reading), so they are
+refused under `--read-only` and while the daemon runs; they never create a
+missing store. `--operation-id <id>` with the original plan
 returns the recorded result of an earlier approved run without deleting
 anything.

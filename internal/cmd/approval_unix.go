@@ -192,25 +192,38 @@ signature catalog and, when requested, the active profile activation.`,
 		}}
 	setCommandCapability(revoke, CapabilityMutating)
 
-	status := &cobra.Command{Use: "status <approval-id>", Args: cobra.ExactArgs(1), Short: "Show an approval's journaled state and, once used, each candidate's outcome (read-only)",
+	// status and operation read the journal through the coordinator:
+	// recordprims may rebuild derived indexes while reading, so they are
+	// writers (refused under --read-only) and never create a missing store.
+	status := &cobra.Command{Use: "status <approval-id>", Args: cobra.ExactArgs(1), Short: "Show an approval's journaled state and, once used, each candidate's outcome",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			insp, err := daemon.InspectApproval(cmd.Context(), stateDir, args[0])
+			c, err := openExistingApprovalStore(stateDir)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = c.Close() }()
+			insp, err := c.InspectApproval(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
 			return writeIndentedJSON(cmd.OutOrStdout(), insp)
 		}}
-	setCommandCapability(status, CapabilityObservational)
+	setCommandCapability(status, CapabilityMutating)
 
-	operation := &cobra.Command{Use: "operation <operation-id>", Args: cobra.ExactArgs(1), Short: "Show each candidate's recorded outcome for one prune execution, or unknown (read-only)",
+	operation := &cobra.Command{Use: "operation <operation-id>", Args: cobra.ExactArgs(1), Short: "Show each candidate's recorded outcome for one prune execution, or unknown",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rep, err := daemon.InspectOperation(cmd.Context(), stateDir, args[0])
+			c, err := openExistingApprovalStore(stateDir)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = c.Close() }()
+			rep, err := c.OperationReport(cmd.Context(), args[0], "")
 			if err != nil {
 				return err
 			}
 			return writeIndentedJSON(cmd.OutOrStdout(), rep)
 		}}
-	setCommandCapability(operation, CapabilityObservational)
+	setCommandCapability(operation, CapabilityMutating)
 
 	parent.AddCommand(request, show, sign, issue, revoke, status, operation)
 	return parent
@@ -341,4 +354,17 @@ func writeIndentedJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+// openExistingApprovalStore opens the coordinator only when a store already
+// exists, so inspecting an absent store creates nothing.
+func openExistingApprovalStore(stateDir string) (*daemon.Coordinator, error) {
+	ok, err := daemon.StoreExists(stateDir)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("no execution journal at %s", stateDir)
+	}
+	return openApprovalCoordinator(stateDir)
 }

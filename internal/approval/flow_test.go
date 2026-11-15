@@ -601,9 +601,9 @@ func TestInterruptedRunProjectsUnknownCandidates(t *testing.T) {
 	res, err := ex.ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
 	wantCode(t, err, CodePersistenceUncertain)
 	_ = os.Remove(filepath.Join(r.state, "journal", "capacity-fixture"))
-	_ = r.coord.Close()
-	// read-only inspection, no coordinator, no plan file
-	insp, err := daemon.InspectApproval(ctx, r.state, p.ApprovalID)
+	r.reopen()
+	// inspection after a restart, without the plan file
+	insp, err := r.coord.InspectApproval(ctx, p.ApprovalID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -620,4 +620,112 @@ func TestInterruptedRunProjectsUnknownCandidates(t *testing.T) {
 	if err != nil || !again.Replayed || again.Report == nil || again.Report.Unknown != 1 || len(r.deleted) != 2 {
 		t.Fatalf("replay %+v %v deleted=%v", again.Report, err, r.deleted)
 	}
+}
+
+// TestCrashBeforeManifestProjectsApprovedPlan covers crashes after the
+// approval is consumed but before the manifest exists: immediately after
+// consume (no execution records) and inside planning (started only). The
+// projection lists the approved plan's candidates, all unknown, without
+// replanning; a retry of the operation reports the same and deletes nothing.
+func TestCrashBeforeManifestProjectsApprovedPlan(t *testing.T) {
+	ctx := context.Background()
+	check := func(t *testing.T, r *flowRig, approvalID, op string, wantStarted bool) {
+		t.Helper()
+		r.reopen()
+		insp, err := r.coord.InspectApproval(ctx, approvalID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rep := insp.Operation
+		if rep == nil || rep.OperationID != op || rep.Started != wantStarted || rep.ManifestKnown || !rep.FromApprovedPlan ||
+			len(rep.Candidates) != 2 || rep.Unknown != 2 || rep.Candidates[0].Path != "/r/a" || rep.Candidates[1].Outcome != "unknown" {
+			t.Fatalf("projection %+v", rep)
+		}
+		again, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: approvalID, Plan: []byte(flowPlan), OperationID: op})
+		if err != nil || !again.Replayed || again.Report == nil || again.Report.Unknown != 2 || len(r.deleted) != 0 {
+			t.Fatalf("retry %+v %v deleted=%v", again.Report, err, r.deleted)
+		}
+	}
+	t.Run("immediately after consume", func(t *testing.T) {
+		r := newFlowRig(t)
+		p := r.approve(flowPlan, nil)
+		head, _ := r.coord.LoadApproval(ctx, p.ApprovalID)
+		pin, err := r.coord.StorePlan(ctx, []byte(flowPlan))
+		if err != nil {
+			t.Fatal(err)
+		}
+		catalog, _ := SignatureCatalogDigest()
+		jid, _ := r.coord.JournalID(ctx)
+		id, _ := IdentifyPlan([]byte(flowPlan))
+		fp, _ := requestFingerprint(p.ApprovalID, jid, id.PlanDigest, nil, nil, catalog)
+		if _, err := r.coord.ConsumeApproval(ctx, head, daemon.ApprovalConsumption{OperationID: "op-x", RequestFingerprint: fp, Plan: pin}); err != nil {
+			t.Fatal(err)
+		}
+		check(t, r, p.ApprovalID, "op-x", false)
+	})
+	t.Run("inside planning", func(t *testing.T) {
+		r := newFlowRig(t)
+		p := r.approve(flowPlan, nil)
+		ex := r.executor()
+		ex.Plan = func(context.Context, []byte, string) (engine.PrunePlan, error) { panic("crash inside planning") }
+		func() {
+			defer func() { _ = recover() }()
+			_, _ = ex.ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+		}()
+		head, _ := r.coord.LoadApproval(ctx, p.ApprovalID)
+		check(t, r, p.ApprovalID, head.Record.Consumption.OperationID, true)
+	})
+}
+
+// TestNoManifestBoundariesProjectApprovedPlan: a planner refusal and a
+// failed manifest write both leave no manifest; the projection still lists
+// the approved plan's candidates as unknown (never an empty, complete-looking
+// report).
+func TestNoManifestBoundariesProjectApprovedPlan(t *testing.T) {
+	ctx := context.Background()
+	assertFallback := func(t *testing.T, r *flowRig, approvalID string) {
+		t.Helper()
+		insp, err := r.coord.InspectApproval(ctx, approvalID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rep := insp.Operation
+		if rep == nil || !rep.Started || rep.ManifestKnown || !rep.FromApprovedPlan || rep.Unknown != 2 || len(rep.Candidates) != 2 {
+			t.Fatalf("projection %+v", rep)
+		}
+	}
+	t.Run("planner refusal", func(t *testing.T) {
+		r := newFlowRig(t)
+		p := r.approve(flowPlan, nil)
+		ex := r.executor()
+		ex.Plan = func(context.Context, []byte, string) (engine.PrunePlan, error) {
+			return engine.PrunePlan{}, errors.New("refused")
+		}
+		_, err := ex.ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+		wantCode(t, err, CodeStalePlanOrDrift)
+		assertFallback(t, r, p.ApprovalID)
+		if insp, _ := r.coord.InspectApproval(ctx, p.ApprovalID); !insp.Operation.Finished || !strings.Contains(insp.Operation.FinishDetail, "plan failed") {
+			t.Fatalf("finish detail %+v", insp.Operation)
+		}
+	})
+	t.Run("manifest write failure", func(t *testing.T) {
+		r := newFlowRig(t)
+		p := r.approve(flowPlan, nil)
+		ex := r.executor()
+		inner := ex.Plan
+		var unfill func()
+		ex.Plan = func(c context.Context, raw []byte, m string) (engine.PrunePlan, error) {
+			plan, err := inner(c, raw, m)
+			unfill = r.fill()
+			return plan, err
+		}
+		_, err := ex.ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+		wantCode(t, err, CodePersistenceUncertain)
+		if len(r.deleted) != 0 {
+			t.Fatalf("deleted %v", r.deleted)
+		}
+		unfill()
+		r.reopen()
+		assertFallback(t, r, p.ApprovalID)
+	})
 }
