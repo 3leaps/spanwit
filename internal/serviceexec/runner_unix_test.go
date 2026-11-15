@@ -312,3 +312,36 @@ func TestServiceExecHelper(t *testing.T) {
 		os.Exit(8)
 	}
 }
+
+func TestExecRunnerStdin(t *testing.T) {
+	cat := "/bin/cat"
+	payload := []byte("signed bytes\x00with nul\n")
+	result := ExecRunner{}.Run(context.Background(), Request{Program: cat, Dir: "/", Stdin: payload})
+	if result.Outcome != Success || string(result.Stdout) != string(payload) {
+		t.Fatalf("outcome=%q stdout=%q err=%v", result.Outcome, result.Stdout, result.Err)
+	}
+	empty := ExecRunner{}.Run(context.Background(), Request{Program: cat, Dir: "/"})
+	if empty.Outcome != Success || len(empty.Stdout) != 0 {
+		t.Fatalf("nil stdin: outcome=%q stdout=%q", empty.Outcome, empty.Stdout)
+	}
+	big := ExecRunner{}.Run(context.Background(), Request{Program: cat, Dir: "/", Stdin: make([]byte, maximumInput+1)})
+	if big.Outcome != NotStarted {
+		t.Fatalf("oversized stdin started: %q", big.Outcome)
+	}
+}
+
+func TestExecRunnerExtraInputs(t *testing.T) {
+	a, b := []byte("first input"), []byte("second\x00input")
+	result := ExecRunner{}.Run(context.Background(), Request{Program: "/bin/cat", Args: []string{"/dev/fd/3", "/dev/fd/4"}, Dir: "/", ExtraInputs: [][]byte{a, b}})
+	if result.Outcome != Success || string(result.Stdout) != string(a)+string(b) {
+		t.Fatalf("outcome=%q stdout=%q err=%v", result.Outcome, result.Stdout, result.Err)
+	}
+	// A child that never reads its pipe still completes.
+	ignored := ExecRunner{}.Run(context.Background(), Request{Program: "/usr/bin/true", Dir: "/", ExtraInputs: [][]byte{make([]byte, maximumInput)}})
+	if ignored.Outcome != Success {
+		t.Fatalf("unread input: outcome=%q err=%v", ignored.Outcome, ignored.Err)
+	}
+	if r := (ExecRunner{}).Run(context.Background(), Request{Program: "/bin/cat", Dir: "/", ExtraInputs: make([][]byte, maximumExtraInputs+1)}); r.Outcome != NotStarted {
+		t.Fatalf("too many inputs started: %q", r.Outcome)
+	}
+}
