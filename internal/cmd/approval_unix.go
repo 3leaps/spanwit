@@ -14,6 +14,7 @@ import (
 
 	"github.com/fulmenhq/gofulmen/appidentity"
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/unix"
 
 	"github.com/3leaps/spanwit/internal/approval"
 	"github.com/3leaps/spanwit/internal/daemon"
@@ -115,7 +116,7 @@ signature catalog and, when requested, the active profile activation.`,
 			if err != nil {
 				return err
 			}
-			if fi, err := os.Stdin.Stat(); err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+			if !stdinIsTerminal() {
 				return fmt.Errorf("approval sign needs an interactive terminal for confirmation")
 			}
 			sig, err := approval.Sign(cmd.Context(), plan, payload, keyPath, func(p approval.Payload, id approval.PlanIdentity) bool {
@@ -331,4 +332,11 @@ func approvalCandidates(plan []byte) []string {
 		out = append(out, fmt.Sprintf("%-10s %s  [%s]", humanSize(c.SizeBytes), c.Path, id))
 	}
 	return out
+}
+
+// stdinIsTerminal reports whether standard input is a terminal (a window-size
+// query succeeds only on a tty; /dev/null and pipes fail it).
+func stdinIsTerminal() bool {
+	_, err := unix.IoctlGetWinsize(unix.Stdin, unix.TIOCGWINSZ)
+	return err == nil
 }
