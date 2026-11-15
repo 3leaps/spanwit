@@ -483,3 +483,36 @@ func drain(r io.Reader) error {
 func nowInstant() string {
 	return time.Now().UTC().Truncate(time.Microsecond).Format("2006-01-02T15:04:05.000000Z")
 }
+
+// ProfileHeadState is the authoritative profile activation head: what an
+// approval of a profile-derived plan binds (policy_ref) and re-checks
+// before consumption. Deactivating and reactivating the same pack changes
+// the pin.
+type ProfileHeadState struct {
+	Active               bool
+	PackRevision         string
+	CompiledPolicyDigest string
+	Pin                  recordprims.Pin
+}
+
+// ProfileHead reads the profile stream head under the coordinator lock.
+func (c *Coordinator) ProfileHead(ctx context.Context) (ProfileHeadState, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.store == nil {
+		return ProfileHeadState{}, ErrPersistenceUncertain
+	}
+	st, err := c.openProfileStream()
+	if err != nil {
+		return ProfileHeadState{}, err
+	}
+	payload, _, pin, err := readStreamHead(ctx, st)
+	if err != nil {
+		return ProfileHeadState{}, err
+	}
+	if payload == nil || pin == nil {
+		return ProfileHeadState{}, nil
+	}
+	return ProfileHeadState{Active: payload.Active, PackRevision: payload.PackRevision,
+		CompiledPolicyDigest: payload.CompiledPolicyDigest, Pin: *pin}, nil
+}
