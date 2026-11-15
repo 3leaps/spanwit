@@ -30,6 +30,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     directory or project manifest at its top or one level down. A directory
     Cargo does not create there withholds it with the new `withheld_reason`
     `layout`.
+  - A relocated cache holding a version-control directory (`.git`, `.hg`,
+    `.jj`, `.svn`) anywhere inside is withheld with reason `layout`.
   - Neither matches the home directory or a parent of it. Both withhold a
     candidate until its newest write is at least 1h old.
   - Under a shared temp directory (`/tmp`, `/var/tmp`, or any sticky,

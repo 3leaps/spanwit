@@ -517,7 +517,14 @@ or any sticky, world-writable directory); a match there is reported in a
 warning instead. Both withhold
 a candidate until the newest write anywhere inside it is at least 1h old,
 whatever `min_age` is configured. The matched directory is the whole
-candidate; nothing inside it is listed separately. A conventional `target/` under `Cargo.toml`, or a `.gocache` under
+candidate; nothing inside it is listed separately.
+
+The line these signatures hold is that spanwit never reclaims content that
+cannot be regenerated. A relocated cache holding a version-control directory
+(`.git`, `.hg`, `.jj` or `.svn`) anywhere inside is withheld with
+`withheld_reason: layout`. Within a directory the tool itself created and
+tagged, other content is treated as the tool's own, as `cargo clean` or
+`go clean -cache` would treat it. A conventional `target/` under `Cargo.toml`, or a `.gocache` under
 `go.mod`, keeps its conventional signature.
 
 A signature's `content_marker` may give `lines` (the exact leading lines, in

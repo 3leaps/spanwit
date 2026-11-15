@@ -223,6 +223,10 @@ type CandidateJob struct {
 	AuthorizationBoundary string
 	ContainmentRelation   string
 	ProvenanceKind        string
+	// WithholdOnVCS withholds the candidate (reason layout) when its sizing
+	// walk sees a version-control directory anywhere inside: set for
+	// signatures discovered by content marker alone.
+	WithholdOnVCS bool
 }
 
 func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions) (PrunePlan, error) {
@@ -463,6 +467,7 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 				AuthorizationBoundary: root,
 				ContainmentRelation:   ContainmentDescendant,
 				ProvenanceKind:        ProvenanceConfigProfile,
+				WithholdOnVCS:         target.Signature != "" && markerDiscovered(signature),
 			})
 			return filepath.SkipDir
 		})
@@ -906,6 +911,13 @@ func sizeCandidateJobs(ctx context.Context, jobs []CandidateJob, sizeMaxDepth in
 					if state != CandidateStateWithheld && !descendantsMeetMinAge(job.EffectiveMinAge, sized, time.Now()) {
 						state = CandidateStateWithheld
 						withheldReason = WithheldReasonAge
+					}
+					// Version-controlled content is never regenerable: a cache
+					// holding a repository anywhere inside is never reclaimed
+					// whole, whatever else withheld it.
+					if job.WithholdOnVCS && sized.VCSSeen {
+						state = CandidateStateWithheld
+						withheldReason = WithheldReasonLayout
 					}
 					basis := ActivityBasisDescendantMtime
 					activityIncomplete := sized.ActivityIncomplete || sized.Incomplete

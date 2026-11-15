@@ -340,6 +340,7 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 			AuthorizationBoundary: analysisRoot,
 			ContainmentRelation:   ContainmentDescendant,
 			ProvenanceKind:        ProvenanceExactPlanAnalysis,
+			WithholdOnVCS:         target.Signature != "" && markerDiscovered(signature),
 		})
 	}
 

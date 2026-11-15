@@ -337,3 +337,80 @@ func TestRelocatedRegress2_KnownProfileDirNeedsFingerprint(t *testing.T) {
 		t.Fatalf("release/ without .fingerprint must withhold for layout: %+v", c)
 	}
 }
+
+// Version-controlled content anywhere inside a relocated cache withholds it
+// (reason layout): it is never regenerable. Covers the deep shapes the
+// top-level checks do not reach, on discovery and exact replay.
+func TestRelocatedRegress2_VCSAnywhereWithholds(t *testing.T) {
+	cargoCases := map[string]string{
+		"doc/src git":       "doc/src/.git/HEAD",
+		"package crate git": "package/crate-0.1.0/.git/HEAD",
+		"deep tmp hg":       "tmp/a/b/c/.hg/requires",
+		"build out jj":      "debug/build/x/out/vendor/.jj/repo",
+		"git worktree file": "doc/src/work/.git",
+		"svn in release":    "release/deps/x/.svn/entries",
+	}
+	for name, rel := range cargoCases {
+		t.Run("cargo "+name, func(t *testing.T) {
+			isolateLiveCaches(t)
+			root := t.TempDir()
+			dir := relocatedCargo(t, filepath.Join(root, "reused-target"))
+			mkdirs(t, filepath.Join(dir, "release", ".fingerprint"))
+			writeRegular(t, filepath.Join(dir, filepath.FromSlash(rel)))
+			ageTree(t, dir, 48*time.Hour)
+			c := assertSignature(t, r4bJobs(t, builtInConfig(root)), dir, relocatedCargoID)
+			if c.State != CandidateStateWithheld || c.WithheldReason != WithheldReasonLayout {
+				t.Fatalf("VCS content must withhold for layout on discovery: %+v", c)
+			}
+			plan, err := PlanFromExact(context.Background(), ExactPlanInput{
+				RequestedMinAge: RequestedMinAgeNone, AnalysisRoot: root,
+				Entries: []ExactEntry{{Path: dir, Signature: relocatedCargoID,
+					EffectiveMinSize: FilterDisplayNone, EffectiveMinAge: FilterDisplayNone, EffectiveMaxAge: FilterDisplayNone}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			c = assertSignature(t, plan.Candidates, dir, relocatedCargoID)
+			if c.State != CandidateStateWithheld || c.WithheldReason != WithheldReasonLayout {
+				t.Fatalf("VCS content must withhold for layout on replay: %+v", c)
+			}
+		})
+	}
+	t.Run("go fuzz deep git", func(t *testing.T) {
+		isolateLiveCaches(t)
+		root := t.TempDir()
+		dir := relocatedGo(t, filepath.Join(root, "gc"))
+		writeRegular(t, filepath.Join(dir, "fuzz", "a", "b", "repo", ".git", "HEAD"))
+		ageTree(t, dir, 48*time.Hour)
+		c := assertSignature(t, r4bJobs(t, builtInConfig(root)), dir, relocatedGoID)
+		if c.State != CandidateStateWithheld || c.WithheldReason != WithheldReasonLayout {
+			t.Fatalf("VCS content in a Go cache must withhold for layout: %+v", c)
+		}
+	})
+	t.Run("clean target stays prunable", func(t *testing.T) {
+		isolateLiveCaches(t)
+		root := t.TempDir()
+		dir := relocatedCargo(t, filepath.Join(root, "clean-target"))
+		writeRegular(t, filepath.Join(dir, "debug", "build", "x", "out", "gitignore-not-vcs"))
+		ageTree(t, dir, 48*time.Hour)
+		c := assertSignature(t, r4bJobs(t, builtInConfig(root)), dir, relocatedCargoID)
+		if c.State != CandidateStatePrunable {
+			t.Fatalf("a target without VCS content should stay prunable: %+v", c)
+		}
+	})
+}
+
+// A conventional cargo-target (name + Cargo.toml) is unaffected by the VCS
+// rule, which applies to marker-only signatures.
+func TestRelocatedRegress2_VCSRuleOnlyForMarkerSignatures(t *testing.T) {
+	isolateLiveCaches(t)
+	root := t.TempDir()
+	writeRegular(t, filepath.Join(root, "repo", "Cargo.toml"))
+	dir := filepath.Join(root, "repo", "target")
+	writeRegular(t, filepath.Join(dir, "debug", "build", "x", "out", ".git", "HEAD"))
+	ageTree(t, dir, 48*time.Hour)
+	c := assertSignature(t, r4bJobs(t, builtInConfig(root)), dir, "development.rust.cargo-target")
+	if c.WithheldReason == WithheldReasonLayout {
+		t.Fatalf("conventional cargo-target must not take the marker-only VCS rule: %+v", c)
+	}
+}

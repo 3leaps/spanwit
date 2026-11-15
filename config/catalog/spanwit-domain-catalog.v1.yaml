@@ -45,7 +45,7 @@ entries:
     rebuild_expectation: high
     signature: development.rust.cargo-target-relocated
     description: >-
-      Cargo build output at any name or place (CARGO_TARGET_DIR), recognised by the CACHEDIR.TAG Cargo writes (generic signature line plus Cargo's own comment line) and a debug/ or release/ directory. Withheld (layout) when it holds a directory Cargo does not create there. Refused when the directory holds a file Cargo does not write there, a VCS directory or project manifest at its top or one level down, sits under a shared temp directory, or is the home directory or one of its parents. Whole directory; withheld until the newest write inside it is at least 1h old.
+      Cargo build output at any name or place (CARGO_TARGET_DIR), recognised by the CACHEDIR.TAG Cargo writes (generic signature line plus Cargo's own comment line) and a debug/ or release/ directory. Withheld (layout) when it holds a directory Cargo does not create there or a version-control directory anywhere inside. Refused when the directory holds a file Cargo does not write there, a VCS directory or project manifest at its top or one level down, sits under a shared temp directory, or is the home directory or one of its parents. Whole directory; withheld until the newest write inside it is at least 1h old.
   - id: development.rust.rustup
     label: Rustup toolchains
     class_ceiling: diagnostic-only
