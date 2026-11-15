@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **`prune --execute` is journaled on macOS and Linux.** Every execution holds
+  the coordinator store's lock and records each candidate's outcome
+  (`applied`, `withheld`, `failed`, `partial`, `unattempted`). It refuses while
+  the daemon is running; stop the daemon to prune and start it again
+  afterwards. If the store cannot be opened, nothing is deleted. The JSON
+  report's `execution` object gains `journal`, `operation_id`, `approval_id`
+  and `assertion`.
+- **Platforms.** Journaled execution and approvals are available on macOS and
+  Linux. On Windows `prune --execute` keeps the earlier behaviour, unjournaled,
+  and reports `journal: unavailable_on_platform`; `--approval` is refused.
+
 ### Security
 
 - **Go 1.26.10 minimum.** `go.mod`, the CI and release toolchain checks, and the
@@ -14,6 +27,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **One-shot plan approvals** (macOS and Linux). `spanwit approval request`,
+  `show`, `sign`, `issue`, `revoke` and `status`, and
+  `prune --from-exact-plan <plan> --execute --approval <id>`.
+  - An approval is a signature by an OpenSSH security key that requires a
+    touch, listed in a trusted allowed-signers file
+    (`/etc/spanwit/allowed_signers` by default) that the executing user cannot
+    write. It binds the exact plan bytes, the signature catalog, `--min-age`,
+    optionally the active profile activation, limits, the store, and a window
+    of at most 24h. It is used once.
+  - `approval sign` shows the candidates and signs the same bytes it checked.
+  - `--approved-only` / `SPANWIT_APPROVED_ONLY` refuses every mutation except
+    an approved exact-plan prune.
+  - See `docs/guides/one-shot-approval.md`.
 - **Relocated build caches.** Two built-in signatures recognise build caches by
   their own markers rather than by name or a project-file ancestor:
   - `development.rust.cargo-target-relocated` matches a `CARGO_TARGET_DIR` at any
