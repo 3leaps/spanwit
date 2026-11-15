@@ -92,6 +92,7 @@ func isolateLiveCaches(t *testing.T) {
 	notSharedTemp(t)
 	setHome(t, t.TempDir())
 	t.Setenv("GOCACHE", "")
+	t.Setenv("GOENV", "off") // tests that exercise GOENV set it themselves
 }
 
 // setHome points os.UserHomeDir at dir on every platform. It does not touch

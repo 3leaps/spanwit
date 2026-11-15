@@ -510,7 +510,11 @@ func excludedLiveCache(path string, sig config.Signature) bool {
 		}
 	}
 	if sig.ExcludeLiveGoCache {
-		for _, loc := range liveGoCacheLocations() {
+		locations, certain := liveGoCacheLocations()
+		if !certain {
+			return true // the live cache location is unknown: never reclaim
+		}
+		for _, loc := range locations {
 			if same(loc) {
 				return true
 			}
@@ -522,65 +526,86 @@ func excludedLiveCache(path string, sig config.Signature) bool {
 // liveGoCacheLocations returns every place the go command may keep its build
 // cache for this user: $GOCACHE, GOCACHE written by `go env -w` to the go env
 // file, and the default under os.UserCacheDir (which honours XDG_CACHE_HOME).
-func liveGoCacheLocations() []string {
-	var out []string
+// certain is false when the go env file exists but cannot be read completely
+// and safely; callers must then treat every candidate as possibly live.
+func liveGoCacheLocations() (locations []string, certain bool) {
 	if v := os.Getenv("GOCACHE"); v != "" {
-		out = append(out, v)
+		locations = append(locations, v)
 	}
-	if v := goEnvFileValue("GOCACHE"); v != "" {
-		out = append(out, v)
+	v, certain := goEnvFileValue("GOCACHE")
+	if v != "" {
+		locations = append(locations, v)
 	}
 	if dir, err := os.UserCacheDir(); err == nil && dir != "" {
-		out = append(out, filepath.Join(dir, "go-build"))
+		locations = append(locations, filepath.Join(dir, "go-build"))
 	}
-	return out
+	return locations, certain
 }
 
+// goEnvFileLimit caps the go env file read; a larger file is not trusted as
+// complete.
+const goEnvFileLimit = 64 << 10
+
 // goEnvFileValue reads key from the go env file ($GOENV, or go/env under
-// os.UserConfigDir), the file `go env -w` writes. It reads at most
-// markerReadLimit bytes and returns "" when the file is absent or GOENV=off.
-func goEnvFileValue(key string) string {
+// os.UserConfigDir), the file `go env -w` writes. certain is true when the
+// file is known absent, GOENV=off, or the whole file was read; it is false
+// when the location cannot be resolved, the file (after following a
+// symlink, as the go command does) is not a regular file, cannot be read, or
+// is larger than goEnvFileLimit. A non-regular file is never opened, so a
+// FIFO cannot block the plan.
+func goEnvFileValue(key string) (value string, certain bool) {
 	file := os.Getenv("GOENV")
 	if file == "off" {
-		return ""
+		return "", true
 	}
 	if file == "" {
 		dir, err := os.UserConfigDir()
 		if err != nil || dir == "" {
-			return ""
+			return "", false
 		}
 		file = filepath.Join(dir, "go", "env")
 	}
 	if !filepath.IsAbs(file) {
-		return ""
+		return "", false
 	}
 	file = filepath.Clean(file)
 	// #nosec G703 -- the go command's own env file, metadata only here.
-	before, err := os.Lstat(file)
-	if err != nil || !before.Mode().IsRegular() {
-		return "" // a FIFO, device or link would block or mislead
+	if _, err := os.Lstat(file); os.IsNotExist(err) {
+		return "", true
+	} else if err != nil {
+		return "", false
 	}
-	f, err := openNoFollowNonBlock(file)
+	resolved, err := filepath.EvalSymlinks(file)
 	if err != nil {
-		return ""
+		return "", false // a dangling or unreadable link: configuration unknown
+	}
+	before, err := os.Lstat(resolved)
+	if err != nil || !before.Mode().IsRegular() {
+		return "", false
+	}
+	if before.Size() > goEnvFileLimit {
+		return "", false
+	}
+	f, err := openNoFollowNonBlock(resolved)
+	if err != nil {
+		return "", false
 	}
 	defer func() { _ = f.Close() }()
 	after, err := f.Stat()
 	if err != nil || !after.Mode().IsRegular() || !os.SameFile(before, after) {
-		return ""
+		return "", false
 	}
-	buf, err := io.ReadAll(io.LimitReader(f, markerReadLimit))
-	if err != nil {
-		return ""
+	buf, err := io.ReadAll(io.LimitReader(f, goEnvFileLimit+1))
+	if err != nil || len(buf) > goEnvFileLimit {
+		return "", false
 	}
-	val := ""
 	for _, line := range strings.Split(string(buf), "\n") {
 		k, v, ok := strings.Cut(strings.TrimSpace(line), "=")
 		if ok && strings.TrimSpace(k) == key {
-			val = strings.TrimSpace(v) // last assignment wins, as in go env
+			value = strings.TrimSpace(v) // last assignment wins, as in go env
 		}
 	}
-	return val
+	return value, true
 }
 
 // childLayoutEvidence enforces ForbiddenChildPaths (no project or VCS marker

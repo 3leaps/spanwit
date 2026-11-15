@@ -18,10 +18,14 @@ func TestRelocatedRegress2_B5_GOENVFifoDoesNotHang(t *testing.T) {
 	}
 	t.Setenv("GOENV", fifo)
 	done := make(chan struct{})
-	go func() { _ = goEnvFileValue("GOCACHE"); close(done) }()
+	var certain bool
+	go func() { _, certain = goEnvFileValue("GOCACHE"); close(done) }()
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("goEnvFileValue blocked on a FIFO GOENV")
+	}
+	if certain {
+		t.Fatal("a FIFO GOENV must leave the configuration uncertain")
 	}
 }
