@@ -275,9 +275,10 @@
               "indeterminate",
               "domain_disabled",
               "activity_after_plan",
-              "size_drift"
+              "size_drift",
+              "layout"
             ],
-            "description": "Why the match is withheld. age = failed age window (min_age floor and/or max_age ceiling); min_size = complete measurement below size floor; indeterminate = depth-bounded lower bound below size floor so the threshold cannot be decided; safe_to_prune = signature not marked safe; domain_disabled = use domain not in an explicitly configured domains.enabled set. activity_after_plan = exact-plan revalidation saw activity newer than the plan baseline; size_drift = exact-plan revalidation measured a complete size different from the complete plan baseline. A drift reason is primary only when no other gate withheld the row; drift facts are always in drift."
+            "description": "Why the match is withheld. age = failed age window (min_age floor and/or max_age ceiling); min_size = complete measurement below size floor; indeterminate = depth-bounded lower bound below size floor so the threshold cannot be decided; safe_to_prune = signature not marked safe; domain_disabled = use domain not in an explicitly configured domains.enabled set. activity_after_plan = exact-plan revalidation saw activity newer than the plan baseline; size_drift = exact-plan revalidation measured a complete size different from the complete plan baseline; layout = a relocated cache whose directory holds entries the tool does not create there, so it is never reclaimed whole. A drift reason is primary only when no other gate withheld the row; drift facts are always in drift."
           },
           "effective_min_size": {
             "type": "string",

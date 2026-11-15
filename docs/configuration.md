@@ -481,6 +481,56 @@ targets:
 
 The built-in `development.rust.cargo-target` signature looks for directories matching `**/target`, then requires Rust evidence such as an ancestor `Cargo.toml` and Cargo-like children such as `debug/`, `release/`, or `.rustc_info.json`.
 
+Two built-in signatures recognise relocated build caches by what they contain
+rather than by name or ancestor. They have no candidate pattern; the content
+marker selects them:
+
+- `development.rust.cargo-target-relocated`: a `CARGO_TARGET_DIR` at any name or
+  place. `CACHEDIR.TAG` must start with the generic cache-directory signature line
+  followed by the comment line Cargo writes there, and a `debug/` or `release/`
+  child must exist.
+- `development.go.build-cache-relocated`: a Go build cache (`GOCACHE`) at any
+  name or place. `README` must start with Go's build-cache line, `trim.txt` must
+  be a regular file, a two-hex-digit shard directory must exist, and nothing
+  outside Go's cache layout may sit at the top. The live build cache is
+  excluded as far as spanwit can resolve the go command's configuration:
+  `$GOCACHE`, a `go env -w` setting, `GOCACHE` in the `go.env` of the Go roots
+  it can find (from `GOROOT`, a `go env -w` setting, or the install tree of
+  the go binary on `PATH`), and the default under the user cache directory.
+  It stays diagnostic-only with the `go-build-cache` recipe. If that
+  configuration cannot be read completely, or names a relative `GOROOT`, no
+  relocated Go cache is matched. Not resolved: a go binary off `PATH`, or
+  one whose install tree is not recognisable, that falls back to its
+  built-in root; the 1h floor still withholds a cache with writes within the
+  last hour.
+
+A relocated Cargo target may hold only files Cargo writes there; a VCS
+directory or project manifest at its top, or directly inside any of its
+directories, refuses it. A directory Cargo does not create there (neither a
+known Cargo directory nor a profile holding `.fingerprint/`, such as tool
+output or user data in a reused target directory, or a `debug/` or `release/`
+without `.fingerprint/`) keeps the match
+visible but withheld with `withheld_reason: layout`; it is never reclaimed
+whole. Neither signature matches the home directory or one
+of its parents, or anything under a shared temp directory (`/tmp`, `/var/tmp`,
+or any sticky, world-writable directory); a match there is reported in a
+warning instead. Both withhold
+a candidate until the newest write anywhere inside it is at least 1h old,
+whatever `min_age` is configured. The matched directory is the whole
+candidate; nothing inside it is listed separately.
+
+The line these signatures hold is that spanwit never reclaims content that
+cannot be regenerated. A relocated cache holding a version-control directory
+(`.git`, `.hg`, `.jj` or `.svn`) anywhere inside is withheld with
+`withheld_reason: layout`. Within a directory the tool itself created and
+tagged, other content is treated as the tool's own, as `cargo clean` or
+`go clean -cache` would treat it. A conventional `target/` under `Cargo.toml`, or a `.gocache` under
+`go.mod`, keeps its conventional signature.
+
+A signature's `content_marker` may give `lines` (the exact leading lines, in
+order; `lines[0]` must equal `first_line`), and `required_child_files` lists
+regular files that must all exist under the candidate.
+
 Users can extend signatures in config:
 
 ```yaml

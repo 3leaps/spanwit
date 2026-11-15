@@ -94,7 +94,7 @@ func PlanFromAllowlist(ctx context.Context, paths []string, opts ...PlanOptions)
 		pattern := target.Pattern
 		if target.Signature != "" {
 			confidence = signature.Confidence
-			pattern = strings.Join(signature.CandidatePatterns, ",")
+			pattern = signatureDisplayPattern(signature)
 			if !signature.SafeToPrune {
 				state = CandidateStateWithheld
 				withheldReason = WithheldReasonSafeToPrune

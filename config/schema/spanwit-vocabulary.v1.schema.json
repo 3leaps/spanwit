@@ -458,6 +458,7 @@
         "age",
         "domain_disabled",
         "indeterminate",
+        "layout",
         "min_size",
         "safe_to_prune",
         "size_drift"

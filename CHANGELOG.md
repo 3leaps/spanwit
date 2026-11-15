@@ -14,6 +14,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Relocated build caches.** Two built-in signatures recognise build caches by
+  their own markers rather than by name or a project-file ancestor:
+  - `development.rust.cargo-target-relocated` matches a `CARGO_TARGET_DIR` at any
+    name or place by Cargo's `CACHEDIR.TAG` (signature line plus Cargo's comment
+    line) and a `debug/` or `release/` child.
+  - `development.go.build-cache-relocated` matches a Go build cache at any name or
+    place by Go's `README` line, `trim.txt`, a shard directory and nothing outside
+    Go's cache layout. The live build cache is excluded as far as the go
+    command's configuration can be resolved (environment, `go env -w`, the
+    `go.env` of the Go roots found, the user cache directory); an unreadable
+    or relative configuration matches no relocated Go cache. A go binary
+    falling back to its built-in root is not resolved.
+  - A relocated Cargo target may hold only files Cargo writes there, and no VCS
+    directory or project manifest at its top or one level down. A directory
+    Cargo does not create there withholds it with the new `withheld_reason`
+    `layout`.
+  - A relocated cache holding a version-control directory (`.git`, `.hg`,
+    `.jj`, `.svn`) anywhere inside is withheld with reason `layout`.
+  - Neither matches the home directory or a parent of it. Both withhold a
+    candidate until its newest write is at least 1h old.
+  - Under a shared temp directory (`/tmp`, `/var/tmp`, or any sticky,
+    world-writable directory) a relocated cache is reported in a warning, never
+    as a candidate.
+  - The matched directory is one whole candidate; `space` no longer lists the
+    name-shaped directories inside it as unverified.
+  - Signatures gain `content_marker.lines` (exact leading lines) and
+    `required_child_files`. A user signature reusing a built-in id keeps both.
 - **Reboot-releasable view.** `space --capacity-only` reports
   `capacity_accounting.reboot_releasable`: gross observations a reboot may
   release, each on its own basis and never summed.

@@ -91,3 +91,46 @@ func TestMergeNewIDIsUnconstrained(t *testing.T) {
 		t.Fatalf("new id should be exactly the user's: %+v", got)
 	}
 }
+
+// A user signature reusing a relocated built-in id keeps every built-in-only
+// safety field, whatever it declares itself.
+func TestMergeKeepsRelocatedBuiltInOnlyFields(t *testing.T) {
+	user := SignatureCatalog{
+		"development": {
+			"rust": {"cargo-target-relocated": {SafeToPrune: true, KnownChildFiles: []string{"anything.pdf"}, KnownChildDirs: []string{"*"}}},
+			"go":   {"build-cache-relocated": {SafeToPrune: true, AllowedChildNames: []string{"*"}}},
+		},
+	}
+	merged := MergeSignatureCatalogs(BuiltInSignatures(), user)
+	builtIn := BuiltInSignatures()
+	for _, id := range []string{"development.rust.cargo-target-relocated", "development.go.build-cache-relocated"} {
+		got, _ := merged.Lookup(id)
+		want, _ := builtIn.Lookup(id)
+		if !reflect.DeepEqual(got.ForbiddenChildPaths, want.ForbiddenChildPaths) {
+			t.Errorf("%s forbidden children = %v, want %v", id, got.ForbiddenChildPaths, want.ForbiddenChildPaths)
+		}
+		if !reflect.DeepEqual(got.KnownChildFiles, want.KnownChildFiles) ||
+			!reflect.DeepEqual(got.KnownChildDirs, want.KnownChildDirs) ||
+			!reflect.DeepEqual(got.ProfileDirMarkers, want.ProfileDirMarkers) ||
+			!reflect.DeepEqual(got.ProfileRequiredDirs, want.ProfileRequiredDirs) ||
+			!reflect.DeepEqual(got.DeepCheckChildDirs, want.DeepCheckChildDirs) {
+			t.Errorf("%s layout lists not kept: %+v", id, got)
+		}
+		if !reflect.DeepEqual(got.AllowedChildNames, want.AllowedChildNames) {
+			t.Errorf("%s layout = %v, want %v", id, got.AllowedChildNames, want.AllowedChildNames)
+		}
+		if !reflect.DeepEqual(got.RequiredChildFiles, want.RequiredChildFiles) {
+			t.Errorf("%s required files = %v, want %v", id, got.RequiredChildFiles, want.RequiredChildFiles)
+		}
+		if !reflect.DeepEqual(got.ExcludedHomePaths, want.ExcludedHomePaths) {
+			t.Errorf("%s home exclusions = %v, want %v", id, got.ExcludedHomePaths, want.ExcludedHomePaths)
+		}
+		if got.ExcludeLiveGoCache != want.ExcludeLiveGoCache || got.AnyChildDirsOnly != want.AnyChildDirsOnly {
+			t.Errorf("%s flags: live-go-cache=%v dirs-only=%v, want %v/%v", id,
+				got.ExcludeLiveGoCache, got.AnyChildDirsOnly, want.ExcludeLiveGoCache, want.AnyChildDirsOnly)
+		}
+		if got.MinAgeFloor != want.MinAgeFloor || len(got.CandidatePatterns) != 0 {
+			t.Errorf("%s floor=%q patterns=%v", id, got.MinAgeFloor, got.CandidatePatterns)
+		}
+	}
+}

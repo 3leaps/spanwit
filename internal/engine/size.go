@@ -34,6 +34,25 @@ type SizeResult struct {
 	// ActivityIncomplete is true when activity may be understated (depth bound,
 	// symlink stop, or walk errors that skip subtrees).
 	ActivityIncomplete bool
+	// VCSSeen is true when an entry named like a version-control directory
+	// (.git, .hg, .jj, .svn; a directory or, for git worktrees, a file) was
+	// observed anywhere under path.
+	VCSSeen bool
+}
+
+// vcsNames are entry names that mark version-controlled (non-regenerable)
+// content. isVCSName compares case-insensitively on every filesystem: on a
+// case-insensitive volume ".GIT" is a working .git, and erring towards
+// withholding is the safe side.
+var vcsNames = []string{".git", ".hg", ".jj", ".svn"}
+
+func isVCSName(name string) bool {
+	for _, v := range vcsNames {
+		if strings.EqualFold(name, v) {
+			return true
+		}
+	}
+	return false
 }
 
 // DirSize returns the total size of all files under path (unbounded depth).
@@ -83,6 +102,9 @@ func DirSizeContext(ctx context.Context, path string, maxDepth int) (SizeResult,
 		if d.Type()&os.ModeSymlink != 0 {
 			result.ActivityIncomplete = true
 			// Still record the link's own metadata size/mtime when it is a file-like entry.
+		}
+		if p != path && isVCSName(d.Name()) {
+			result.VCSSeen = true
 		}
 		if p != path {
 			rel, relErr := filepath.Rel(path, p)

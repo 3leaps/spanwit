@@ -13,6 +13,23 @@ var reclaimablePatterns = []string{
 	"target", "node_modules", "dist", "build", ".next", ".turbo", ".cache", "out", "tmp", "temp",
 }
 
+// atOrUnderVerified reports whether path is a verified candidate or lies
+// beneath one. A relocated cache root (a CARGO_TARGET_DIR without a
+// target-shaped name) is verified as a whole, so name-shaped directories
+// inside it (debug/build, ...) are part of that candidate, not unverified rows.
+func atOrUnderVerified(path string, verified map[string]bool) bool {
+	for p := filepath.Clean(path); ; {
+		if verified[p] {
+			return true
+		}
+		parent := filepath.Dir(p)
+		if parent == p {
+			return false
+		}
+		p = parent
+	}
+}
+
 // nameShapedUnverified walks root for name-shaped reclaimable dirs that are not
 // context-verified. Discovery is depth-bounded; sizing of each match is also
 // depth-bounded relative to the match path. Results are complete (not
@@ -29,7 +46,7 @@ func nameShapedUnverified(ctx context.Context, root string, verified map[string]
 	}, coverage)
 	var candidates []Entry
 	for _, path := range paths {
-		if !verified[path] {
+		if !atOrUnderVerified(path, verified) {
 			candidates = append(candidates, Entry{Path: path, State: StateUnverified,
 				Label: "name-shaped (not context-verified)", Pattern: filepath.Base(path)})
 		}

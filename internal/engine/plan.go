@@ -49,6 +49,11 @@ const (
 	// domains.enabled set (authorize-narrow). This is a fail-closed restriction
 	// on the existing execute path, never a new execute path.
 	WithheldReasonDomainDisabled = "domain_disabled"
+	// WithheldReasonLayout marks a marker-verified relocated cache whose
+	// directory holds entries the tool does not create there (for example
+	// user data in a reused target directory). It stays visible, never
+	// prunable.
+	WithheldReasonLayout = "layout"
 
 	// FilterDisplayMixed is used on the plan-level banner when candidates
 	// resolved to more than one distinct value for that gate.
@@ -218,6 +223,10 @@ type CandidateJob struct {
 	AuthorizationBoundary string
 	ContainmentRelation   string
 	ProvenanceKind        string
+	// WithholdOnVCS withholds the candidate (reason layout) when its sizing
+	// walk sees a version-control directory anywhere inside: set for
+	// signatures discovered by content marker alone.
+	WithholdOnVCS bool
 }
 
 func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions) (PrunePlan, error) {
@@ -313,6 +322,14 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 			if !ok {
 				return nil
 			}
+			// Shared temp holds other users' files and has no execute assent:
+			// a marker-only match there is reported, never a candidate. Its
+			// subtree is the cache, so it is not descended either.
+			if target.Signature != "" && markerDiscovered(signature) && underSharedTemp(path) {
+				plan.Warnings = append(plan.Warnings, fmt.Errorf(
+					"shared temp: %s matches %s; shared-temp caches are diagnostic only (not a candidate)", path, target.Signature))
+				return filepath.SkipDir
+			}
 
 			info, err := d.Info()
 			if err != nil {
@@ -325,6 +342,9 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 			// but never lower; it applies by path match, whatever the target's
 			// provenance, so a pattern-only target cannot escape it.
 			effMinAge = raiseMinAge(effMinAge, ageFloorFor(rel, signatures))
+			if target.Signature != "" {
+				effMinAge = markerFloorMinAge(effMinAge, signature)
+			}
 			floored := ageFloorFor(rel, signatures) != ""
 			if profile.TempRoot {
 				effMinAge = raiseMinAge(effMinAge, tempRootAgeFloor)
@@ -338,7 +358,7 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 			pattern := target.Pattern
 			if target.Signature != "" {
 				confidence = signature.Confidence
-				pattern = strings.Join(signature.CandidatePatterns, ",")
+				pattern = signatureDisplayPattern(signature)
 			}
 
 			// Incremental mode is Cargo incremental only: expand verified
@@ -424,6 +444,10 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 				state = CandidateStateWithheld
 				withheldReason = WithheldReasonSafeToPrune
 			}
+			if target.Signature != "" && !layoutRecognised(path, signature) {
+				state = CandidateStateWithheld
+				withheldReason = WithheldReasonLayout
+			}
 
 			jobs = append(jobs, CandidateJob{
 				Path:             path,
@@ -443,6 +467,7 @@ func BuildPrunePlan(ctx context.Context, cfg *config.Config, opts ...PlanOptions
 				AuthorizationBoundary: root,
 				ContainmentRelation:   ContainmentDescendant,
 				ProvenanceKind:        ProvenanceConfigProfile,
+				WithholdOnVCS:         target.Signature != "" && markerDiscovered(signature),
 			})
 			return filepath.SkipDir
 		})
@@ -555,29 +580,55 @@ func candidatePathKey(path string) string {
 }
 
 func matchingTarget(root string, path string, rel string, targets []config.Target, signatures config.SignatureCatalog) (config.Target, config.Signature, []string, bool) {
-	for _, target := range targets {
-		if target.Signature != "" {
-			signature, ok := signatures.Lookup(target.Signature)
-			if !ok {
+	// Name-pattern signatures and pattern-only targets are tried before
+	// signatures discovered by content marker alone, whatever the configured
+	// target order: a conventional target/ that also carries CACHEDIR.TAG keeps
+	// its conventional id (incremental reclaim depends on it).
+	for _, markerPass := range []bool{false, true} {
+		for _, target := range targets {
+			var signature config.Signature
+			if target.Signature != "" {
+				var ok bool
+				signature, ok = signatures.Lookup(target.Signature)
+				if !ok {
+					continue
+				}
+			}
+			if (target.Signature != "" && markerDiscovered(signature)) != markerPass {
 				continue
 			}
-			if !matchesAny(rel, signature.CandidatePatterns) {
-				continue
+			if target.Signature != "" {
+				if markerDiscovered(signature) {
+					// No name to match: only a valid content marker can select it,
+					// and never at the home directory or one of its parents.
+					if signature.ContentMarker == nil || len(signature.ContentMarker.ExpectedLines()) == 0 {
+						continue
+					}
+				} else if !matchesAny(rel, signature.CandidatePatterns) {
+					continue
+				}
+				evidence, ok := signatureEvidence(root, path, signature)
+				if !ok {
+					continue
+				}
+				// Checked on evidence hits only: each stats several locations.
+				if markerDiscovered(signature) && isHomeOrAncestor(path) {
+					continue
+				}
+				if excludedLiveCache(path, signature) {
+					continue
+				}
+				return target, signature, evidence, true
 			}
-			evidence, ok := signatureEvidence(root, path, signature)
-			if !ok {
-				continue
+			if target.Pattern != "" && matchesPattern(rel, target.Pattern) {
+				// A pattern-only target carries no evidence. On a path a guarded
+				// signature covers (sibling, marker or age-floor evidence), it is
+				// refused: the path is reclaimable only through that signature.
+				if guardedSignatureCovers(rel, signatures) {
+					continue
+				}
+				return target, config.Signature{}, []string{"pattern:" + target.Pattern}, true
 			}
-			return target, signature, evidence, true
-		}
-		if target.Pattern != "" && matchesPattern(rel, target.Pattern) {
-			// A pattern-only target carries no evidence. On a path a guarded
-			// signature covers (sibling, marker or age-floor evidence), it is
-			// refused: the path is reclaimable only through that signature.
-			if guardedSignatureCovers(rel, signatures) {
-				continue
-			}
-			return target, config.Signature{}, []string{"pattern:" + target.Pattern}, true
 		}
 	}
 	return config.Target{}, config.Signature{}, nil, false
@@ -642,12 +693,26 @@ func signatureEvidence(root string, path string, signature config.Signature) ([]
 		}
 		evidence = append(evidence, "sibling:"+found)
 	}
+	// Required child files first: a single Lstat each, and rare, so most
+	// directories are refused before the marker file is opened and read.
+	var childFiles []string
+	if len(signature.RequiredChildFiles) > 0 {
+		found, ok := requiredChildFilesEvidence(path, signature.RequiredChildFiles)
+		if !ok {
+			return evidence, false
+		}
+		childFiles = found
+	}
 	if signature.ContentMarker != nil {
 		found, ok := contentMarkerEvidence(path, signature.ContentMarker)
 		if !ok {
 			return evidence, false
 		}
 		evidence = append(evidence, "marker:"+found)
+	}
+	evidence = append(evidence, childFiles...)
+	if !childLayoutEvidence(path, signature) {
+		return evidence, false
 	}
 	if len(signature.AnyChildPaths) > 0 {
 		for _, child := range signature.AnyChildPaths {
@@ -664,6 +729,9 @@ func signatureEvidence(root string, path string, signature config.Signature) ([]
 			// component (leaf or intermediate); devices/FIFOs/sockets/symlinks
 			// never satisfy evidence.
 			if !isPlainEvidence(candidate, false) {
+				continue
+			}
+			if signature.AnyChildDirsOnly && !isPlainDir(candidate) {
 				continue
 			}
 			evidence = append(evidence, "child:"+child)
@@ -843,6 +911,13 @@ func sizeCandidateJobs(ctx context.Context, jobs []CandidateJob, sizeMaxDepth in
 					if state != CandidateStateWithheld && !descendantsMeetMinAge(job.EffectiveMinAge, sized, time.Now()) {
 						state = CandidateStateWithheld
 						withheldReason = WithheldReasonAge
+					}
+					// Version-controlled content is never regenerable: a cache
+					// holding a repository anywhere inside is never reclaimed
+					// whole, whatever else withheld it.
+					if job.WithholdOnVCS && sized.VCSSeen {
+						state = CandidateStateWithheld
+						withheldReason = WithheldReasonLayout
 					}
 					basis := ActivityBasisDescendantMtime
 					activityIncomplete := sized.ActivityIncomplete || sized.Incomplete

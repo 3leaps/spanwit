@@ -3,7 +3,6 @@ package space
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -746,15 +745,7 @@ func mergeOverlayTargets(base, overlay []config.Target) []config.Target {
 }
 
 func builtInSignatureTargets() []config.Target {
-	var ids []string
-	for domain, ecosystems := range config.BuiltInSignatures() {
-		for ecosystem, signatures := range ecosystems {
-			for name := range signatures {
-				ids = append(ids, domain+"."+ecosystem+"."+name)
-			}
-		}
-	}
-	sort.Strings(ids)
+	ids := config.BuiltInSignatureIDs()
 	targets := make([]config.Target, 0, len(ids))
 	for _, id := range ids {
 		targets = append(targets, config.Target{Signature: id})
