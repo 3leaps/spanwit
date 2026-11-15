@@ -165,7 +165,7 @@ func TestPruneExecuteRefusesUnsupportedStateFilesystemBeforePlanning(t *testing.
 	cmd.SetArgs([]string{"--config", "/nonexistent/spanwit.yaml", "--execute", "--state-dir", bad})
 	err := cmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "--state-dir") || !strings.Contains(err.Error(), "filesystem") ||
-		!(strings.Contains(err.Error(), "devfs") || strings.Contains(err.Error(), "unknown (0x")) {
+		(!strings.Contains(err.Error(), "devfs") && !strings.Contains(err.Error(), "unknown (0x")) {
 		t.Fatalf("want a filesystem refusal naming the type and remedy, got %v", err)
 	}
 	if _, err := os.Stat(target); err != nil {
