@@ -349,6 +349,8 @@ func TestRelocatedRegress2_VCSAnywhereWithholds(t *testing.T) {
 		"build out jj":      "debug/build/x/out/vendor/.jj/repo",
 		"git worktree file": "doc/src/work/.git",
 		"svn in release":    "release/deps/x/.svn/entries",
+		"uppercase GIT":     "doc/src/.GIT/HEAD",
+		"mixed-case Hg":     "tmp/x/.Hg/requires",
 	}
 	for name, rel := range cargoCases {
 		t.Run("cargo "+name, func(t *testing.T) {

@@ -41,8 +41,19 @@ type SizeResult struct {
 }
 
 // vcsNames are entry names that mark version-controlled (non-regenerable)
-// content.
-var vcsNames = map[string]bool{".git": true, ".hg": true, ".jj": true, ".svn": true}
+// content. isVCSName compares case-insensitively on every filesystem: on a
+// case-insensitive volume ".GIT" is a working .git, and erring towards
+// withholding is the safe side.
+var vcsNames = []string{".git", ".hg", ".jj", ".svn"}
+
+func isVCSName(name string) bool {
+	for _, v := range vcsNames {
+		if strings.EqualFold(name, v) {
+			return true
+		}
+	}
+	return false
+}
 
 // DirSize returns the total size of all files under path (unbounded depth).
 func DirSize(path string) (int64, error) {
@@ -92,7 +103,7 @@ func DirSizeContext(ctx context.Context, path string, maxDepth int) (SizeResult,
 			result.ActivityIncomplete = true
 			// Still record the link's own metadata size/mtime when it is a file-like entry.
 		}
-		if p != path && vcsNames[d.Name()] {
+		if p != path && isVCSName(d.Name()) {
 			result.VCSSeen = true
 		}
 		if p != path {
