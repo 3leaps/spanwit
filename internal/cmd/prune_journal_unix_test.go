@@ -3,6 +3,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -193,5 +194,39 @@ func TestApprovalStatusIsReadOnly(t *testing.T) {
 	}
 	if _, err := os.Lstat(stateDir); !os.IsNotExist(err) {
 		t.Fatalf("status created the state dir: %v", err)
+	}
+}
+
+func TestReplayRendersRecordedResult(t *testing.T) {
+	r := &daemon.OperationReport{OperationID: "op-1", ApprovalID: "a-1", Started: true, ManifestKnown: true, Finished: true,
+		Candidates: []daemon.CandidateResult{{Index: 0, Path: "/r/a", Outcome: "applied", Recorded: true}, {Index: 1, Path: "/r/b", Outcome: "applied", Recorded: true}}}
+	var text bytes.Buffer
+	if err := writeOperationReport(&text, r, "text"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text.String(), "op-1") || !strings.Contains(text.String(), "/r/b") || !strings.Contains(text.String(), "nothing re-executed") {
+		t.Fatalf("text %q", text.String())
+	}
+	var js bytes.Buffer
+	if err := writeOperationReport(&js, r, "json"); err != nil {
+		t.Fatal(err)
+	}
+	var back daemon.OperationReport
+	if err := json.Unmarshal(js.Bytes(), &back); err != nil || len(back.Candidates) != 2 || back.OperationID != "op-1" {
+		t.Fatalf("json %v %s", err, js.String())
+	}
+	if err := reportError(r); err != nil {
+		t.Fatalf("complete result reported as error: %v", err)
+	}
+	gap := *r
+	gap.Finished, gap.Unknown = false, 1
+	gap.Candidates = []daemon.CandidateResult{r.Candidates[0], {Index: 1, Path: "/r/b", Outcome: "unknown"}}
+	if err := reportError(&gap); err == nil || !strings.Contains(err.Error(), "1 unknown") {
+		t.Fatalf("crash gap not surfaced: %v", err)
+	}
+	var gapText bytes.Buffer
+	_ = writeOperationReport(&gapText, &gap, "text")
+	if !strings.Contains(gapText.String(), "unknown      /r/b") {
+		t.Fatalf("gap text %q", gapText.String())
 	}
 }

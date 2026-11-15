@@ -132,6 +132,11 @@ func TestApprovedExecutionHappyPathAndReplay(t *testing.T) {
 	if err != nil || !again.Replayed || again.OperationID != res.OperationID || len(r.deleted) != 2 {
 		t.Fatalf("replay: %+v %v deleted=%v", again, err, r.deleted)
 	}
+	// the replay carries the full recorded result, not just raw records
+	if rep := again.Report; rep == nil || len(rep.Candidates) != 2 || rep.Unknown != 0 || !rep.Finished ||
+		rep.Candidates[0].Outcome != OutcomeApplied || rep.Candidates[1].Outcome != OutcomeApplied || rep.ApprovalID != p.ApprovalID {
+		t.Fatalf("replay report %+v", again.Report)
+	}
 	// same operation, changed request: idempotency_payload_mismatch
 	age := "48h"
 	_, err = ex.ExecuteApproved(context.Background(), ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan), MinAge: &age, OperationID: res.OperationID})

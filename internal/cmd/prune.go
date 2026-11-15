@@ -489,9 +489,16 @@ func runApprovedPrune(cmd *cobra.Command, session *pruneSession, approvalID, ope
 		minAgePtr = &minAge
 	}
 	_, _ = fmt.Fprintf(os.Stderr, "=== spanwit prune ===\nConfig: from-exact-plan:%s\nMode:   EXECUTE under approval %s\n\n", planPath, approvalID)
-	plan, info, execErr := session.executeApproved(context.Background(), approvalID, operationID, raw, minAgePtr, nil)
+	plan, info, report, execErr := session.executeApproved(context.Background(), approvalID, operationID, raw, minAgePtr, nil)
 	if code := approval.RefusalCode(execErr); code != "" && info.OperationID == "" {
 		return execErr // refused before any effect: no report to write
+	}
+	if report != nil {
+		if err := writeOperationReport(os.Stdout, report, outputFormat); err != nil {
+			return err
+		}
+		writeJournalLine(info)
+		return execErr
 	}
 	if outputFormat == "json" {
 		if err := writePrunePlanJSON(os.Stdout, plan, "from-exact-plan:"+planPath, true, time.Now(), info); err != nil {

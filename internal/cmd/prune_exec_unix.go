@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -52,7 +53,7 @@ func (s *pruneSession) executor() approval.Executor {
 
 // executeApproved consumes a one-shot approval and executes the exact plan
 // bytes it binds (read once by the caller).
-func (s *pruneSession) executeApproved(ctx context.Context, approvalID, operationID string, raw []byte, minAge *string, opts []engine.PlanOptions) (PrunePlan, pruneExecutionInfo, error) {
+func (s *pruneSession) executeApproved(ctx context.Context, approvalID, operationID string, raw []byte, minAge *string, opts []engine.PlanOptions) (PrunePlan, pruneExecutionInfo, *daemon.OperationReport, error) {
 	ex := s.executor()
 	ex.Plan = func(ctx context.Context, raw []byte, minAge string) (engine.PrunePlan, error) {
 		return buildPrunePlanFromExactPlanBytes(ctx, raw, minAge, opts...)
@@ -60,12 +61,15 @@ func (s *pruneSession) executeApproved(ctx context.Context, approvalID, operatio
 	res, err := ex.ExecuteApproved(ctx, approval.ExecuteInput{ApprovalID: approvalID, Plan: raw, MinAge: minAge, OperationID: operationID})
 	info := pruneExecutionInfo{Journal: engine.ExecutionJournaled, OperationID: res.OperationID, ApprovalID: approvalID, Assertion: assertionLabel()}
 	if err != nil {
-		return res.Plan, info, err
+		return res.Plan, info, nil, err
 	}
 	if res.Replayed {
-		return res.Plan, info, fmt.Errorf("operation %s already ran for approval %s; nothing re-executed (%d recorded outcomes)", res.OperationID, approvalID, len(res.Outcomes))
+		// An exact retry: the recorded result of the original operation,
+		// rebuilt from its stored manifest and outcome records. Nothing was
+		// replanned or deleted.
+		return res.Plan, info, res.Report, reportError(res.Report)
 	}
-	return res.Plan, info, outcomeError(res)
+	return res.Plan, info, nil, outcomeError(res)
 }
 
 // executeUnapproved is the explicit --execute: same coordinator, guard and
@@ -129,4 +133,40 @@ func checkStateFilesystem(stateDir string) error {
 		return nil // daemon.Open performs the authoritative check
 	}
 	return fmt.Errorf("execution journal unavailable (nothing deleted): %s is on filesystem type %q; the journal needs APFS or HFS+ (macOS) or ext4, XFS or Btrfs (Linux). Use --state-dir to point at a private directory on one of those", stateDir, name)
+}
+
+// reportError is non-nil when a recorded operation did not fully apply:
+// a failed or partial outcome, or a candidate with no recorded outcome.
+func reportError(r *daemon.OperationReport) error {
+	if r == nil {
+		return fmt.Errorf("recorded result unavailable")
+	}
+	var bad int
+	for _, c := range r.Candidates {
+		if c.Outcome == approval.OutcomeFailed || c.Outcome == approval.OutcomePartial {
+			bad++
+		}
+	}
+	if bad > 0 || r.Unknown > 0 || !r.Finished {
+		return fmt.Errorf("operation %s: %d failed or partial, %d unknown, finished=%v (recorded result; nothing re-executed)", r.OperationID, bad, r.Unknown, r.Finished)
+	}
+	return nil
+}
+
+// writeOperationReport renders a recorded operation result (an exact retry):
+// JSON as the operation report, text as one line per candidate.
+func writeOperationReport(w io.Writer, r *daemon.OperationReport, format string) error {
+	if format == "json" {
+		return writeIndentedJSON(w, r)
+	}
+	_, _ = fmt.Fprintf(w, "Recorded result of operation %s (approval %s); nothing re-executed.\n", r.OperationID, r.ApprovalID)
+	for _, c := range r.Candidates {
+		line := fmt.Sprintf("  %-12s %s", c.Outcome, c.Path)
+		if c.Reason != "" {
+			line += " (" + c.Reason + ")"
+		}
+		_, _ = fmt.Fprintln(w, line)
+	}
+	_, _ = fmt.Fprintf(w, "%d candidates, %d unknown, finished=%v\n", len(r.Candidates), r.Unknown, r.Finished)
+	return nil
 }
