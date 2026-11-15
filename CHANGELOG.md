@@ -21,7 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     line) and a `debug/` or `release/` child.
   - `development.go.build-cache-relocated` matches a Go build cache at any name or
     place by Go's `README` line, `trim.txt`, a shard directory and nothing outside
-    Go's cache layout. The build cache the go command would use is excluded.
+    Go's cache layout. The build cache the go command would use (environment,
+    `go env -w`, any Go root's `go.env`, the user cache directory) is excluded;
+    an unreadable or relative configuration matches no relocated Go cache.
   - A relocated Cargo target may hold only files Cargo writes there, and no VCS
     directory or project manifest at its top or one level down. A directory
     Cargo does not create there withholds it with the new `withheld_reason`

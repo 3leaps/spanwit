@@ -283,6 +283,20 @@ func TestGoEnv_GoRootEnvFile(t *testing.T) {
 			}
 			t.Setenv("PATH", linkDir)
 		},
+		"relative GOROOT": func(t *testing.T, _, _ string) {
+			t.Setenv("GOROOT", "relative/goroot")
+		},
+		"GOROOT from user env file names cache": func(t *testing.T, base, cache string) {
+			root := fakeGoRoot(t, base, "GOCACHE="+cache+"\n")
+			f := filepath.Join(base, "user-env")
+			writeEnvFile(t, f, "GOROOT="+root+"\n")
+			t.Setenv("GOENV", f)
+		},
+		"relative GOROOT in user env file": func(t *testing.T, base, _ string) {
+			f := filepath.Join(base, "user-env")
+			writeEnvFile(t, f, "GOROOT=relative/goroot\n")
+			t.Setenv("GOENV", f)
+		},
 		"explicit GOROOT go.env unreadable": func(t *testing.T, base, cache string) {
 			if os.Geteuid() == 0 {
 				t.Skip("root reads anything")
@@ -306,6 +320,12 @@ func TestGoEnv_GoRootEnvFile(t *testing.T) {
 	pos := map[string]func(t *testing.T, base, cache string){
 		"GOROOT go.env without GOCACHE": func(t *testing.T, base, _ string) {
 			t.Setenv("GOROOT", fakeGoRoot(t, base, "GOPROXY=https://proxy.golang.org,direct\n"))
+		},
+		"GOROOT from user env file without GOCACHE": func(t *testing.T, base, _ string) {
+			root := fakeGoRoot(t, base, "GOPROXY=off\n")
+			f := filepath.Join(base, "user-env")
+			writeEnvFile(t, f, "GOROOT="+root+"\n")
+			t.Setenv("GOENV", f)
 		},
 		"GOROOT without go.env": func(t *testing.T, base, _ string) {
 			root := fakeGoRoot(t, base, "")

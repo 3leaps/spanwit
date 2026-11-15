@@ -538,9 +538,13 @@ func liveGoCacheLocations() (locations []string, certain bool) {
 		locations = append(locations, v)
 	}
 	// The go command's lowest-precedence layer is $GOROOT/go.env. Every
-	// root it may use is read: an explicit $GOROOT and the install root of
-	// the go binary on PATH. Extra roots only add exclusions.
-	for _, root := range candidateGoRoots() {
+	// root it may use is read (see candidateGoRoots); extra roots only add
+	// exclusions, and an unresolvable root makes the result uncertain.
+	roots, rootsCertain := candidateGoRoots()
+	if !rootsCertain {
+		certain = false
+	}
+	for _, root := range roots {
 		rv, rc := goEnvFileAt(filepath.Join(root, "go.env"), "GOCACHE")
 		if !rc {
 			certain = false
@@ -555,13 +559,30 @@ func liveGoCacheLocations() (locations []string, certain bool) {
 	return locations, certain
 }
 
-// candidateGoRoots returns the GOROOTs the go command may use for this user:
-// $GOROOT when it is absolute, and the root of the go binary found on PATH
-// (symlinks resolved, two levels above the binary), when it holds a VERSION
-// or go.env file.
-func candidateGoRoots() []string {
-	var roots []string
-	if r := os.Getenv("GOROOT"); r != "" && filepath.IsAbs(r) {
+// candidateGoRoots returns the GOROOTs the go command may use for this
+// user: GOROOT from the process environment and from the user's go env file
+// (`go env -w GOROOT=...`), and the root of the go binary on PATH (symlinks
+// resolved, two levels above the binary, holding VERSION or go.env). The go
+// command resolves a relative GOROOT against its own working directory,
+// which is unknown here, so a relative setting makes the result uncertain,
+// as does an env file that cannot be read completely. A go binary that is
+// not on PATH, relying on its compiled-in GOROOT, is not covered.
+func candidateGoRoots() (roots []string, certain bool) {
+	certain = true
+	settings := []string{os.Getenv("GOROOT")}
+	fileRoot, fileCertain := goEnvFileValue("GOROOT")
+	if !fileCertain {
+		certain = false
+	}
+	settings = append(settings, fileRoot)
+	for _, r := range settings {
+		if r == "" {
+			continue
+		}
+		if !filepath.IsAbs(r) {
+			certain = false
+			continue
+		}
 		roots = append(roots, filepath.Clean(r))
 	}
 	if bin, err := exec.LookPath("go"); err == nil {
@@ -574,7 +595,7 @@ func candidateGoRoots() []string {
 			}
 		}
 	}
-	return roots
+	return roots, certain
 }
 
 // goEnvFileLimit caps the go env file read; a larger file is not trusted as

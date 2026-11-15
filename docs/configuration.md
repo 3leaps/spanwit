@@ -493,9 +493,13 @@ marker selects them:
   name or place. `README` must start with Go's build-cache line, `trim.txt` must
   be a regular file, a two-hex-digit shard directory must exist, and nothing
   outside Go's cache layout may sit at the top. The build cache the go command
-  would use (`$GOCACHE`, a `go env -w` setting, or the default under the user
-  cache directory) is never matched; it stays diagnostic-only with the
-  `go-build-cache` recipe.
+  would use is never matched: `$GOCACHE`, a `go env -w` setting, `GOCACHE` in
+  the `go.env` of any Go root (from `GOROOT`, a `go env -w` setting, or the go
+  binary on `PATH`), or the default under the user cache directory. It stays
+  diagnostic-only with the `go-build-cache` recipe. If that configuration
+  cannot be read completely, or names a relative `GOROOT`, no relocated Go
+  cache is matched. A go binary outside `PATH` that relies on its built-in
+  root is not consulted.
 
 A relocated Cargo target may hold only files Cargo writes there; a VCS
 directory or project manifest at its top, or directly inside any of its
