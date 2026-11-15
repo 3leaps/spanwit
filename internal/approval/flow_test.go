@@ -521,7 +521,6 @@ func TestPlanStoredThenConsumeFailedThenRetry(t *testing.T) {
 	}
 }
 
-
 // TestLatchedCoordinatorRefusesUntilRestart: freeing capacity is not
 // reconciliation; the same coordinator refuses until it is reopened.
 func TestLatchedCoordinatorRefusesUntilRestart(t *testing.T) {
