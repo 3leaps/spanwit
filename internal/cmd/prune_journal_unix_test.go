@@ -86,7 +86,7 @@ func TestPruneExecuteIsJournaled(t *testing.T) {
 	for _, r := range recs {
 		kinds = append(kinds, r.Kind+":"+r.Outcome)
 	}
-	if strings.Join(kinds, ",") != "outcome:applied,finished:,started:" {
+	if strings.Join(kinds, ",") != "outcome:applied,finished:,manifest:,started:" {
 		t.Fatalf("journal %v", kinds)
 	}
 }
@@ -168,5 +168,30 @@ func TestPruneExecuteRefusesUnsupportedStateFilesystemBeforePlanning(t *testing.
 	}
 	if _, err := os.Stat(target); err != nil {
 		t.Fatalf("target touched: %v", err)
+	}
+}
+
+func TestPruneSortRefusedUnderApproval(t *testing.T) {
+	identity, _, _, stateDir := journalRig(t)
+	cmd := newPruneCmd(identity)
+	cmd.SetArgs([]string{"--from-exact-plan", "/p.json", "--execute", "--approval", "a-1", "--sort", "idle", "--state-dir", stateDir})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "--sort is not valid with --approval") {
+		t.Fatalf("got %v", err)
+	}
+	if _, err := os.Lstat(stateDir); !os.IsNotExist(err) {
+		t.Fatalf("refused flag combination still opened the store: %v", err)
+	}
+}
+
+func TestApprovalStatusIsReadOnly(t *testing.T) {
+	_, _, _, stateDir := journalRig(t)
+	if _, err := runApprovalCmd(t, "status", "--state-dir", stateDir, "missing"); err == nil {
+		t.Fatal("missing approval reported")
+	}
+	if _, err := runApprovalCmd(t, "operation", "--state-dir", stateDir, "missing"); err == nil {
+		t.Fatal("operation on absent state reported")
+	}
+	if _, err := os.Lstat(stateDir); !os.IsNotExist(err) {
+		t.Fatalf("status created the state dir: %v", err)
 	}
 }

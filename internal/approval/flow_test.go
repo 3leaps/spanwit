@@ -4,6 +4,7 @@ package approval
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,7 +116,7 @@ func TestApprovedExecutionHappyPathAndReplay(t *testing.T) {
 		t.Fatalf("deleted %v outcomes %+v", r.deleted, res.Outcomes)
 	}
 	recs, err := r.coord.ExecutionRecords(context.Background(), res.OperationID)
-	if err != nil || len(recs) != 4 { // c0, c1, finished, started
+	if err != nil || len(recs) != 5 { // c0, c1, finished, manifest, started
 		t.Fatalf("journaled %d records: %v", len(recs), err)
 	}
 	// stored plan body equals the executed bytes
@@ -473,5 +474,146 @@ func TestCrashAfterConsumeNeverReexecutes(t *testing.T) {
 	wantCode(t, err, CodeGrantAlreadyConsumed)
 	if len(r.deleted) != 0 {
 		t.Fatalf("re-executed after a crash: %v", r.deleted)
+	}
+}
+
+// TestSamePlanSeparateApprovals: two independent approvals of identical plan
+// bytes each execute once (devrev regression).
+func TestSamePlanSeparateApprovals(t *testing.T) {
+	r := newFlowRig(t)
+	ctx := context.Background()
+	first := r.approve(flowPlan, nil)
+	second := r.approve(flowPlan, nil)
+	if _, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: first.ApprovalID, Plan: []byte(flowPlan)}); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if _, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: second.ApprovalID, Plan: []byte(flowPlan)}); err != nil {
+		t.Fatalf("second approval of the same plan: %v", err)
+	}
+	if len(r.deleted) != 4 {
+		t.Fatalf("deleted %v", r.deleted)
+	}
+}
+
+// TestPlanStoredThenConsumeFailedThenRetry: the plan append succeeds, the
+// consume fails (journal full), and after a restart the same approval
+// executes once (the stored plan is reused, consumption stays strict).
+func TestPlanStoredThenConsumeFailedThenRetry(t *testing.T) {
+	r := newFlowRig(t)
+	ctx := context.Background()
+	p := r.approve(flowPlan, nil)
+	if _, err := r.coord.StorePlan(ctx, []byte(flowPlan)); err != nil {
+		t.Fatal(err)
+	}
+	unfill := r.fill()
+	_, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+	wantCode(t, err, CodePersistenceUncertain)
+	unfill()
+	r.reopen()
+	if _, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)}); err != nil {
+		t.Fatalf("retry after a failed consume: %v", err)
+	}
+	if len(r.deleted) != 2 {
+		t.Fatalf("deleted %v", r.deleted)
+	}
+	if _, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)}); RefusalCode(err) != CodeGrantAlreadyConsumed {
+		t.Fatalf("third attempt: %v", err)
+	}
+}
+
+
+// TestLatchedCoordinatorRefusesUntilRestart: freeing capacity is not
+// reconciliation; the same coordinator refuses until it is reopened.
+func TestLatchedCoordinatorRefusesUntilRestart(t *testing.T) {
+	ctx := context.Background()
+	r := newFlowRig(t)
+	p := r.approve(flowPlan, nil)
+	unfill := r.fill()
+	_, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+	wantCode(t, err, CodePersistenceUncertain)
+	unfill()
+	_, err = r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+	wantCode(t, err, CodePersistenceUncertain)
+	if len(r.deleted) != 0 {
+		t.Fatalf("latched coordinator deleted %v", r.deleted)
+	}
+	r.reopen()
+	if _, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)}); err != nil {
+		t.Fatalf("after restart: %v", err)
+	}
+}
+
+// TestFailureBranchJournalErrorsSurface: journal failures in the planner
+// error and limits branches are persistence_uncertain, not the branch's own
+// refusal (devrev regression).
+func TestFailureBranchJournalErrorsSurface(t *testing.T) {
+	ctx := context.Background()
+	t.Run("planner error", func(t *testing.T) {
+		r := newFlowRig(t)
+		p := r.approve(flowPlan, nil)
+		ex := r.executor()
+		ex.Plan = func(context.Context, []byte, string) (engine.PrunePlan, error) {
+			r.fill()
+			return engine.PrunePlan{}, errors.New("planner refused")
+		}
+		_, err := ex.ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+		wantCode(t, err, CodePersistenceUncertain)
+	})
+	t.Run("limits", func(t *testing.T) {
+		r := newFlowRig(t)
+		p := r.approve(flowPlan, nil)
+		r.extra = 1
+		ex := r.executor()
+		inner := ex.Plan
+		ex.Plan = func(c context.Context, raw []byte, m string) (engine.PrunePlan, error) {
+			plan, err := inner(c, raw, m)
+			r.fill()
+			return plan, err
+		}
+		_, err := ex.ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+		wantCode(t, err, CodePersistenceUncertain)
+		if len(r.deleted) != 0 {
+			t.Fatalf("deleted %v", r.deleted)
+		}
+	})
+}
+
+// TestInterruptedRunProjectsUnknownCandidates: one outcome recorded, the
+// next effect unrecorded; after a restart the projection shows the recorded
+// outcome and the rest as unknown, readable without the plan file.
+func TestInterruptedRunProjectsUnknownCandidates(t *testing.T) {
+	ctx := context.Background()
+	r := newFlowRig(t)
+	p := r.approve(flowPlan, nil)
+	ex := r.executor()
+	inner := ex.Delete
+	ex.Delete = func(c context.Context, cand *engine.PruneCandidate) (string, string) {
+		out, d := inner(c, cand)
+		if cand.Path == "/r/b" {
+			r.fill() // the second outcome cannot be recorded
+		}
+		return out, d
+	}
+	res, err := ex.ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+	wantCode(t, err, CodePersistenceUncertain)
+	_ = os.Remove(filepath.Join(r.state, "journal", "capacity-fixture"))
+	_ = r.coord.Close()
+	// read-only inspection, no coordinator, no plan file
+	insp, err := daemon.InspectApproval(ctx, r.state, p.ApprovalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := insp.Operation
+	if insp.State != daemon.ApprovalConsumed || op == nil || op.OperationID != res.OperationID || !op.ManifestKnown || op.Finished {
+		t.Fatalf("inspection %+v", insp)
+	}
+	if len(op.Candidates) != 2 || op.Candidates[0].Outcome != OutcomeApplied || !op.Candidates[0].Recorded ||
+		op.Candidates[1].Outcome != "unknown" || op.Candidates[1].Recorded || op.Unknown != 1 {
+		t.Fatalf("candidates %+v", op.Candidates)
+	}
+	r.reopen()
+	again, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan), OperationID: res.OperationID})
+	if err != nil || !again.Replayed || again.Report == nil || again.Report.Unknown != 1 || len(r.deleted) != 2 {
+		t.Fatalf("replay %+v %v deleted=%v", again.Report, err, r.deleted)
 	}
 }

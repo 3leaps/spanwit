@@ -4,6 +4,7 @@ package approval
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -264,6 +265,9 @@ type Result struct {
 	Replayed    bool // an exact retry: the original operation, no new effect
 	Plan        engine.PrunePlan
 	Outcomes    []daemon.ExecutionRecord
+	// Report projects every candidate of the operation: its recorded
+	// outcome, or unknown when none was recorded (set on replay).
+	Report *daemon.OperationReport
 }
 
 // ExecuteInput is one approved execution request.
@@ -328,7 +332,11 @@ func (e Executor) ExecuteApproved(ctx context.Context, in ExecuteInput) (Result,
 			if err != nil {
 				return Result{}, refuse(CodePersistenceUncertain, err, "read original outcomes")
 			}
-			return Result{OperationID: cons.OperationID, Replayed: true, Outcomes: recs}, nil
+			report, err := e.Coord.OperationReport(ctx, cons.OperationID)
+			if err != nil {
+				return Result{}, refuse(CodePersistenceUncertain, err, "project original outcomes")
+			}
+			return Result{OperationID: cons.OperationID, Replayed: true, Outcomes: recs, Report: &report}, nil
 		case in.OperationID != "" && cons != nil && in.OperationID == cons.OperationID:
 			return Result{}, refuse(CodeIdempotencyPayloadMismatch, nil, "operation %s was consumed with a different request", in.OperationID)
 		default:
@@ -393,12 +401,17 @@ func (e Executor) ExecuteUnapproved(ctx context.Context, plan engine.PrunePlan) 
 }
 
 func (e Executor) run(ctx context.Context, op, approvalID string, raw []byte, minAge string, p *Payload) (Result, error) {
-	if err := e.Coord.AppendExecution(ctx, daemon.ExecutionRecord{OperationID: op, Kind: "started", ApprovalID: approvalID}); err != nil {
+	// Journal writes from here on never use the cancellable context: a
+	// cancellation stops new deletions, not the record of what happened.
+	jctx := context.WithoutCancel(ctx)
+	if err := e.Coord.AppendExecution(jctx, daemon.ExecutionRecord{OperationID: op, Kind: "started", ApprovalID: approvalID}); err != nil {
 		return Result{OperationID: op}, journalRefusal(err)
 	}
 	plan, err := e.Plan(ctx, raw, minAge)
 	if err != nil {
-		_ = e.Coord.AppendExecution(ctx, daemon.ExecutionRecord{OperationID: op, Kind: "finished", Detail: "plan failed: " + err.Error()})
+		if jerr := e.Coord.AppendExecution(jctx, daemon.ExecutionRecord{OperationID: op, Kind: "finished", Detail: "plan failed: " + err.Error()}); jerr != nil {
+			return Result{OperationID: op}, journalRefusal(jerr)
+		}
 		return Result{OperationID: op}, refuse(CodeStalePlanOrDrift, err, "revalidate plan: %v", err)
 	}
 	// Under an approval, unknown drift withholds too.
@@ -408,6 +421,9 @@ func (e Executor) run(ctx context.Context, op, approvalID string, raw []byte, mi
 			c.State, c.WithheldReason = engine.CandidateStateWithheld, engine.WithheldReasonIndeterminate
 		}
 	}
+	if err := e.recordManifest(jctx, op, plan); err != nil {
+		return Result{OperationID: op, Plan: plan}, err
+	}
 	var count, bytes int64
 	for _, c := range plan.Candidates {
 		if c.State == engine.CandidateStatePrunable {
@@ -416,28 +432,59 @@ func (e Executor) run(ctx context.Context, op, approvalID string, raw []byte, mi
 		}
 	}
 	if count > p.Limits.MaxCandidates || bytes > p.Limits.MaxReclaimBytes {
+		res := Result{OperationID: op, Plan: plan}
 		for i, c := range plan.Candidates {
-			_ = e.Coord.AppendExecution(ctx, daemon.ExecutionRecord{OperationID: op, Kind: "outcome", Index: i, Path: c.Path, Outcome: OutcomeUnattempted, Reason: CodeLimitsExceeded})
+			rec := daemon.ExecutionRecord{OperationID: op, Kind: "outcome", Index: i, Path: c.Path, Outcome: OutcomeUnattempted, Reason: CodeLimitsExceeded}
+			if err := e.Coord.AppendExecution(jctx, rec); err != nil {
+				return res, journalRefusal(err)
+			}
+			res.Outcomes = append(res.Outcomes, rec)
 		}
-		_ = e.Coord.AppendExecution(ctx, daemon.ExecutionRecord{OperationID: op, Kind: "finished", Detail: CodeLimitsExceeded})
-		return Result{OperationID: op, Plan: plan}, refuse(CodeLimitsExceeded, nil, "%d candidates / %d bytes exceed the approved %d / %d", count, bytes, p.Limits.MaxCandidates, p.Limits.MaxReclaimBytes)
+		if err := e.Coord.AppendExecution(jctx, daemon.ExecutionRecord{OperationID: op, Kind: "finished", Detail: CodeLimitsExceeded}); err != nil {
+			return res, journalRefusal(err)
+		}
+		return res, refuse(CodeLimitsExceeded, nil, "%d candidates / %d bytes exceed the approved %d / %d", count, bytes, p.Limits.MaxCandidates, p.Limits.MaxReclaimBytes)
 	}
 	return e.loop(ctx, op, plan, p.ExpiresAt)
 }
 
 func (e Executor) runPlanned(ctx context.Context, op, approvalID string, plan engine.PrunePlan, _ *Payload) (Result, error) {
-	if err := e.Coord.AppendExecution(ctx, daemon.ExecutionRecord{OperationID: op, Kind: "started", ApprovalID: approvalID}); err != nil {
+	jctx := context.WithoutCancel(ctx)
+	if err := e.Coord.AppendExecution(jctx, daemon.ExecutionRecord{OperationID: op, Kind: "started", ApprovalID: approvalID}); err != nil {
 		return Result{OperationID: op, Plan: plan}, journalRefusal(err)
 	}
+	if err := e.recordManifest(jctx, op, plan); err != nil {
+		return Result{OperationID: op, Plan: plan}, err
+	}
 	return e.loop(ctx, op, plan, time.Time{})
+}
+
+// recordManifest stores the candidates the loop will attempt, in loop
+// order, and references them from the operation before the first effect,
+// so an interrupted run can be projected candidate by candidate.
+func (e Executor) recordManifest(ctx context.Context, op string, plan engine.PrunePlan) error {
+	m := daemon.ExecutionManifest{Schema: daemon.ExecutionManifestSchema, OperationID: op, Candidates: []daemon.ManifestCandidate{}}
+	for i, c := range plan.Candidates {
+		m.Candidates = append(m.Candidates, daemon.ManifestCandidate{Index: i, Path: c.Path, State: c.State, SizeBytes: c.Size})
+	}
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	pin, err := e.Coord.StoreManifest(ctx, raw)
+	if err != nil {
+		return journalRefusal(err)
+	}
+	if err := e.Coord.AppendExecution(ctx, daemon.ExecutionRecord{OperationID: op, Kind: "manifest", Manifest: &pin}); err != nil {
+		return journalRefusal(err)
+	}
+	return nil
 }
 
 // loop deletes prunable candidates one at a time, recording each outcome
 // after its effect. A journal failure stops further deletions. Expiry or
 // cancellation records the remaining candidates as unattempted and stops.
 func (e Executor) loop(ctx context.Context, op string, plan engine.PrunePlan, expires time.Time) (Result, error) {
-	// Cancellation stops new deletions only; records of what already
-	// happened (and of what will not be attempted) are still written.
 	jctx := context.WithoutCancel(ctx)
 	res := Result{OperationID: op, Plan: plan}
 	stopReason := ""

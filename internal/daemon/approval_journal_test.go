@@ -4,7 +4,11 @@ package daemon
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -204,5 +208,112 @@ func TestProfileHeadChangesOnSamePackReactivation(t *testing.T) {
 	}
 	if second.Pin == first.Pin {
 		t.Fatalf("reactivation kept the head pin %+v", second.Pin)
+	}
+}
+
+// TestStorePlanReusesImmutablePlanRecord: storing the same bytes again (a
+// second approval of the same plan, or a retry after a failed consume)
+// returns the existing pin instead of a conflicting append.
+func TestStorePlanReusesImmutablePlanRecord(t *testing.T) {
+	c := openApprovalCoordinator(t)
+	ctx := context.Background()
+	a, err := c.StorePlan(ctx, []byte(`{"p":1}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := c.StorePlan(ctx, []byte(`{"p":1}`))
+	if err != nil || a != b {
+		t.Fatalf("second store: %+v vs %+v (%v)", a, b, err)
+	}
+	other, err := c.StorePlan(ctx, []byte(`{"p":2}`))
+	if err != nil || other == a {
+		t.Fatalf("different plan: %+v %v", other, err)
+	}
+}
+
+func snapshotTree(t *testing.T, root string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			out[p] = "err:" + err.Error()
+			return nil
+		}
+		sum := ""
+		if info.Mode().IsRegular() {
+			b, _ := os.ReadFile(p)
+			sum = fmt.Sprintf("%x", sha256.Sum256(b))
+		}
+		out[p] = fmt.Sprintf("%v %d %d %s", info.Mode(), info.Size(), info.ModTime().UnixNano(), sum)
+		return nil
+	})
+	return out
+}
+
+// TestInspectionIsReadOnly: inspecting creates nothing when there is no
+// state and changes nothing (bytes, sizes, modes, mtimes) when there is.
+func TestInspectionIsReadOnly(t *testing.T) {
+	ctx := context.Background()
+	base := privateDir(t)
+	absent := filepath.Join(base, "state")
+	if _, err := InspectApproval(ctx, absent, "x"); !errors.Is(err, ErrApprovalNotFound) {
+		t.Fatalf("absent: %v", err)
+	}
+	if _, err := InspectOperation(ctx, absent, "op"); err == nil {
+		t.Fatal("absent operation reported")
+	}
+	if _, err := os.Lstat(absent); !os.IsNotExist(err) {
+		t.Fatalf("inspection created %s: %v", absent, err)
+	}
+
+	dir := privateDir(t)
+	c, err := Open(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.RequestApproval(ctx, "a-1", []byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.AppendExecution(ctx, ExecutionRecord{OperationID: "op", Kind: "started"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Close()
+	before := snapshotTree(t, dir)
+	insp, err := InspectApproval(ctx, dir, "a-1")
+	if err != nil || insp.State != ApprovalRequested {
+		t.Fatalf("inspect: %+v %v", insp, err)
+	}
+	if _, err := InspectApproval(ctx, dir, "missing"); !errors.Is(err, ErrApprovalNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+	if rep, err := InspectOperation(ctx, dir, "op"); err != nil || !rep.Started {
+		t.Fatalf("operation: %+v %v", rep, err)
+	}
+	after := snapshotTree(t, dir)
+	for p, v := range before {
+		if after[p] != v {
+			t.Errorf("changed %s:\n  %s\n  %s", p, v, after[p])
+		}
+	}
+	for p := range after {
+		if _, ok := before[p]; !ok {
+			t.Errorf("created %s", p)
+		}
+	}
+}
+
+// TestInspectionWhileCoordinatorRuns refuses cleanly rather than racing.
+func TestInspectionWhileCoordinatorRuns(t *testing.T) {
+	dir := privateDir(t)
+	c, err := Open(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+	if _, err := c.RequestApproval(context.Background(), "a-1", []byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InspectApproval(context.Background(), dir, "a-1"); err != nil && !errors.Is(err, ErrStoreHeld) {
+		t.Fatalf("while held: %v", err)
 	}
 }

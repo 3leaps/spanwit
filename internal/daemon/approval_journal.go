@@ -25,9 +25,11 @@ const (
 	planStreamID      = "plan"
 	identityRecordID  = "journal"
 
-	ApprovalRecordSchema  = "spanwit-approval-record/v0"
-	ExecutionRecordSchema = "spanwit-execution-record/v0"
-	maxApprovalRecord     = 256 << 10
+	ApprovalRecordSchema = "spanwit-approval-record/v0"
+	// ExecutionManifestSchema is the candidates an execution will attempt.
+	ExecutionManifestSchema = "spanwit-execution-manifest/v0"
+	ExecutionRecordSchema   = "spanwit-execution-record/v0"
+	maxApprovalRecord       = 256 << 10
 )
 
 // Approval states (N7).
@@ -154,6 +156,9 @@ func (c *Coordinator) write(ctx context.Context, st *recordprims.Stream, recordI
 func (c *Coordinator) writeContent(ctx context.Context, st *recordprims.Stream, recordID string, revision uint64,
 	supersedes *recordprims.Pin, contract string, content map[string]any, lease *recordprims.PublicationLease,
 	key string, want recordprims.WriteOutcome) (recordprims.Pin, error) {
+	if err := c.writable(); err != nil {
+		return recordprims.Pin{}, err
+	}
 	if err := c.admitJournal(ctx); err != nil {
 		return recordprims.Pin{}, fmt.Errorf("%w: %v", ErrPersistenceUncertain, err)
 	}
@@ -236,6 +241,10 @@ func (c *Coordinator) LoadApproval(ctx context.Context, approvalID string) (Appr
 	if err != nil {
 		return ApprovalHead{}, err
 	}
+	return loadApprovalFrom(ctx, st, approvalID)
+}
+
+func loadApprovalFrom(ctx context.Context, st *recordprims.Stream, approvalID string) (ApprovalHead, error) {
 	head, ok, err := st.Head(approvalID)
 	if err != nil {
 		return ApprovalHead{}, err
@@ -328,18 +337,34 @@ func (c *Coordinator) ConsumeApproval(ctx context.Context, prev ApprovalHead, co
 }
 
 // StorePlan durably stores the exact plan bytes before any effect: a
-// content-addressed body, bound by digest and length in a record of the
-// plan stream (record id plan-<hex>). The consumption record references the
-// returned pin, so recovery never depends on the original input file.
-// Storing the same plan again is an idempotent replay of the same record.
+// content-addressed body bound in a record of the plan stream (record id
+// plan-<hex>). The consumption record references the returned pin, so
+// recovery never depends on the original input file.
 func (c *Coordinator) StorePlan(ctx context.Context, plan []byte) (recordprims.Pin, error) {
+	return c.storeBody(ctx, plan, "plan-", "contract: spanwit-exact-prune-plan/v1")
+}
+
+// StoreManifest durably stores an execution manifest (the candidates the
+// loop will attempt, in order) before the first effect.
+func (c *Coordinator) StoreManifest(ctx context.Context, manifest []byte) (recordprims.Pin, error) {
+	return c.storeBody(ctx, manifest, "manifest-", "contract: "+ExecutionManifestSchema)
+}
+
+// storeBody stores data as a content-addressed body record in the plan
+// stream. The record is immutable: data stored earlier (another approval of
+// the same plan, or an attempt whose consume then failed) is reused after
+// verifying the stored bytes equal data.
+func (c *Coordinator) storeBody(ctx context.Context, data []byte, prefix, contract string) (recordprims.Pin, error) {
 	if c.store == nil {
 		return recordprims.Pin{}, ErrPersistenceUncertain
+	}
+	if err := c.writable(); err != nil {
+		return recordprims.Pin{}, err
 	}
 	if err := c.admitJournal(ctx); err != nil {
 		return recordprims.Pin{}, fmt.Errorf("%w: %v", ErrPersistenceUncertain, err)
 	}
-	ref, lease, err := c.store.PutBody(ctx, bytes.NewReader(plan), "application/json")
+	ref, lease, err := c.store.PutBody(ctx, bytes.NewReader(data), "application/json")
 	if err != nil {
 		c.setState("journal_unavailable")
 		return recordprims.Pin{}, fmt.Errorf("%w: %v", ErrPersistenceUncertain, err)
@@ -348,17 +373,36 @@ func (c *Coordinator) StorePlan(ctx context.Context, plan []byte) (recordprims.P
 	if err != nil {
 		return recordprims.Pin{}, err
 	}
-	id := "plan-" + strings.TrimPrefix(ref.Digest, "sha256:")
+	id := prefix + strings.TrimPrefix(ref.Digest, "sha256:")
+	head, ok, err := st.Head(id)
+	if err != nil {
+		c.setState("journal_unavailable")
+		return recordprims.Pin{}, fmt.Errorf("%w: %v", ErrPersistenceUncertain, err)
+	}
+	if ok {
+		stored, err := loadBodyFrom(ctx, st, head.Pin)
+		if err != nil {
+			return recordprims.Pin{}, fmt.Errorf("%w: stored body unreadable: %v", ErrPersistenceUncertain, err)
+		}
+		if !bytes.Equal(stored, data) {
+			return recordprims.Pin{}, fmt.Errorf("%w: stored body %s differs from its digest", ErrPersistenceUncertain, id)
+		}
+		return head.Pin, nil
+	}
 	body := map[string]any{"body": map[string]any{"digest": ref.Digest, "length": ref.Length, "media_type": ref.MediaType}}
-	return c.writeContent(ctx, st, id, 1, nil, "contract: spanwit-exact-prune-plan/v1", body, &lease, "plan:"+id, recordprims.OutcomeAppended)
+	return c.writeContent(ctx, st, id, 1, nil, contract, body, &lease, "body:"+id, recordprims.OutcomeAppended)
 }
 
-// LoadPlan returns the stored plan bytes for a plan record pin.
+// LoadPlan returns the stored bytes for a plan or manifest record pin.
 func (c *Coordinator) LoadPlan(ctx context.Context, pin recordprims.Pin) ([]byte, error) {
 	st, err := c.openStream(planStreamID, recordprims.ModeSingleRevision)
 	if err != nil {
 		return nil, err
 	}
+	return loadBodyFrom(ctx, st, pin)
+}
+
+func loadBodyFrom(ctx context.Context, st *recordprims.Stream, pin recordprims.Pin) ([]byte, error) {
 	sink := &bodyCollector{limit: 64 << 20}
 	res, err := st.Release(ctx, recordprims.UseRequest{
 		Purpose: recordprims.PurposeExport, Selection: []recordprims.Pin{pin}, Closure: recordprims.ClosureFullContent,
@@ -367,7 +411,7 @@ func (c *Coordinator) LoadPlan(ctx context.Context, pin recordprims.Pin) ([]byte
 		return nil, err
 	}
 	if res.Outcome != recordprims.ReleaseReleased || !sink.has {
-		return nil, fmt.Errorf("plan %s unreadable: %s", pin.RecordID, res.Outcome)
+		return nil, fmt.Errorf("body %s unreadable: %s", pin.RecordID, res.Outcome)
 	}
 	return sink.body, nil
 }
@@ -406,7 +450,10 @@ type ExecutionRecord struct {
 	Reason      string `json:"reason,omitempty"`
 	Bytes       int64  `json:"bytes,omitempty"`
 	Detail      string `json:"detail,omitempty"`
-	At          string `json:"at"`
+	// Manifest (kind manifest) pins the stored candidate list the loop
+	// attempts, in order, written before the first effect.
+	Manifest *recordprims.Pin `json:"manifest,omitempty"`
+	At       string           `json:"at"`
 }
 
 // AppendExecution journals one execution record. Record ids are
@@ -433,6 +480,10 @@ func (c *Coordinator) ExecutionRecords(ctx context.Context, operationID string) 
 	if err != nil {
 		return nil, err
 	}
+	return executionRecordsFrom(ctx, st, operationID)
+}
+
+func executionRecordsFrom(ctx context.Context, st *recordprims.Stream, operationID string) ([]ExecutionRecord, error) {
 	var out []ExecutionRecord
 	sink := &execCollector{prefix: operationID + ":", out: &out}
 	res, err := st.Release(ctx, recordprims.UseRequest{Purpose: recordprims.PurposeServe, Closure: recordprims.ClosureMetadataOnly}, sink)
@@ -515,4 +566,14 @@ func (c *Coordinator) ProfileHead(ctx context.Context) (ProfileHeadState, error)
 	}
 	return ProfileHeadState{Active: payload.Active, PackRevision: payload.PackRevision,
 		CompiledPolicyDigest: payload.CompiledPolicyDigest, Pin: *pin}, nil
+}
+
+// writable refuses every new journal write once the coordinator has latched
+// (journal_unavailable or journal_capacity_reached). Capacity relief is not
+// reconciliation: only a restart (a fresh Open) clears the latch.
+func (c *Coordinator) writable() error {
+	if state := c.Status().State; journalStopped(state) {
+		return fmt.Errorf("%w: journal stopped (%s); restart to reconcile", ErrPersistenceUncertain, state)
+	}
+	return nil
 }

@@ -192,31 +192,27 @@ signature catalog and, when requested, the active profile activation.`,
 		}}
 	setCommandCapability(revoke, CapabilityMutating)
 
-	status := &cobra.Command{Use: "status <approval-id>", Args: cobra.ExactArgs(1), Short: "Show an approval's journaled state",
+	status := &cobra.Command{Use: "status <approval-id>", Args: cobra.ExactArgs(1), Short: "Show an approval's journaled state and, once used, each candidate's outcome (read-only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := openApprovalCoordinator(stateDir)
+			insp, err := daemon.InspectApproval(cmd.Context(), stateDir, args[0])
 			if err != nil {
 				return err
 			}
-			defer func() { _ = c.Close() }()
-			head, err := c.LoadApproval(cmd.Context(), args[0])
-			if err != nil {
-				return err
-			}
-			out := map[string]any{"approval_id": head.Record.ApprovalID, "state": head.Record.State, "revision": head.Pin.Revision, "updated_at": head.Record.UpdatedAt}
-			if head.Record.Decision != nil {
-				out["decision"] = head.Record.Decision // display only; execution re-verifies
-			}
-			if head.Record.Consumption != nil {
-				out["operation_id"] = head.Record.Consumption.OperationID
-			}
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			return enc.Encode(out)
+			return writeIndentedJSON(cmd.OutOrStdout(), insp)
 		}}
 	setCommandCapability(status, CapabilityObservational)
 
-	parent.AddCommand(request, show, sign, issue, revoke, status)
+	operation := &cobra.Command{Use: "operation <operation-id>", Args: cobra.ExactArgs(1), Short: "Show each candidate's recorded outcome for one prune execution, or unknown (read-only)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rep, err := daemon.InspectOperation(cmd.Context(), stateDir, args[0])
+			if err != nil {
+				return err
+			}
+			return writeIndentedJSON(cmd.OutOrStdout(), rep)
+		}}
+	setCommandCapability(operation, CapabilityObservational)
+
+	parent.AddCommand(request, show, sign, issue, revoke, status, operation)
 	return parent
 }
 
@@ -339,4 +335,10 @@ func approvalCandidates(plan []byte) []string {
 func stdinIsTerminal() bool {
 	_, err := unix.IoctlGetWinsize(unix.Stdin, unix.TIOCGWINSZ)
 	return err == nil
+}
+
+func writeIndentedJSON(w io.Writer, v any) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
 }

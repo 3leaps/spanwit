@@ -138,6 +138,9 @@ Freshness (--from-space-report / --from-exact-plan):
 			if approvalID != "" && (!execute || fromExactPlan == "") {
 				return fmt.Errorf("--approval requires --from-exact-plan and --execute")
 			}
+			if approvalID != "" && cmd.Flags().Changed("sort") {
+				return fmt.Errorf("--sort is not valid with --approval (the approved plan's sort_mode decides candidate order)")
+			}
 			if operationID != "" && approvalID == "" {
 				return fmt.Errorf("--operation-id only retries an approved execution (use with --approval)")
 			}
@@ -485,13 +488,8 @@ func runApprovedPrune(cmd *cobra.Command, session *pruneSession, approvalID, ope
 	if cmd.Flags().Changed("min-age") {
 		minAgePtr = &minAge
 	}
-	var sortOpts []engine.PlanOptions
-	if cmd.Flags().Changed("sort") {
-		sortMode, _ := cmd.Flags().GetString("sort")
-		sortOpts = append(sortOpts, engine.WithSortMode(sortMode))
-	}
 	_, _ = fmt.Fprintf(os.Stderr, "=== spanwit prune ===\nConfig: from-exact-plan:%s\nMode:   EXECUTE under approval %s\n\n", planPath, approvalID)
-	plan, info, execErr := session.executeApproved(context.Background(), approvalID, operationID, raw, minAgePtr, sortOpts)
+	plan, info, execErr := session.executeApproved(context.Background(), approvalID, operationID, raw, minAgePtr, nil)
 	if code := approval.RefusalCode(execErr); code != "" && info.OperationID == "" {
 		return execErr // refused before any effect: no report to write
 	}

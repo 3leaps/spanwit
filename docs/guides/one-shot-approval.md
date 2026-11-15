@@ -80,7 +80,9 @@ filesystem.
    spanwit prune --from-exact-plan plan.json --execute --approval <id>
    ```
 
-`spanwit approval status <id>` shows the state; `spanwit approval revoke <id>`
+`--sort` is refused with `--approval`: the approved plan's `sort_mode` decides
+the order. `spanwit approval status <id>` shows the state and, once used, each
+candidate's outcome; `spanwit approval revoke <id>`
 revokes a requested or issued approval. A revocation recorded before execution
 starts wins; a running execution is not interrupted.
 
@@ -111,6 +113,12 @@ checked by the executor.
 Every execution, approved or not, records each candidate's outcome in the
 journal: `applied`, `withheld`, `failed` (the guard refused; nothing removed),
 `partial` (a removal error left part of the target), or `unattempted` (the run
-stopped first). A candidate with no recorded outcome after an interruption is
-unknown; it is never re-executed. `--operation-id <id>` returns the recorded
-result of an earlier run without deleting anything.
+stopped first). Before the first deletion the run stores the list of
+candidates it will attempt, so after an interruption
+`spanwit approval operation <operation-id>` reports every candidate, with
+`unknown` for any whose outcome was not recorded; nothing is re-executed and
+the original plan file is not needed. `approval status` and `approval
+operation` only read the journal (they work under `--read-only`) and refuse
+while the daemon holds it. `--operation-id <id>` with the original plan
+returns the recorded result of an earlier approved run without deleting
+anything.
