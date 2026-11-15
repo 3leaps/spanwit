@@ -225,6 +225,11 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 			}
 			target = config.Target{Signature: e.Signature}
 			target, signature, evidence, ok = matchingTarget(analysisRoot, abs, rel, []config.Target{target}, signatures)
+			if ok && markerDiscovered(signature) && underSharedTemp(abs) {
+				plan.Warnings = append(plan.Warnings, fmt.Errorf(
+					"exact-plan path %s: under shared temp, %q is diagnostic only (not included)", abs, e.Signature))
+				continue
+			}
 			if !ok {
 				_ = sig
 				plan.Warnings = append(plan.Warnings, fmt.Errorf(
@@ -262,6 +267,9 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 		// The signature age floor comes from the catalog, never from the plan
 		// file: a plan carrying effective_min_age "none" cannot lower it.
 		effMinAge := raiseMinAge(e.EffectiveMinAge, ageFloorFor(exactRel(analysisRoot, abs), signatures))
+		if target.Signature != "" {
+			effMinAge = markerFloorMinAge(effMinAge, signature)
+		}
 		floored := ageFloorFor(exactRel(analysisRoot, abs), signatures) != ""
 		if in.TempRoot {
 			if writableComponentBetween(analysisRoot, abs) {
@@ -300,10 +308,14 @@ func PlanFromExact(ctx context.Context, in ExactPlanInput, opts ...PlanOptions) 
 		pattern := target.Pattern
 		if target.Signature != "" {
 			confidence = signature.Confidence
-			pattern = strings.Join(signature.CandidatePatterns, ",")
+			pattern = signatureDisplayPattern(signature)
 			if !signature.SafeToPrune && state != CandidateStateWithheld {
 				state = CandidateStateWithheld
 				withheldReason = WithheldReasonSafeToPrune
+			}
+			if !layoutRecognised(abs, signature) {
+				state = CandidateStateWithheld
+				withheldReason = WithheldReasonLayout
 			}
 		}
 		if evidence == nil {

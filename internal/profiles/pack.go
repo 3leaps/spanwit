@@ -143,7 +143,7 @@ func Load(r io.Reader) (*Pack, error) {
 					return nil, fmt.Errorf("recipe %s requires signature-backed targets", id)
 				}
 				sig, _ := signatures.Lookup(target.Signature)
-				if len(sig.RequiredAncestorFiles) == 0 && len(sig.AnyChildPaths) == 0 && len(sig.SiblingEvidence) == 0 && sig.ContentMarker == nil {
+				if len(sig.RequiredAncestorFiles) == 0 && len(sig.AnyChildPaths) == 0 && len(sig.SiblingEvidence) == 0 && len(sig.RequiredChildFiles) == 0 && sig.ContentMarker == nil {
 					return nil, fmt.Errorf("recipe %s requires context evidence beyond a candidate pattern", id)
 				}
 			}

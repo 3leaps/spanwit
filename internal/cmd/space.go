@@ -979,7 +979,7 @@ func writeSpaceText(w io.Writer, report space.Report, earlyTriageAlreadyPrinted 
 
 	// --- Withheld ---
 	withheld := filterEntriesByState(report.Verified.Candidates, space.StateWithheld)
-	_, _ = fmt.Fprintln(w, "Withheld (context-verified but not prunable under current filters):")
+	_, _ = fmt.Fprintln(w, "Withheld (context-verified but not prunable; reason per row):")
 	_, _ = fmt.Fprintln(w, "------------------------------------------------------------")
 	if len(withheld) == 0 {
 		_, _ = fmt.Fprintln(w, emptySectionMsg(filtered))

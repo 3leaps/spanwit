@@ -64,9 +64,10 @@ spanwit space ~/dev --format json > /tmp/space-after.json
 ## Safety notes
 
 - Recipes stay **`diagnostic-only`**. They never promote caches to prunable.
-- Relocated `CARGO_TARGET_DIR` **outside** a `Cargo.toml` ancestor is **not**
-  context-verified by the built-in cargo-target signature — treat as diagnostic
-  until a provenance contract exists (see placement caveats on `space`).
+- A relocated `CARGO_TARGET_DIR` **outside** a `Cargo.toml` ancestor is verified
+  by `development.rust.cargo-target-relocated` when it keeps Cargo's
+  `CACHEDIR.TAG` and a `debug/` or `release/` child. Without them it stays
+  diagnostic. A shared target in active use is withheld by the age gate.
 - `--read-only` / `SPANWIT_READ_ONLY` still assert no mutating capability for the
   invocation; structural recipes do not change that.
 

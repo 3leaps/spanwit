@@ -39,6 +39,13 @@ entries:
     signature: development.rust.cargo-target
     description: >-
       Cargo build output (target/ next to Cargo.toml). Context-verified and safe_to_prune, backed by a registered signature. Discovered under an analysis root, not a home cache.
+  - id: development.rust.cargo-target-relocated
+    label: Rust Cargo build output (relocated)
+    class_ceiling: prunable
+    rebuild_expectation: high
+    signature: development.rust.cargo-target-relocated
+    description: >-
+      Cargo build output at any name or place (CARGO_TARGET_DIR), recognised by the CACHEDIR.TAG Cargo writes (generic signature line plus Cargo's own comment line) and a debug/ or release/ directory. Withheld (layout) when it holds a directory Cargo does not create there. Refused when the directory holds a file Cargo does not write there, a VCS directory or project manifest at its top or one level down, sits under a shared temp directory, or is the home directory or one of its parents. Whole directory; withheld until the newest write inside it is at least 1h old.
   - id: development.rust.rustup
     label: Rustup toolchains
     class_ceiling: diagnostic-only
@@ -67,6 +74,13 @@ entries:
     signature: development.go.repo-local-gocache
     description: >-
       A .gocache directory under a go.mod, verified by the README marker Go writes in its build cache. Context-verified and safe_to_prune; on by default. Exclude with --domain if a repo relies on a warm local cache.
+  - id: development.go.build-cache-relocated
+    label: Go build cache (relocated)
+    class_ceiling: prunable
+    rebuild_expectation: high
+    signature: development.go.build-cache-relocated
+    description: >-
+      A Go build cache at any name or place (GOCACHE under a scratch dir or a review HOME), recognised by Go's README marker, trim.txt and a shard directory, with nothing outside Go's cache layout, and never under a shared temp directory. The live build cache the go command would use ($GOCACHE, go env -w, the user cache dir) is excluded and stays with development.go.go-build. Withheld until the newest write inside it is at least 1h old.
   - id: development.go.go-pkg
     label: Go module cache (GOPATH/pkg)
     class_ceiling: diagnostic-only

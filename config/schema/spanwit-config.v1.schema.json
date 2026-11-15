@@ -114,6 +114,15 @@
                 "minItems": 1,
                 "description": "Patterns relative to the candidate's parent directory. At least one must match a plain regular file under a sibling directory of the live-db shape (^[0-9]+$) that does not match the candidate patterns. Symlinks never satisfy evidence."
               },
+              "required_child_files": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "Local relative paths under the candidate; every one must be a plain regular file with no symlink component. For a reused built-in id the built-in list is kept."
+              },
               "content_marker": {
                 "type": "object",
                 "required": [
@@ -129,9 +138,18 @@
                   "first_line": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "lines": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1,
+                    "description": "Exact leading lines the marker file must carry, in order. lines[0] must equal first_line."
                   }
                 },
-                "description": "A plain regular file under the candidate whose first line equals first_line exactly (read capped at 4 KiB, never following a symlink)."
+                "description": "A plain regular file under the candidate whose first line equals first_line exactly, and whose leading lines equal lines when given (each compared after stripping only a trailing CR/LF; read capped at 4 KiB, never following a symlink)."
               },
               "min_age_floor": {
                 "type": "string",

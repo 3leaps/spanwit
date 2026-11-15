@@ -18,7 +18,7 @@ func PlacementNotes(pressure Pressure, analysis *Pressure) []string {
 
 	notes := []string{
 		"Placement (advisory): when the primary write volume is tight, prefer project-specific CARGO_TARGET_DIR on a roomier volume rather than one global shared target dir.",
-		"Placement caveat: a relocated CARGO_TARGET_DIR outside a Cargo.toml ancestor is not context-verified by the built-in cargo-target signature — treat as diagnostic/manual unless an explicit provenance contract is added later.",
+		"Placement note: a relocated CARGO_TARGET_DIR outside a Cargo.toml ancestor is verified by cargo-target-relocated only when it keeps Cargo's CACHEDIR.TAG and a debug/ or release/ child; otherwise treat it as diagnostic/manual.",
 		"Placement is advice-only: spanwit never moves trees, never creates symlinks, and never mutates Cargo config.",
 	}
 

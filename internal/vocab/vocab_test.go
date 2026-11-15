@@ -196,7 +196,7 @@ func TestGoConstantsMatchRegistry(t *testing.T) {
 		{"recipe_kind", false, []string{space.RecipeKindArgv, space.RecipeKindStructural}},
 		{"recipe_step_kind", false, []string{space.StepCommand, space.StepConfigSnippet, space.StepObserve, space.StepPurgeHint, space.StepVerify}},
 		{"size_basis", false, []string{engine.SizeBasisAllocated, engine.SizeBasisApparent}},
-		{"withheld_reason", false, []string{engine.WithheldReasonActivityAfterPlan, engine.WithheldReasonAge, engine.WithheldReasonDomainDisabled, engine.WithheldReasonIndeterminate, engine.WithheldReasonMinSize, engine.WithheldReasonSafeToPrune, engine.WithheldReasonSizeDrift}},
+		{"withheld_reason", false, []string{engine.WithheldReasonActivityAfterPlan, engine.WithheldReasonAge, engine.WithheldReasonDomainDisabled, engine.WithheldReasonIndeterminate, engine.WithheldReasonLayout, engine.WithheldReasonMinSize, engine.WithheldReasonSafeToPrune, engine.WithheldReasonSizeDrift}},
 		{"drift_outcome", false, []string{engine.DriftChanged, engine.DriftUnchanged, engine.DriftUnknown}},
 		{"reboot_block_status", false, []string{capacity.StatusMeasured, capacity.StatusPartial, capacity.StatusUnsupported}},
 		{"reboot_swap_status", false, []string{capacity.StatusMeasured, capacity.RebootSwapNotReleasable, capacity.StatusUnavailable, capacity.StatusUnsupported}},

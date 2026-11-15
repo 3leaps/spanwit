@@ -189,18 +189,10 @@ func runScan(identity *appidentity.Identity, stdout, stderr io.Writer, opts scan
 	return foundry.ExitSuccess
 }
 
-// builtInSignatureTargets returns one target per built-in signature, sorted by id
-// for deterministic evaluation order.
+// builtInSignatureTargets returns one target per built-in signature in
+// config.BuiltInSignatureIDs order (name-pattern first, then marker-only).
 func builtInSignatureTargets() []config.Target {
-	var ids []string
-	for domain, ecosystems := range config.BuiltInSignatures() {
-		for ecosystem, signatures := range ecosystems {
-			for name := range signatures {
-				ids = append(ids, domain+"."+ecosystem+"."+name)
-			}
-		}
-	}
-	sort.Strings(ids)
+	ids := config.BuiltInSignatureIDs()
 	targets := make([]config.Target, 0, len(ids))
 	for _, id := range ids {
 		targets = append(targets, config.Target{Signature: id})
