@@ -20,6 +20,7 @@ const flowPlan = `{"$schema":"x","version":1,"analysis_root":"/r","min_size":0,"
 
 type flowRig struct {
 	t       *testing.T
+	state   string
 	coord   *daemon.Coordinator
 	key     softSK
 	signers string
@@ -44,7 +45,7 @@ func newFlowRig(t *testing.T) *flowRig {
 	}
 	t.Cleanup(func() { _ = c.Close() })
 	k := newSoftSK(t)
-	return &flowRig{t: t, coord: c, key: k,
+	return &flowRig{t: t, state: state, coord: c, key: k,
 		signers: writeSigners(t, trustedDir(t), "maintainer@example "+k.authorizedKey()+"\n"),
 		now:     time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC), drift: map[string]string{}}
 }
@@ -356,5 +357,121 @@ func TestSamePolicyComparesHeadPin(t *testing.T) {
 	b := *a
 	if !samePolicy(a, &b) {
 		t.Fatal("identical policy did not match")
+	}
+}
+
+// fill makes the journal report capacity (a sparse file at the watermark),
+// returning a func that removes it.
+func (r *flowRig) fill() func() {
+	r.t.Helper()
+	p := filepath.Join(r.state, "journal", "capacity-fixture")
+	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	if err := f.Truncate(16 << 20); err != nil {
+		r.t.Fatal(err)
+	}
+	_ = f.Close()
+	return func() { _ = os.Remove(p) }
+}
+
+// reopen simulates a restart: a latched coordinator is closed and reopened.
+func (r *flowRig) reopen() {
+	r.t.Helper()
+	_ = r.coord.Close()
+	c, err := daemon.Open(r.state, nil)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	r.t.Cleanup(func() { _ = c.Close() })
+	r.coord = c
+}
+
+func TestFullJournalAtEachBoundary(t *testing.T) {
+	ctx := context.Background()
+	t.Run("request", func(t *testing.T) {
+		r := newFlowRig(t)
+		r.fill()
+		_, _, err := Request(ctx, r.coord, RequestInput{Plan: []byte(flowPlan), Expires: time.Hour, Now: r.now})
+		if RefusalCode(err) != CodePersistenceUncertain {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("issue", func(t *testing.T) {
+		r := newFlowRig(t)
+		_, raw, err := Request(ctx, r.coord, RequestInput{Plan: []byte(flowPlan), Expires: time.Hour, Now: r.now})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.fill()
+		_, _, err = Issue(ctx, r.coord, raw, r.key.sign(raw, SignatureNamespace, 0x01), r.signers, r.now)
+		wantCode(t, err, CodePersistenceUncertain)
+	})
+	t.Run("consume", func(t *testing.T) {
+		r := newFlowRig(t)
+		p := r.approve(flowPlan, nil)
+		unfill := r.fill()
+		_, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+		wantCode(t, err, CodePersistenceUncertain)
+		if len(r.deleted) != 0 {
+			t.Fatalf("deleted %v", r.deleted)
+		}
+		unfill()
+		r.reopen()
+		head, _ := r.coord.LoadApproval(ctx, p.ApprovalID)
+		if head.Record.State != daemon.ApprovalIssued {
+			t.Fatalf("approval %s after a refused consume", head.Record.State)
+		}
+	})
+	t.Run("between effects", func(t *testing.T) {
+		r := newFlowRig(t)
+		p := r.approve(flowPlan, nil)
+		ex := r.executor()
+		inner := ex.Delete
+		ex.Delete = func(c context.Context, cand *engine.PruneCandidate) (string, string) {
+			out, d := inner(c, cand)
+			r.fill() // the first outcome record cannot be written
+			return out, d
+		}
+		res, err := ex.ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+		wantCode(t, err, CodePersistenceUncertain)
+		if strings.Join(r.deleted, ",") != "/r/a" {
+			t.Fatalf("deletions continued after a journal failure: %v", r.deleted)
+		}
+		// restart: the retry of that operation never re-executes; the missing
+		// outcome stays unknown (no record), never inferred
+		_ = os.Remove(filepath.Join(r.state, "journal", "capacity-fixture"))
+		r.reopen()
+		again, err := r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan), OperationID: res.OperationID})
+		if err != nil || !again.Replayed || len(r.deleted) != 1 {
+			t.Fatalf("retry after restart: %+v %v deleted=%v", again, err, r.deleted)
+		}
+		for _, rec := range again.Outcomes {
+			if rec.Kind == "outcome" {
+				t.Fatalf("an outcome was recorded for an unrecorded effect: %+v", rec)
+			}
+		}
+	})
+}
+
+func TestCrashAfterConsumeNeverReexecutes(t *testing.T) {
+	ctx := context.Background()
+	r := newFlowRig(t)
+	p := r.approve(flowPlan, nil)
+	head, _ := r.coord.LoadApproval(ctx, p.ApprovalID)
+	planPin, err := r.coord.StorePlan(ctx, []byte(flowPlan))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// consumption durable, then "crash" before started/outcomes
+	if _, err := r.coord.ConsumeApproval(ctx, head, daemon.ApprovalConsumption{OperationID: "op-crashed", RequestFingerprint: "x", Plan: planPin}); err != nil {
+		t.Fatal(err)
+	}
+	r.reopen()
+	_, err = r.executor().ExecuteApproved(ctx, ExecuteInput{ApprovalID: p.ApprovalID, Plan: []byte(flowPlan)})
+	wantCode(t, err, CodeGrantAlreadyConsumed)
+	if len(r.deleted) != 0 {
+		t.Fatalf("re-executed after a crash: %v", r.deleted)
 	}
 }
