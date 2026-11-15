@@ -17,6 +17,7 @@ func resetPolicyForTest(t *testing.T) {
 	t.Helper()
 	mutationEnvPrefix = "SPANWIT_"
 	t.Setenv("SPANWIT_READ_ONLY", "")
+	t.Setenv("SPANWIT_APPROVED_ONLY", "")
 	resetMutationPolicyState()
 	t.Cleanup(func() {
 		t.Setenv("SPANWIT_READ_ONLY", "")
