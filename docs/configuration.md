@@ -501,7 +501,8 @@ marker selects them:
   configuration cannot be read completely, or names a relative `GOROOT`, no
   relocated Go cache is matched. Not resolved: a go binary off `PATH`, or
   one whose install tree is not recognisable, that falls back to its
-  built-in root; the 1h activity floor still withholds a cache in use.
+  built-in root; the 1h floor still withholds a cache with writes within the
+  last hour.
 
 A relocated Cargo target may hold only files Cargo writes there; a VCS
 directory or project manifest at its top, or directly inside any of its
