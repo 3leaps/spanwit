@@ -2,22 +2,15 @@
 
 package cmd
 
-import "syscall"
+import "golang.org/x/sys/unix"
 
 // stateFSType names the filesystem holding path and reports whether the
 // journal store accepts it (recordprims: apfs, hfs).
 func stateFSType(path string) (string, bool, error) {
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(path, &st); err != nil {
+	var st unix.Statfs_t
+	if err := unix.Statfs(path, &st); err != nil {
 		return "", false, err
 	}
-	b := make([]byte, 0, len(st.Fstypename))
-	for _, c := range st.Fstypename {
-		if c == 0 {
-			break
-		}
-		b = append(b, byte(c))
-	}
-	name := string(b)
+	name := unix.ByteSliceToString(st.Fstypename[:])
 	return name, name == "apfs" || name == "hfs", nil
 }
