@@ -599,13 +599,32 @@ func goEnvFileValue(key string) (value string, certain bool) {
 	if err != nil || len(buf) > goEnvFileLimit {
 		return "", false
 	}
-	for _, line := range strings.Split(string(buf), "\n") {
-		k, v, ok := strings.Cut(strings.TrimSpace(line), "=")
-		if ok && strings.TrimSpace(k) == key {
-			value = strings.TrimSpace(v) // last assignment wins, as in go env
+	return parseGoEnvFile(buf, key), true
+}
+
+// parseGoEnvFile mirrors the go command's env file parser
+// (cmd/go/internal/cfg.readEnvFile): lines split on "\n" only; a line with
+// no "=" or whose first byte is not A-Z is ignored; the key is everything
+// before the first "=" and the value everything after it, verbatim (no
+// trimming: a path may end in a space); the last assignment wins.
+func parseGoEnvFile(data []byte, key string) string {
+	value := ""
+	for len(data) > 0 {
+		line := data
+		if i := bytes.IndexByte(data, '\n'); i >= 0 {
+			line, data = data[:i], data[i+1:]
+		} else {
+			data = nil
+		}
+		i := bytes.IndexByte(line, '=')
+		if i < 0 || line[0] < 'A' || 'Z' < line[0] {
+			continue
+		}
+		if string(line[:i]) == key {
+			value = string(line[i+1:])
 		}
 	}
-	return value, true
+	return value
 }
 
 // childLayoutEvidence enforces ForbiddenChildPaths (no project or VCS marker
