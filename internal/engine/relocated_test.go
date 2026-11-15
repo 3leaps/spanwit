@@ -93,6 +93,8 @@ func isolateLiveCaches(t *testing.T) {
 	setHome(t, t.TempDir())
 	t.Setenv("GOCACHE", "")
 	t.Setenv("GOENV", "off") // tests that exercise GOENV set it themselves
+	t.Setenv("GOROOT", "")
+	t.Setenv("PATH", t.TempDir()) // no host go binary, so no host go.env
 }
 
 // setHome points os.UserHomeDir at dir on every platform. It does not touch

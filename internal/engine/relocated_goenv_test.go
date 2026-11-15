@@ -244,3 +244,82 @@ func TestParseGoEnvFile_MatchesGoParser(t *testing.T) {
 		}
 	}
 }
+
+// fakeGoRoot builds <base>/goroot with bin/go (executable), VERSION and a
+// go.env holding content, and returns the root.
+func fakeGoRoot(t *testing.T, base, content string) string {
+	t.Helper()
+	root := filepath.Join(base, "goroot")
+	writeEnvFile(t, filepath.Join(root, "go.env"), content)
+	writeEnvFile(t, filepath.Join(root, "VERSION"), "go1.99\n")
+	bin := filepath.Join(root, "bin", "go")
+	writeEnvFile(t, bin, "#!/bin/sh\n")
+	if err := os.Chmod(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// $GOROOT/go.env is read from an explicit GOROOT and from the root of the
+// go binary on PATH; it can only add exclusions.
+func TestGoEnv_GoRootEnvFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix executable fixture")
+	}
+	neg := map[string]func(t *testing.T, base, cache string){
+		"explicit GOROOT names cache": func(t *testing.T, base, cache string) {
+			t.Setenv("GOROOT", fakeGoRoot(t, base, "GOCACHE="+cache+"\n"))
+		},
+		"PATH go binary root names cache": func(t *testing.T, base, cache string) {
+			root := fakeGoRoot(t, base, "GOCACHE="+cache+"\n")
+			t.Setenv("PATH", filepath.Join(root, "bin"))
+		},
+		"symlinked go binary on PATH": func(t *testing.T, base, cache string) {
+			root := fakeGoRoot(t, base, "GOCACHE="+cache+"\n")
+			linkDir := filepath.Join(base, "linkbin")
+			mkdirs(t, linkDir)
+			if err := os.Symlink(filepath.Join(root, "bin", "go"), filepath.Join(linkDir, "go")); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", linkDir)
+		},
+		"explicit GOROOT go.env unreadable": func(t *testing.T, base, cache string) {
+			if os.Geteuid() == 0 {
+				t.Skip("root reads anything")
+			}
+			root := fakeGoRoot(t, base, "GOPROXY=off\n")
+			f := filepath.Join(root, "go.env")
+			if err := os.Chmod(f, 0o000); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chmod(f, 0o600) })
+			t.Setenv("GOROOT", root)
+		},
+	}
+	for name, setup := range neg {
+		t.Run(name, func(t *testing.T) {
+			if d, r := goEnvCase(t, setup); d || r {
+				t.Fatalf("cache must not be prunable: discovery=%v replay=%v", d, r)
+			}
+		})
+	}
+	pos := map[string]func(t *testing.T, base, cache string){
+		"GOROOT go.env without GOCACHE": func(t *testing.T, base, _ string) {
+			t.Setenv("GOROOT", fakeGoRoot(t, base, "GOPROXY=https://proxy.golang.org,direct\n"))
+		},
+		"GOROOT without go.env": func(t *testing.T, base, _ string) {
+			root := fakeGoRoot(t, base, "")
+			if err := os.Remove(filepath.Join(root, "go.env")); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("GOROOT", root)
+		},
+	}
+	for name, setup := range pos {
+		t.Run(name, func(t *testing.T) {
+			if d, r := goEnvCase(t, setup); !d || !r {
+				t.Fatalf("cache should be prunable: discovery=%v replay=%v", d, r)
+			}
+		})
+	}
+}

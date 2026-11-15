@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	pathpkg "path"
 	"path/filepath"
 	"regexp"
@@ -536,10 +537,44 @@ func liveGoCacheLocations() (locations []string, certain bool) {
 	if v != "" {
 		locations = append(locations, v)
 	}
+	// The go command's lowest-precedence layer is $GOROOT/go.env. Every
+	// root it may use is read: an explicit $GOROOT and the install root of
+	// the go binary on PATH. Extra roots only add exclusions.
+	for _, root := range candidateGoRoots() {
+		rv, rc := goEnvFileAt(filepath.Join(root, "go.env"), "GOCACHE")
+		if !rc {
+			certain = false
+		}
+		if rv != "" {
+			locations = append(locations, rv)
+		}
+	}
 	if dir, err := os.UserCacheDir(); err == nil && dir != "" {
 		locations = append(locations, filepath.Join(dir, "go-build"))
 	}
 	return locations, certain
+}
+
+// candidateGoRoots returns the GOROOTs the go command may use for this user:
+// $GOROOT when it is absolute, and the root of the go binary found on PATH
+// (symlinks resolved, two levels above the binary), when it holds a VERSION
+// or go.env file.
+func candidateGoRoots() []string {
+	var roots []string
+	if r := os.Getenv("GOROOT"); r != "" && filepath.IsAbs(r) {
+		roots = append(roots, filepath.Clean(r))
+	}
+	if bin, err := exec.LookPath("go"); err == nil {
+		if real, err := filepath.EvalSymlinks(bin); err == nil && filepath.IsAbs(real) {
+			root := filepath.Dir(filepath.Dir(real))
+			_, verr := os.Lstat(filepath.Join(root, "VERSION"))
+			_, eerr := os.Lstat(filepath.Join(root, "go.env"))
+			if verr == nil || eerr == nil {
+				roots = append(roots, root)
+			}
+		}
+	}
+	return roots
 }
 
 // goEnvFileLimit caps the go env file read; a larger file is not trusted as
@@ -565,6 +600,13 @@ func goEnvFileValue(key string) (value string, certain bool) {
 		}
 		file = filepath.Join(dir, "go", "env")
 	}
+	return goEnvFileAt(file, key)
+}
+
+// goEnvFileAt reads key from the env file at file with the same certainty
+// rules as goEnvFileValue: known absent or read whole is certain; anything
+// else is not.
+func goEnvFileAt(file, key string) (value string, certain bool) {
 	if !filepath.IsAbs(file) {
 		return "", false
 	}
