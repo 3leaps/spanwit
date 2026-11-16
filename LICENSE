@@ -40,7 +40,7 @@ limitations under the License.
 
 ## Trademark Notice
 
-"3 Leaps®" is a registered trademark of 3 Leaps, LLC, a Florida LLC with offices in South Carolina. "Fulmen™", "Fulmens™", "FulmenHQ™", "Spanwit™", and the "Fulmen logo™" are trademarks of 3 Leaps, LLC, claimed through use in commerce, with plans for USPTO registration.
+"3 Leaps®" is a registered trademark of 3 Leaps, LLC, a North Carolina LLC. "Fulmen™", "Fulmens™", "FulmenHQ™", "Spanwit™", and the "Fulmen logo™" are trademarks of 3 Leaps, LLC, claimed through use in commerce, with plans for USPTO registration.
 
 While code and documentation are open under the MIT License above, use of these trademarks and associated logos, icons, and visual elements is reserved for official implementations to prevent confusion and protect the ecosystem. Use of these marks in derivative works does not imply endorsement by 3 Leaps, LLC. As a courtesy, rename derivative projects to avoid using "3leaps", "fulmen", "fulmens", "fulmenhq", or "spanwit" in repository or package names. See docs/derivative-naming.md for the upstream template reference and step-by-step renaming guidance.
 
