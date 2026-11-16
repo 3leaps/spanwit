@@ -25,6 +25,8 @@
   "prune-plan.v1#/properties/candidates/items/properties/size_basis": "size_basis",
   "prune-plan.v1#/properties/candidates/items/properties/state": "trust_state",
   "prune-plan.v1#/properties/candidates/items/properties/withheld_reason": "withheld_reason",
+  "prune-plan.v1#/properties/execution/properties/assertion": "execution_assertion",
+  "prune-plan.v1#/properties/execution/properties/journal": "execution_journal",
   "prune-plan.v1#/properties/mode": "prune_mode",
   "prune-plan.v1#/properties/reclaim_scope": "reclaim_scope",
   "prune-plan.v1#/properties/sort_mode": "sort_mode",

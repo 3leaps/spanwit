@@ -20,11 +20,13 @@ import (
 )
 
 const (
-	defaultTimeout = 10 * time.Second
-	maximumTimeout = 30 * time.Second
-	defaultOutput  = 64 << 10
-	maximumOutput  = 1 << 20
-	cleanupGrace   = 500 * time.Millisecond
+	defaultTimeout     = 10 * time.Second
+	maximumTimeout     = 30 * time.Second
+	defaultOutput      = 64 << 10
+	maximumOutput      = 1 << 20
+	maximumInput       = 1 << 20
+	maximumExtraInputs = 4
+	cleanupGrace       = 500 * time.Millisecond
 )
 
 var errOwnedGroupRemaining = errors.New("owned process group remains after bounded cleanup")
@@ -56,6 +58,13 @@ type Request struct {
 	Env       []string
 	Timeout   time.Duration
 	MaxOutput int
+	// Stdin, when non-nil, is supplied as the child's standard input (bounded
+	// by maximumInput); nil leaves standard input empty.
+	Stdin []byte
+	// ExtraInputs are supplied as read-only pipes on file descriptors 3, 4, ...
+	// (readable by the child as /dev/fd/N), so a caller can hand a tool exact
+	// in-memory bytes without a filesystem path another process could swap.
+	ExtraInputs [][]byte
 }
 
 type Result struct {
@@ -99,13 +108,34 @@ func (ExecRunner) Run(ctx context.Context, request Request) Result {
 	command.Env = append([]string{}, request.Env...)
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	output := newOutput(limit)
+	if request.Stdin != nil {
+		command.Stdin = bytes.NewReader(request.Stdin)
+	}
+	var feeders []*os.File
+	for _, data := range request.ExtraInputs {
+		r, w, err := os.Pipe()
+		if err != nil {
+			closeAll(command.ExtraFiles)
+			closeAll(feeders)
+			return Result{Outcome: NotStarted, Err: err}
+		}
+		command.ExtraFiles = append(command.ExtraFiles, r)
+		feeders = append(feeders, w)
+		go func(w *os.File, data []byte) {
+			_, _ = w.Write(data) // a child that never reads gets EPIPE after exit
+			_ = w.Close()
+		}(w, data)
+	}
 	command.Stdout = output.stdout
 	command.Stderr = output.stderr
 	// Wait owns the pipe-copy lifecycle. If the leader exits while a descendant
 	// holds a copied descriptor, WaitDelay closes our pipes and returns an
 	// uncertainty rather than letting a manager call hang forever.
 	command.WaitDelay = cleanupGrace
-	if err := command.Start(); err != nil {
+	err := command.Start()
+	closeAll(command.ExtraFiles) // the child holds its own copies
+	if err != nil {
+		closeAll(feeders)
 		return Result{Outcome: NotStarted, Err: err}
 	}
 	result := Result{Started: true, ExitCode: -1}
@@ -147,6 +177,17 @@ func validate(request Request) error {
 	}
 	if request.Timeout < 0 || request.Timeout > maximumTimeout {
 		return fmt.Errorf("timeout must be between zero and %s", maximumTimeout)
+	}
+	if len(request.Stdin) > maximumInput {
+		return fmt.Errorf("standard input must be at most %d bytes", maximumInput)
+	}
+	if len(request.ExtraInputs) > maximumExtraInputs {
+		return fmt.Errorf("at most %d extra inputs", maximumExtraInputs)
+	}
+	for _, data := range request.ExtraInputs {
+		if len(data) > maximumInput {
+			return fmt.Errorf("extra input must be at most %d bytes", maximumInput)
+		}
 	}
 	if request.MaxOutput < 0 || request.MaxOutput > maximumOutput {
 		return fmt.Errorf("output limit must be between zero and %d bytes", maximumOutput)
@@ -335,4 +376,10 @@ func (w writer) Write(data []byte) (int, error) {
 	_, _ = w.destination.Write(data)
 	w.output.remaining -= len(data)
 	return len(data), nil
+}
+
+func closeAll(files []*os.File) {
+	for _, f := range files {
+		_ = f.Close()
+	}
 }

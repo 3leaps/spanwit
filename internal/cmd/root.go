@@ -73,6 +73,8 @@ func Initialize(ctx context.Context, identity *appidentity.Identity, logger *log
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&logLevel, "log-level", "l", "info", "logging level (trace|debug|info|warn|error)")
 	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "config file path override")
+	rootCmd.PersistentFlags().BoolVar(&assertApprovedOnlyFlag, approvedOnlyFlagName, false,
+		"assert approval-bound execution: refuse every mutation except prune --from-exact-plan --execute --approval (also SPANWIT_APPROVED_ONLY)")
 	rootCmd.PersistentFlags().BoolVar(&assertReadOnlyFlag, readOnlyFlagName, false,
 		"assert the resolved invocation has no mutating capability (also via "+mutationEnvPrefix+envReadOnlySuffix+
 			"; fails closed on conflict, prune --execute/-e, or inventory --coverage-attest)")
@@ -94,6 +96,7 @@ func Initialize(ctx context.Context, identity *appidentity.Identity, logger *log
 	addClassified(newDiagnoseCmd(identity), CapabilityObservational)
 	addClassified(newObserveCmd(identity), CapabilityMutating)
 	addClassified(newDaemonCmd(identity), CapabilityMutating)
+	addClassified(newApprovalCmd(identity), CapabilityMutating)
 	// prune is planning by default; --execute elevates to mutating at enforce time.
 	addClassified(newPruneCmd(identity), CapabilityPlanning)
 }

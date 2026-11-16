@@ -24,6 +24,11 @@ const (
 	readOnlyFlagName = "read-only"
 	// envReadOnlySuffix is appended to identity EnvPrefix (e.g. SPANWIT_READ_ONLY).
 	envReadOnlySuffix = "READ_ONLY"
+
+	// Flag and env names for the approval-bound assertion: the invocation may
+	// mutate only through prune --from-exact-plan --execute --approval.
+	approvedOnlyFlagName  = "approved-only"
+	envApprovedOnlySuffix = "APPROVED_ONLY"
 )
 
 // Mutation contract labels are inventory SSOT (open | read_only).
@@ -37,6 +42,9 @@ var mutationEnvPrefix string
 
 // assertReadOnlyFlag is bound to the root --read-only persistent flag.
 var assertReadOnlyFlag bool
+
+// assertApprovedOnlyFlag is bound to the root --approved-only persistent flag.
+var assertApprovedOnlyFlag bool
 
 // setCommandCapability records the base capability on a cobra command.
 // Only the closed enum is accepted (fail-closed at registration).
@@ -106,13 +114,17 @@ func parseTruthyEnv(raw string) (on bool, set bool, err error) {
 // resolveReadOnlyAssertion combines flag and env. Explicit flag/env conflict
 // fails closed. Either source alone may assert.
 func resolveReadOnlyAssertion(flagChanged bool, flagVal bool, envRaw string) (asserted bool, err error) {
+	return resolveAssertion(readOnlyFlagName, envReadOnlySuffix, flagChanged, flagVal, envRaw)
+}
+
+func resolveAssertion(flagName, envSuffix string, flagChanged bool, flagVal bool, envRaw string) (asserted bool, err error) {
 	envOn, envSet, err := parseTruthyEnv(envRaw)
 	if err != nil {
 		return false, err
 	}
 	if flagChanged && envSet && flagVal != envOn {
-		return false, fmt.Errorf("conflicting read-only assertion: --%s=%v vs %s%s=%q (fail-closed)",
-			readOnlyFlagName, flagVal, mutationEnvPrefix, envReadOnlySuffix, envRaw)
+		return false, fmt.Errorf("conflicting %s assertion: --%s=%v vs %s%s=%q (fail-closed)",
+			flagName, flagName, flagVal, mutationEnvPrefix, envSuffix, envRaw)
 	}
 	if flagChanged {
 		return flagVal, nil
@@ -168,6 +180,7 @@ func enforceMutationPolicy(cmd *cobra.Command) error {
 	// Always reset process-local resolved state at the start of enforce so a
 	// prior invocation cannot leak contract/capability into this run.
 	setResolvedMutationState(false, "")
+	resolvedApprovedOnly = false
 
 	if cmd == nil || isMutationPolicyExempt(cmd) {
 		return nil
@@ -188,10 +201,26 @@ func enforceMutationPolicy(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+	approvedOnly, err := resolveApprovedOnly(cmd)
+	if err != nil {
+		return err
+	}
+	if asserted && approvedOnly {
+		return fmt.Errorf("conflicting assertions: --%s and --%s cannot both be active (fail-closed)", readOnlyFlagName, approvedOnlyFlagName)
+	}
 	cap := resolveInvocationCapability(cmd)
-	// Stash for subcommands (inventory/space headers).
-	setResolvedMutationState(asserted, cap)
+	// Stash for subcommands (inventory/space headers). Under approved-only a
+	// non-approved invocation can mutate nothing, so its reports carry the
+	// read_only contract; an approved prune reports approval_bound itself.
+	setResolvedMutationState(asserted || approvedOnly, cap)
+	resolvedApprovedOnly = approvedOnly
 
+	if approvedOnly {
+		if cap == CapabilityMutating && isApprovedPruneInvocation(cmd) {
+			return nil
+		}
+		asserted = true
+	}
 	if !asserted {
 		return nil
 	}
@@ -202,6 +231,10 @@ func enforceMutationPolicy(cmd *cobra.Command) error {
 	case CapabilityObservational, CapabilityPlanning:
 		return nil
 	case CapabilityMutating:
+		if approvedOnly {
+			return fmt.Errorf("approved-only assertion admits only `prune --from-exact-plan <plan> --execute --approval <id>` (command %q resolved to %s; unset --%s / %s%s)",
+				cmd.CommandPath(), cap, approvedOnlyFlagName, mutationEnvPrefix, envApprovedOnlySuffix)
+		}
 		return fmt.Errorf("read-only assertion forbids mutating capability (command %q resolved to %s; remove --execute/--coverage-attest or unset --%s / %s)",
 			cmd.CommandPath(), cap, readOnlyFlagName, envKey)
 	default:
@@ -217,7 +250,38 @@ func enforceMutationPolicy(cmd *cobra.Command) error {
 var (
 	resolvedReadOnlyAsserted bool
 	resolvedCapability       string
+	resolvedApprovedOnly     bool
 )
+
+// ResolvedApprovedOnly reports whether the approval-bound assertion is active.
+func ResolvedApprovedOnly() bool {
+	return resolvedApprovedOnly
+}
+
+func resolveApprovedOnly(cmd *cobra.Command) (bool, error) {
+	flagChanged, flagVal := false, assertApprovedOnlyFlag
+	if root := cmd.Root(); root != nil {
+		if f := root.PersistentFlags().Lookup(approvedOnlyFlagName); f != nil {
+			flagChanged = f.Changed
+			if v, err := root.PersistentFlags().GetBool(approvedOnlyFlagName); err == nil {
+				flagVal = v
+			}
+		}
+	}
+	return resolveAssertion(approvedOnlyFlagName, envApprovedOnlySuffix, flagChanged, flagVal, os.Getenv(mutationEnvPrefix+envApprovedOnlySuffix))
+}
+
+// isApprovedPruneInvocation is the single shape approved-only admits:
+// prune with --execute, a non-empty --approval and --from-exact-plan.
+func isApprovedPruneInvocation(cmd *cobra.Command) bool {
+	if cmd.Name() != "prune" || cmd.Parent() == nil || cmd.Parent().Parent() != nil {
+		return false
+	}
+	execute, err1 := cmd.Flags().GetBool("execute")
+	approvalID, err2 := cmd.Flags().GetString("approval")
+	plan, err3 := cmd.Flags().GetString("from-exact-plan")
+	return err1 == nil && err2 == nil && err3 == nil && execute && strings.TrimSpace(approvalID) != "" && strings.TrimSpace(plan) != ""
+}
 
 func setResolvedMutationState(asserted bool, capability string) {
 	resolvedReadOnlyAsserted = asserted
@@ -226,6 +290,8 @@ func setResolvedMutationState(asserted bool, capability string) {
 
 func resetMutationPolicyState() {
 	assertReadOnlyFlag = false
+	assertApprovedOnlyFlag = false
+	resolvedApprovedOnly = false
 	setResolvedMutationState(false, "")
 }
 

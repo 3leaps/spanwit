@@ -122,6 +122,19 @@ type pruneExecutionSummary struct {
 	DeletedCandidates int    `json:"deleted_candidates"`
 	DeletedBytes      int64  `json:"deleted_bytes"`
 	DeletedHuman      string `json:"deleted_human"`
+	Journal           string `json:"journal"`
+	OperationID       string `json:"operation_id,omitempty"`
+	ApprovalID        string `json:"approval_id,omitempty"`
+	Assertion         string `json:"assertion,omitempty"`
+}
+
+// pruneExecutionInfo is how an execution was recorded. Every executed
+// report carries it; Journal is never empty.
+type pruneExecutionInfo struct {
+	Journal     string
+	OperationID string
+	ApprovalID  string
+	Assertion   string
 }
 
 func newPrunePlanOutput(plan PrunePlan, loadedPath string, execute bool, now time.Time) prunePlanOutput {
@@ -444,8 +457,17 @@ func formatWithheldByReason(byReason map[string]*reasonAgg) string {
 	return "Withheld: " + strings.Join(parts, "; ")
 }
 
-func writePrunePlanJSON(w io.Writer, plan PrunePlan, loadedPath string, execute bool, now time.Time) error {
+func writePrunePlanJSON(w io.Writer, plan PrunePlan, loadedPath string, execute bool, now time.Time, exec ...pruneExecutionInfo) error {
 	out := newPrunePlanOutput(plan, loadedPath, execute, now)
+	if execute {
+		if len(exec) != 1 || exec[0].Journal == "" {
+			return fmt.Errorf("prune plan json: an executed report must state its journal")
+		}
+		out.Execution.Journal = exec[0].Journal
+		out.Execution.OperationID = exec[0].OperationID
+		out.Execution.ApprovalID = exec[0].ApprovalID
+		out.Execution.Assertion = exec[0].Assertion
+	}
 	out.Tool = envelope.CurrentTool()
 	d, err := envelope.Stamp(out)
 	if err != nil {

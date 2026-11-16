@@ -66,11 +66,10 @@ func e2eTempRoot(t *testing.T) string {
 	// per-user temp root (like /var/folders/... on macOS or XDG_RUNTIME_DIR).
 	if strings.HasPrefix(base, "/tmp/") || strings.HasPrefix(base, "/var/tmp/") ||
 		strings.HasPrefix(base, "/private/tmp/") || strings.HasPrefix(base, "/private/var/tmp/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			t.Fatal(err)
+		if realHome == "" {
+			t.Fatal("no home directory for a per-user temp root")
 		}
-		d, err := os.MkdirTemp(home, ".spanwit-e2e-temproot-*")
+		d, err := os.MkdirTemp(realHome, ".spanwit-e2e-temproot-*")
 		if err != nil {
 			t.Fatal(err)
 		}

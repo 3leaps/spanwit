@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/fulmenhq/gofulmen/appidentity"
 	"github.com/spf13/cobra"
 
+	"github.com/3leaps/spanwit/internal/approval"
 	"github.com/3leaps/spanwit/internal/config"
 	"github.com/3leaps/spanwit/internal/engine"
 	"github.com/3leaps/spanwit/internal/space"
@@ -27,7 +29,18 @@ func newPruneCmd(identity *appidentity.Identity) *cobra.Command {
 		sortMode        string
 		reclaimScope    string
 		minAge          string
+		approvalID      string
+		operationID     string
+		stateDir        string
+		allowedSigners  string
 	)
+	home, _ := os.UserHomeDir()
+	binary := "spanwit"
+	if identity != nil && identity.BinaryName != "" {
+		binary = identity.BinaryName
+	}
+	stateDir = filepath.Join(home, ".local", "state", binary, "daemon")
+	allowedSigners = approval.DefaultAllowedSigners
 
 	cmd := &cobra.Command{
 		Use:   "prune",
@@ -122,11 +135,34 @@ Freshness (--from-space-report / --from-exact-plan):
 				}
 			}
 
+			if approvalID != "" && (!execute || fromExactPlan == "") {
+				return fmt.Errorf("--approval requires --from-exact-plan and --execute")
+			}
+			if approvalID != "" && cmd.Flags().Changed("sort") {
+				return fmt.Errorf("--sort is not valid with --approval (the approved plan's sort_mode decides candidate order)")
+			}
+			if operationID != "" && approvalID == "" {
+				return fmt.Errorf("--operation-id only retries an approved execution (use with --approval)")
+			}
+
 			var (
 				plan       PrunePlan
 				loadedPath string
 				err        error
+				session    *pruneSession
+				execInfo   pruneExecutionInfo
 			)
+			if execute {
+				// Coordinator ownership before any discovery or plan work.
+				session, err = openPruneSession(stateDir, allowedSigners)
+				if err != nil {
+					return err
+				}
+				defer session.close()
+			}
+			if approvalID != "" {
+				return runApprovedPrune(cmd, session, approvalID, operationID, fromExactPlan, minAge, outputFormat)
+			}
 
 			planOpts := []engine.PlanOptions{
 				engine.WithSortMode(sortMode),
@@ -187,9 +223,9 @@ Freshness (--from-space-report / --from-exact-plan):
 			if outputFormat == "json" {
 				var executeErr error
 				if execute {
-					executeErr = executePrunePlan(context.Background(), &plan)
+					execInfo, executeErr = session.executeUnapproved(context.Background(), &plan)
 				}
-				if err := writePrunePlanJSON(os.Stdout, plan, loadedPath, execute, time.Now()); err != nil {
+				if err := writePrunePlanJSON(os.Stdout, plan, loadedPath, execute, time.Now(), execInfoArg(execute, execInfo)...); err != nil {
 					return err
 				}
 				for _, warning := range plan.Warnings {
@@ -210,7 +246,9 @@ Freshness (--from-space-report / --from-exact-plan):
 				return nil
 			}
 
-			if err := executePrunePlan(context.Background(), &plan); err != nil {
+			execInfo, err = session.executeUnapproved(context.Background(), &plan)
+			writeJournalLine(execInfo)
+			if err != nil {
 				for _, warning := range plan.Warnings {
 					_, _ = fmt.Fprintf(os.Stderr, "Warning: %v\n", warning)
 				}
@@ -238,6 +276,10 @@ Freshness (--from-space-report / --from-exact-plan):
 	cmd.Flags().StringVar(&sortMode, "sort", "size", "candidate ranking: size|idle (advisory; idle = cold complete activity first)")
 	cmd.Flags().StringVar(&reclaimScope, "reclaim-scope", "whole", "reclaim granularity: whole|incremental")
 	cmd.Flags().StringVar(&minAge, "min-age", "", "replay modes only: raise every candidate's min_age floor (e.g. 48h, 7d), or none to drop only the 1h handoff floor")
+	cmd.Flags().StringVar(&approvalID, "approval", "", "execute the exact plan under this one-shot approval (with --from-exact-plan --execute)")
+	cmd.Flags().StringVar(&operationID, "operation-id", "", "retry a previous approved operation exactly (returns its recorded result; no new effect)")
+	cmd.Flags().StringVar(&stateDir, "state-dir", stateDir, "coordinator state directory holding the execution journal")
+	cmd.Flags().StringVar(&allowedSigners, "allowed-signers", allowedSigners, "trusted approval signers file (not writable by this user)")
 
 	return cmd
 }
@@ -250,6 +292,12 @@ func buildPrunePlanFromExactPlanFile(ctx context.Context, path, minAge string, o
 	if err != nil {
 		return PrunePlan{}, fmt.Errorf("read exact plan: %w", err)
 	}
+	return buildPrunePlanFromExactPlanBytes(ctx, raw, minAge, opts...)
+}
+
+// buildPrunePlanFromExactPlanBytes plans from exact plan bytes already read
+// (an approved execution hashes and plans from the same single read).
+func buildPrunePlanFromExactPlanBytes(ctx context.Context, raw []byte, minAge string, opts ...engine.PlanOptions) (PrunePlan, error) {
 	ep, err := space.ParseAndValidateExactPlanJSON(raw)
 	if err != nil {
 		return PrunePlan{}, err
@@ -410,4 +458,58 @@ func emptyPlanFromSpaceReport(report space.Report, minAge string, opts ...engine
 		},
 		Freshness: engine.NewFreshness(minAge),
 	}
+}
+
+func execInfoArg(execute bool, info pruneExecutionInfo) []pruneExecutionInfo {
+	if !execute {
+		return nil
+	}
+	return []pruneExecutionInfo{info}
+}
+
+// writeJournalLine states on stderr whether this run was journaled.
+func writeJournalLine(info pruneExecutionInfo) {
+	switch info.Journal {
+	case engine.ExecutionJournaled:
+		_, _ = fmt.Fprintf(os.Stderr, "Journal: recorded (operation %s).\n", info.OperationID)
+	case engine.ExecutionUnavailableOnPlatform:
+		_, _ = fmt.Fprintf(os.Stderr, "Journal: unavailable on this platform; this run is not recorded.\n")
+	}
+}
+
+// runApprovedPrune executes an exact plan under a one-shot approval. The
+// plan file is read exactly once; those bytes are hashed and planned.
+func runApprovedPrune(cmd *cobra.Command, session *pruneSession, approvalID, operationID, planPath, minAge, outputFormat string) error {
+	raw, err := os.ReadFile(planPath) // #nosec G304 -- the operator-named plan file; its digest must match the approval.
+	if err != nil {
+		return fmt.Errorf("read exact plan: %w", err)
+	}
+	var minAgePtr *string
+	if cmd.Flags().Changed("min-age") {
+		minAgePtr = &minAge
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "=== spanwit prune ===\nConfig: from-exact-plan:%s\nMode:   EXECUTE under approval %s\n\n", planPath, approvalID)
+	plan, info, report, execErr := session.executeApproved(context.Background(), approvalID, operationID, raw, minAgePtr, nil)
+	if code := approval.RefusalCode(execErr); code != "" && info.OperationID == "" {
+		return execErr // refused before any effect: no report to write
+	}
+	if report != nil {
+		if err := writeOperationReport(os.Stdout, report, outputFormat); err != nil {
+			return err
+		}
+		writeJournalLine(info)
+		return execErr
+	}
+	if outputFormat == "json" {
+		if err := writePrunePlanJSON(os.Stdout, plan, "from-exact-plan:"+planPath, true, time.Now(), info); err != nil {
+			return err
+		}
+	} else {
+		writePlanText(os.Stdout, plan)
+	}
+	for _, warning := range plan.Warnings {
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: %v\n", warning)
+	}
+	writeJournalLine(info)
+	return execErr
 }

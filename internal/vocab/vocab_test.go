@@ -198,6 +198,8 @@ func TestGoConstantsMatchRegistry(t *testing.T) {
 		{"size_basis", false, []string{engine.SizeBasisAllocated, engine.SizeBasisApparent}},
 		{"withheld_reason", false, []string{engine.WithheldReasonActivityAfterPlan, engine.WithheldReasonAge, engine.WithheldReasonDomainDisabled, engine.WithheldReasonIndeterminate, engine.WithheldReasonLayout, engine.WithheldReasonMinSize, engine.WithheldReasonSafeToPrune, engine.WithheldReasonSizeDrift}},
 		{"drift_outcome", false, []string{engine.DriftChanged, engine.DriftUnchanged, engine.DriftUnknown}},
+		{"execution_journal", false, []string{engine.ExecutionJournaled, engine.ExecutionUnavailableOnPlatform}},
+		{"execution_assertion", false, []string{engine.ExecutionAssertionApprovalBound, engine.ExecutionAssertionOpen}},
 		{"reboot_block_status", false, []string{capacity.StatusMeasured, capacity.StatusPartial, capacity.StatusUnsupported}},
 		{"reboot_swap_status", false, []string{capacity.StatusMeasured, capacity.RebootSwapNotReleasable, capacity.StatusUnavailable, capacity.StatusUnsupported}},
 		{"reboot_swap_reason", false, []string{capacity.RebootReasonStaticSwap, capacity.RebootReasonProbeFailed, capacity.RebootReasonNotBootContainer}},

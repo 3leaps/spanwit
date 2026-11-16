@@ -171,6 +171,32 @@
         "deleted_human": {
           "type": "string",
           "minLength": 1
+        },
+        "journal": {
+          "type": "string",
+          "enum": [
+            "journaled",
+            "unavailable_on_platform"
+          ],
+          "description": "journaled: every candidate outcome is recorded in the local coordinator journal; unavailable_on_platform: this platform has no journal and the run is unrecorded."
+        },
+        "operation_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Journal operation identity (journaled runs)."
+        },
+        "approval_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The one-shot approval this run consumed."
+        },
+        "assertion": {
+          "type": "string",
+          "enum": [
+            "approval_bound",
+            "open"
+          ],
+          "description": "Invocation assertion the run executed under."
         }
       }
     },

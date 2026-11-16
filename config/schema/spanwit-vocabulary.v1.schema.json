@@ -537,6 +537,22 @@
         "unavailable",
         "unsupported"
       ]
+    },
+    "execution_journal": {
+      "type": "string",
+      "description": "Whether an execution's outcomes are journaled.",
+      "enum": [
+        "journaled",
+        "unavailable_on_platform"
+      ]
+    },
+    "execution_assertion": {
+      "type": "string",
+      "description": "Invocation assertion an execution ran under.",
+      "enum": [
+        "approval_bound",
+        "open"
+      ]
     }
   }
 }

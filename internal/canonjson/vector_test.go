@@ -1,0 +1,3 @@
+package canonjson
+
+const digestVectorWant = "55bb4a0c51ab4a160761d961b6175737efbe22d67dd339c38e7a9adb2791d2e3"

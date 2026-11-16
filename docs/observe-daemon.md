@@ -65,7 +65,9 @@ seconds. No matches, denied visibility, missing tools and failed/truncated
 queries remain `unknown`, never proof of inactivity. Processes may start after
 the query, and cross-worktree cache consumers without a visible path are missed.
 This is a scheduling hint, not a complete build detector or cleanup guard.
-There is no trim or approval path.
+The daemon has no trim or approval path. One-shot approvals and
+`prune --execute` use the same store from the CLI while the daemon is stopped
+(see [one-shot approval](guides/one-shot-approval.md)).
 
 `--state-dir` selects an absolute, user-owned directory with mode 0700.
 Every component is opened relative to its verified parent descriptor without
@@ -106,8 +108,10 @@ that the machine has no reclaimable files. No mutation socket methods exist.
 The journal uses durable-record/v1 and recordprims-fs/v2. Sample payload version
 0 is distinct from API protocol version 1. Existing observe JSON state is not
 migrated. Root payloads use `root-attribution/v0` on a separate journal stream.
-There is no snapshot-body retention, approval, grant, or cleanup execution
-in this experimental slice. Before opening a store and before
+The daemon performs no snapshot-body retention, approval, grant, or cleanup
+execution in this experimental slice; on macOS and Linux every
+`prune --execute` holds the store's `coordinator.lock` and records its
+outcomes there, so it refuses while the daemon runs. Before opening a store and before
 appending observations, a bounded metadata walk checks aggregate logical file
 lengths (including indexes and temporary files) against a 16 MiB stop-admission
 watermark. Enumeration is limited to 4096 entries and eight directory levels;
