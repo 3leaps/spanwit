@@ -33,7 +33,7 @@ func newApprovalCmd(identity *appidentity.Identity) *cobra.Command {
 
 	parent := &cobra.Command{
 		Use:   "approval",
-		Short: "One-shot approvals for an exact prune plan (request, show, sign, issue, revoke, status)",
+		Short: "One-shot approvals for an exact prune plan (request, show, sign, issue, revoke, status, operation)",
 		Long: `One-shot approval of an exact prune plan.
 
   1. spanwit approval request --plan p.json --out payload.json

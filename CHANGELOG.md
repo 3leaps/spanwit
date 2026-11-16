@@ -30,7 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - **One-shot plan approvals** (macOS and Linux). `spanwit approval request`,
-  `show`, `sign`, `issue`, `revoke` and `status`, and
+  `show`, `sign`, `issue`, `revoke`, `status` and `operation`, and
   `prune --from-exact-plan <plan> --execute --approval <id>`.
   - An approval is a signature by an OpenSSH security key that requires a
     touch, listed in a trusted allowed-signers file
@@ -41,7 +41,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `approval sign` shows the candidates and signs the same bytes it checked.
   - `--approved-only` / `SPANWIT_APPROVED_ONLY` refuses every mutation except
     an approved exact-plan prune.
+  - Before the first deletion an execution stores the candidates it will
+    attempt; `approval operation <operation-id>` reports each candidate's
+    outcome, or `unknown` where none was recorded. Retrying with the same
+    `--operation-id` returns the recorded result without deleting again.
   - See `docs/guides/one-shot-approval.md`.
+- **Experimental observation daemon** (macOS and Linux). `spanwit daemon run`
+  samples one filesystem every five minutes into a private journal and serves
+  read-only status to the same user over a Unix socket (`daemon capabilities`,
+  `status`, `proposals`); `daemon once` appends one sample while the daemon is
+  stopped. It has no cleanup or mutation methods. See `docs/observe-daemon.md`.
+  - Optional `--root` paths (at most 16) add bounded allocation observations
+    and growth deltas between complete observations. Deep observations run
+    hourly, after a large free-space drop, or on worsening pressure; a root
+    with a visible `go`, `cargo` or `rustc` process is deferred.
+  - The journal stops admitting writes at a 16 MiB watermark and reports
+    `journal_capacity_reached`; history is never deleted.
+- **Per-user service.** `spanwit daemon service preview|install|start|status|stop|uninstall`
+  manages a launchd agent or systemd user unit for the daemon. Installation
+  binds the executable's digest and never starts the service; it does not
+  enable login startup or automatic restart. `status` is read-only and reports
+  drift when the installed executable changes. On macOS and Linux,
+  `make install` stages the binary and replaces it with one rename.
+- **Experimental profile packs.** `spanwit profile validate|preview|diff`
+  review named recipes grouped into personas (`profile-pack/v0`); preview runs
+  the existing planner and never deletes. See `docs/profile-packs.md`.
+  - Recipes may declare a cache `budget` (`max_bytes`, `idle-oldest-first`
+    selection) and profiles a `volume_objective` (`floor_bytes`,
+    `recovery_target_bytes`). Recent or incompletely sized entries are never
+    selected to meet a budget.
+  - `profile activate|status|deactivate` store the exact pack bytes and record
+    activation in the journal while the daemon is stopped. With an active
+    profile, the daemon evaluates proposals after each heartbeat;
+    proposals always report `execution_authorized: false`.
 - **Relocated build caches.** Two built-in signatures recognise build caches by
   their own markers rather than by name or a project-file ancestor:
   - `development.rust.cargo-target-relocated` matches a `CARGO_TARGET_DIR` at any

@@ -3,8 +3,9 @@
 The foreground `spanwit daemon run` (or `go run ./cmd/spanwitd`) samples one
 filesystem every five minutes and writes inline growth samples to a private
 recordprims journal. By default it performs no directory walk. Optional explicit
-roots enable bounded allocation observations; neither mode evaluates policy or
-performs cleanup. Stop it with SIGINT or SIGTERM. No service is installed automatically.
+roots enable bounded allocation observations; neither mode performs cleanup.
+With an active profile, proposals are evaluated read-only after each heartbeat
+(see [profile packs](profile-packs.md)). Stop it with SIGINT or SIGTERM. No service is installed automatically.
 
 ```sh
 spanwit daemon run --path "$HOME"
@@ -36,7 +37,7 @@ free-space drop of at least 5 GiB since that baseline or 2 GiB between successfu
 heartbeats, or on worsening pressure. Attempts have a 15-minute cooldown;
 a transition into critical pressure can bypass it once. Failed or partial
 attempts retain pending reasons for a cooldown-bounded retry. Cadence uses
-monotonic elapsed time. No budget crossing is evaluated yet.
+monotonic elapsed time. Profile budgets do not trigger deep observations.
 
 Status reports `awaiting_attribution` until the first result, then `complete`,
 `partial`, or `unavailable` in `attribution_state`. It includes the latest committed `attribution` when available, with its
@@ -102,8 +103,9 @@ previous sample as `sample_unavailable` and retry on the next heartbeat. Journal
 failures retain `journal_unavailable` for readers and suspend further writes
 until restart; no uncertain append is silently replayed. On restart, the cache starts
 empty and a fresh sample is taken; existing journal records remain unchanged.
-Proposal reads explicitly return `not_evaluated` and an empty list, not a claim
-that the machine has no reclaimable files. No mutation socket methods exist.
+Without an active profile, proposal reads return `not_evaluated` and an empty
+list, not a claim that the machine has no reclaimable files. Evaluated
+proposals never authorize execution (`execution_authorized: false`). No mutation socket methods exist.
 
 The journal uses durable-record/v1 and recordprims-fs/v2. Sample payload version
 0 is distinct from API protocol version 1. Existing observe JSON state is not
