@@ -45,6 +45,10 @@ that directory comes before `/usr/bin` on your `PATH`, they replace the system
 tools for everything you run. To avoid surprises, call it by full path and pass
 it to spanwit with `--ssh-keygen /opt/homebrew/bin/ssh-keygen`. spanwit never
 searches `PATH` for it, and verification always uses `/usr/bin/ssh-keygen`.
+Because it reads the key's PIN, spanwit refuses a signing binary that another
+user could replace: the file and every directory above it must be owned by you
+or root and not writable by others (group write is accepted only for an
+administrative group, such as `admin` on Homebrew's prefix).
 
 `spanwit doctor` reports which `ssh-keygen` signs and verifies on this machine.
 It does not touch the key, so security-key support is confirmed by the first

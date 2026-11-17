@@ -14,10 +14,10 @@ import (
 const homebrewSSHKeygen = "/opt/homebrew/bin/ssh-keygen"
 
 // approvalSigningReport describes readiness for approval signing and
-// verification. It only checks that files exist and are trusted; it never
+// verification. It only checks files and their ownership; it never
 // runs ssh-keygen or touches a key, so security-key support itself is
 // confirmed by the first signature.
-func approvalSigningReport(goos string, exists func(string) bool, trusted func(string) error) []string {
+func approvalSigningReport(goos string, exists func(string) bool, trusted, signer func(string) error) []string {
 	var lines []string
 	if err := trusted(approval.SystemSSHKeygen); err != nil {
 		lines = append(lines, "verify: "+approval.SystemSSHKeygen+" unavailable or untrusted ("+err.Error()+")")
@@ -31,7 +31,11 @@ func approvalSigningReport(goos string, exists func(string) bool, trusted func(s
 	}
 	switch {
 	case goos == "darwin" && exists(homebrewSSHKeygen):
-		lines = append(lines, "sign: approval sign --ssh-keygen "+homebrewSSHKeygen+" (the macOS ssh-keygen cannot use security keys)")
+		if err := signer(homebrewSSHKeygen); err != nil {
+			lines = append(lines, "sign: "+homebrewSSHKeygen+" would be refused ("+err.Error()+")")
+		} else {
+			lines = append(lines, "sign: approval sign --ssh-keygen "+homebrewSSHKeygen+" (the macOS ssh-keygen cannot use security keys)")
+		}
 	case goos == "darwin":
 		lines = append(lines, "sign: the macOS ssh-keygen cannot use security keys; brew install openssh, then approval sign --ssh-keygen "+homebrewSSHKeygen)
 	default:
@@ -43,5 +47,6 @@ func approvalSigningReport(goos string, exists func(string) bool, trusted func(s
 func approvalSigningLines() []string {
 	return approvalSigningReport(runtime.GOOS,
 		func(p string) bool { _, err := os.Stat(p); return err == nil },
-		func(p string) error { _, err := approval.TrustedFile(p, 64<<20); return err })
+		func(p string) error { _, err := approval.TrustedFile(p, 64<<20); return err },
+		func(p string) error { _, err := approval.SignerPath(p); return err })
 }

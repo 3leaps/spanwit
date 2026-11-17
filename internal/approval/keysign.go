@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -26,10 +28,14 @@ var ErrSignerUnsupported = errors.New("signer_unsupported")
 
 // SignerPath resolves the ssh-keygen used to sign. Empty means the system
 // ssh-keygen, which must pass the same trust check as verification. Any
-// other path must be absolute, resolve to a regular executable file that
-// neither group nor others can write. Signing never searches PATH; the
-// result only affects how the signature is produced, never how it is
-// verified.
+// other path must be absolute and clean; it is resolved, and the resolved
+// path (the one executed) must be one only this user or an administrator
+// can change: every component owned by this user or root, none writable by
+// others, group write only for an administrative group, and the file a
+// regular executable without set-id bits. The signer reads the key's PIN,
+// so a binary another user could replace is refused even though the
+// signature it produces is verified afterwards. Signing never searches
+// PATH; verification always uses the system ssh-keygen.
 func SignerPath(path string) (string, error) {
 	if path == "" {
 		if _, err := TrustedFile(sshKeygenPath, 64<<20); err != nil {
@@ -44,14 +50,57 @@ func SignerPath(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: --ssh-keygen %s: %v", ErrSignerUnsupported, path, err)
 	}
-	info, err := os.Stat(resolved)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		return "", fmt.Errorf("%w: --ssh-keygen %s is not an executable file", ErrSignerUnsupported, path)
-	}
-	if info.Mode().Perm()&0o022 != 0 {
-		return "", fmt.Errorf("%w: --ssh-keygen %s is group or other writable", ErrSignerUnsupported, path)
+	for cur := resolved; ; cur = filepath.Dir(cur) {
+		info, err := os.Lstat(cur)
+		if err != nil {
+			return "", fmt.Errorf("%w: --ssh-keygen %s: %v", ErrSignerUnsupported, path, err)
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			return "", fmt.Errorf("%w: --ssh-keygen %s: no ownership for %s", ErrSignerUnsupported, path, cur)
+		}
+		if reason := signerEntryProblem(info.Mode(), st.Uid, st.Gid, cur == resolved); reason != "" {
+			return "", fmt.Errorf("%w: --ssh-keygen %s: %s %s", ErrSignerUnsupported, path, cur, reason)
+		}
+		if cur == filepath.Dir(cur) {
+			break
+		}
 	}
 	return resolved, nil
+}
+
+// signerOwnerOK accepts this user and root. Tests replace it.
+var signerOwnerOK = func(uid uint32) bool { return uid == 0 || int(uid) == os.Geteuid() }
+
+// adminGroup reports whether gid is a group whose members administer the
+// machine anyway: wheel (0) everywhere, and admin (80) on macOS, which
+// Homebrew gives group write on its prefix.
+func adminGroup(gid uint32) bool {
+	return gid == 0 || (runtime.GOOS == "darwin" && gid == 80)
+}
+
+// signerEntryProblem returns why one resolved path component is not
+// acceptable for the signing binary, or "" when it is.
+func signerEntryProblem(mode os.FileMode, uid, gid uint32, final bool) string {
+	switch {
+	case mode&os.ModeSymlink != 0:
+		return "changed while resolving"
+	case !signerOwnerOK(uid):
+		return "is owned by another user"
+	case mode.Perm()&0o002 != 0:
+		return "is writable by others"
+	case mode.Perm()&0o020 != 0 && !adminGroup(gid):
+		return "is group writable"
+	}
+	if final {
+		switch {
+		case !mode.IsRegular() || mode.Perm()&0o111 == 0:
+			return "is not an executable file"
+		case mode&(os.ModeSetuid|os.ModeSetgid) != 0:
+			return "is set-id"
+		}
+	}
+	return ""
 }
 
 // signWithKeygen runs `ssh-keygen -Y sign` with the payload on standard

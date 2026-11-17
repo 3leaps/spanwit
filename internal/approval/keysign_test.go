@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -24,31 +25,69 @@ func writeExec(t *testing.T, dir, name, body string, mode os.FileMode) string {
 }
 
 func TestSignerPath(t *testing.T) {
+	sh, err := filepath.EvalSymlinks("/bin/sh")
+	if err != nil {
+		t.Skip("no /bin/sh")
+	}
+	if got, err := SignerPath(sh); err != nil || got != sh {
+		t.Fatalf("root-owned system binary: %q, %v", got, err)
+	}
 	dir := t.TempDir()
-	good := writeExec(t, dir, "ssh-keygen", "#!/bin/sh\n", 0o755)
-	link := filepath.Join(dir, "link")
-	if err := os.Symlink(good, link); err != nil {
-		t.Fatal(err)
-	}
-	resolved, _ := filepath.EvalSymlinks(good)
-	for in, want := range map[string]string{good: resolved, link: resolved} {
-		got, err := SignerPath(in)
-		if err != nil || got != want {
-			t.Fatalf("SignerPath(%s) = %q, %v", in, got, err)
-		}
-	}
-	refused := map[string]string{
-		"relative":       "ssh-keygen",
-		"unclean":        dir + "/./ssh-keygen",
-		"missing":        filepath.Join(dir, "absent"),
-		"not executable": writeExec(t, dir, "plain", "x", 0o644),
-		"group writable": writeExec(t, dir, "gw", "#!/bin/sh\n", 0o775),
-		"directory":      dir,
-	}
-	for name, in := range refused {
+	for name, in := range map[string]string{
+		"relative": "ssh-keygen",
+		"unclean":  dir + "/./ssh-keygen",
+		"missing":  filepath.Join(dir, "absent"),
+	} {
 		if _, err := SignerPath(in); !errors.Is(err, ErrSignerUnsupported) {
 			t.Errorf("%s: SignerPath(%s) = %v", name, in, err)
 		}
+	}
+	// Another user's binary is refused even when nothing is group writable.
+	prev := signerOwnerOK
+	signerOwnerOK = func(uid uint32) bool { return uid != 0 }
+	t.Cleanup(func() { signerOwnerOK = prev })
+	if _, err := SignerPath(sh); !errors.Is(err, ErrSignerUnsupported) || !strings.Contains(err.Error(), "owned by another user") {
+		t.Errorf("other owner accepted: %v", err)
+	}
+}
+
+func TestSignerEntryProblem(t *testing.T) {
+	prev := signerOwnerOK
+	signerOwnerOK = func(uid uint32) bool { return uid == 501 || uid == 0 }
+	t.Cleanup(func() { signerOwnerOK = prev })
+	const me, other, staff = 501, 502, 20
+	cases := []struct {
+		name     string
+		mode     os.FileMode
+		uid, gid uint32
+		final    bool
+		want     string
+	}{
+		{"own dir", os.ModeDir | 0o755, me, staff, false, ""},
+		{"root dir", os.ModeDir | 0o755, 0, 0, false, ""},
+		{"other owner dir", os.ModeDir | 0o755, other, staff, false, "owned by another user"},
+		{"other-writable dir", os.ModeDir | 0o777, me, staff, false, "writable by others"},
+		{"sticky world dir", os.ModeDir | os.ModeSticky | 0o777, 0, 0, false, "writable by others"},
+		{"group-writable staff dir", os.ModeDir | 0o775, me, staff, false, "group writable"},
+		{"group-writable wheel dir", os.ModeDir | 0o775, 0, 0, false, ""},
+		{"own executable", 0o555, me, staff, true, ""},
+		{"not executable", 0o644, me, staff, true, "not an executable"},
+		{"directory as final", os.ModeDir | 0o755, me, staff, true, "not an executable"},
+		{"setuid", os.ModeSetuid | 0o755, me, staff, true, "set-id"},
+		{"setgid", os.ModeSetgid | 0o755, me, staff, true, "set-id"},
+		{"symlink", os.ModeSymlink | 0o755, me, staff, false, "changed while resolving"},
+		{"other owner file", 0o755, other, staff, true, "owned by another user"},
+	}
+	for _, c := range cases {
+		got := signerEntryProblem(c.mode, c.uid, c.gid, c.final)
+		if (c.want == "") != (got == "") || !strings.Contains(got, c.want) {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+	// Homebrew's prefix: group admin (80) with group write, on macOS only.
+	got := signerEntryProblem(os.ModeDir|0o775, me, 80, false)
+	if (runtime.GOOS == "darwin") != (got == "") {
+		t.Errorf("admin group-writable dir on %s: %q", runtime.GOOS, got)
 	}
 }
 
