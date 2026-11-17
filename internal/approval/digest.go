@@ -65,14 +65,18 @@ func IdentifyPlan(raw []byte) (PlanIdentity, error) {
 		seen[path] = true
 		sig, _ := obj["signature"].(string)
 		pat, _ := obj["pattern"].(string)
+		// The planner revalidates a candidate by its signature when it has
+		// one; pattern is then the signature's display pattern (space and
+		// profile handoffs carry both). The set entry follows the planner,
+		// and the plan digest binds every member either way.
 		var kind, id string
 		switch {
-		case sig != "" && pat == "":
+		case sig != "":
 			kind, id = "signature", sig
-		case pat != "" && sig == "":
+		case pat != "":
 			kind, id = "pattern", pat
 		default:
-			return PlanIdentity{}, fmt.Errorf("exact plan: candidate %q needs exactly one of signature or pattern", path)
+			return PlanIdentity{}, fmt.Errorf("exact plan: candidate %q needs a signature or a pattern", path)
 		}
 		keys = append(keys, path)
 		byPath[path] = []canonjson.Value{path, kind, id}
