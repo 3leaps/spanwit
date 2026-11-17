@@ -13,7 +13,6 @@ import (
 	"github.com/3leaps/spanwit/internal/canonjson"
 	"github.com/3leaps/spanwit/internal/daemon"
 	"github.com/3leaps/spanwit/internal/engine"
-	"github.com/3leaps/spanwit/internal/serviceexec"
 	"github.com/google/uuid"
 )
 
@@ -129,37 +128,28 @@ func Show(plan, payload []byte) (Payload, PlanIdentity, error) {
 // Sign runs Show's checks and then has ssh-keygen sign the same in-memory
 // payload bytes (stdin), so the signed bytes are the bytes that were checked
 // and displayed. confirm is called with the parsed payload before signing.
-func Sign(ctx context.Context, plan, payload []byte, keyPath string, confirm func(Payload, PlanIdentity) bool) ([]byte, error) {
+// keygen selects the ssh-keygen used to sign (see SignerPath); verification
+// always uses the system ssh-keygen.
+func Sign(ctx context.Context, plan, payload []byte, keyPath, keygen string, confirm func(Payload, PlanIdentity) bool) ([]byte, error) {
 	p, id, err := Show(plan, payload)
+	if err != nil {
+		return nil, err
+	}
+	program, err := SignerPath(keygen)
 	if err != nil {
 		return nil, err
 	}
 	if !confirm(p, id) {
 		return nil, errors.New("not confirmed; nothing signed")
 	}
-	if _, err := TrustedFile(sshKeygenPath, 64<<20); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrVerifierUnavailable, err)
+	stdout, stderr, err := signWithKeygen(ctx, program, keyPath, payload)
+	if err != nil {
+		return nil, signFailure(program, stderr, err)
 	}
-	res := serviceexec.ExecRunner{}.Run(ctx, serviceexec.Request{
-		Program: sshKeygenPath, Args: []string{"-Y", "sign", "-n", SignatureNamespace, "-f", keyPath},
-		Dir: "/", Timeout: 30 * time.Second, Stdin: payload,
-	})
-	if res.Outcome != serviceexec.Success {
-		return nil, fmt.Errorf("ssh-keygen sign: %s: %s", res.Outcome, firstLine(res.Stderr))
-	}
-	if _, err := ParseSignature(res.Stdout); err != nil {
+	if _, err := ParseSignature(stdout); err != nil {
 		return nil, fmt.Errorf("produced signature is not acceptable: %w", err)
 	}
-	return res.Stdout, nil
-}
-
-func firstLine(b []byte) string {
-	for i, c := range b {
-		if c == '\n' {
-			return string(b[:i])
-		}
-	}
-	return string(b)
+	return stdout, nil
 }
 
 // Issue verifies sig over the journaled request payload and records the

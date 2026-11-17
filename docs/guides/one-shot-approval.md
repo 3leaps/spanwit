@@ -23,14 +23,47 @@ deleting; any difference refuses with `stale_plan_or_drift` and deletes nothing.
 
 ## Setup (once)
 
-The approval key must be an OpenSSH security-key key (`sk-ssh-ed25519` or
-`sk-ecdsa-sha2-nistp256`) that requires a touch. A key dedicated to spanwit
-is easiest to tell apart from other SSH keys:
+### A signing tool with security-key support
+
+Approvals are verified with the system `/usr/bin/ssh-keygen`. Signing needs an
+`ssh-keygen` that can use a security key:
+
+| Platform | Signing `ssh-keygen`                                                                  |
+| -------- | ------------------------------------------------------------------------------------- |
+| Linux    | `/usr/bin/ssh-keygen` from an OpenSSH client built with security-key support (8.2+).  |
+| macOS    | The system `ssh-keygen` cannot use security keys. Install Homebrew's OpenSSH (below). |
+| Windows  | Approvals are unavailable.                                                            |
+
+On macOS:
 
 ```sh
-ssh-keygen -t ed25519-sk -O application=ssh:spanwit -C spanwit-approver \
-  -f ~/.ssh/id_ed25519_sk_spanwit
+brew install openssh
 ```
+
+This links `ssh`, `ssh-keygen` and `ssh-agent` into `/opt/homebrew/bin`. If
+that directory comes before `/usr/bin` on your `PATH`, they replace the system
+tools for everything you run. To avoid surprises, call it by full path and pass
+it to spanwit with `--ssh-keygen /opt/homebrew/bin/ssh-keygen`. spanwit never
+searches `PATH` for it, and verification always uses `/usr/bin/ssh-keygen`.
+
+`spanwit doctor` reports which `ssh-keygen` signs and verifies on this machine.
+It does not touch the key, so security-key support is confirmed by the first
+signature.
+
+### The approval key
+
+The approval key must be an OpenSSH security-key key (`sk-ssh-ed25519` or
+`sk-ecdsa-sha2-nistp256`) that requires a touch. A key dedicated to spanwit
+is easiest to tell apart from other SSH keys (on macOS, use
+`/opt/homebrew/bin/ssh-keygen`):
+
+```sh
+ssh-keygen -t ed25519-sk -O application=ssh:spanwit -O verify-required \
+  -C spanwit-approver -f ~/.ssh/id_ed25519_sk_spanwit
+```
+
+`-O verify-required` is optional: signing then asks for the security key's PIN
+as well as a touch. spanwit requires the touch; it does not check for the PIN.
 
 List its public key in `/etc/spanwit/allowed_signers` (or the file passed with
 `--allowed-signers`):
@@ -44,8 +77,8 @@ runs spanwit (owned by another user, no group or other write, not a symlink).
 An entry with `no-touch-required`, `cert-authority`, or a key type that can
 sign without the device makes the whole file untrusted.
 
-`approval sign` supports touch-only keys whose key handle file has no
-passphrase (the handle is useless without the device).
+`approval sign` runs in your terminal, where `ssh-keygen` asks for the key's
+PIN or the key file's passphrase when either is set, and then for a touch.
 
 ### No security key?
 
@@ -77,6 +110,7 @@ filesystem.
 
    ```sh
    spanwit approval sign --plan plan.json --payload payload.json --key ~/.ssh/id_ed25519_sk_spanwit
+   # macOS: add --ssh-keygen /opt/homebrew/bin/ssh-keygen
    ```
 
    `sign` reads both files once, checks the payload binds that plan, prints the

@@ -19,8 +19,11 @@ import (
 	"github.com/3leaps/spanwit/internal/serviceexec"
 )
 
-// sshKeygenPath is the only ssh-keygen spanwit runs; PATH is never searched.
-var sshKeygenPath = "/usr/bin/ssh-keygen"
+// SystemSSHKeygen is the ssh-keygen spanwit verifies with. PATH is never
+// searched; signing may use another binary named explicitly (SignerPath).
+const SystemSSHKeygen = "/usr/bin/ssh-keygen"
+
+var sshKeygenPath = SystemSSHKeygen
 
 // Refusal classes from the approval contract.
 var (

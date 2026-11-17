@@ -38,7 +38,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     write. It binds the exact plan bytes, the signature catalog, `--min-age`,
     optionally the active profile activation, limits, the store, and a window
     of at most 24h. It is used once.
-  - `approval sign` shows the candidates and signs the same bytes it checked.
+  - `approval sign` shows the candidates and signs the same bytes it checked,
+    in the terminal, where `ssh-keygen` can ask for the key's PIN or
+    passphrase. `--ssh-keygen <path>` selects the signing `ssh-keygen` (on
+    macOS, Homebrew's OpenSSH: the system one cannot use security keys);
+    verification always uses `/usr/bin/ssh-keygen`. `spanwit doctor` reports
+    approval signing readiness.
   - `--approved-only` / `SPANWIT_APPROVED_ONLY` refuses every mutation except
     an approved exact-plan prune.
   - Before the first deletion an execution stores the candidates it will
