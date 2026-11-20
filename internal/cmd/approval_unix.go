@@ -126,7 +126,7 @@ signature catalog and, when requested, the active profile activation.`,
 				line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 				ok := strings.TrimSpace(line) == strings.TrimPrefix(p.PlanDigest, "sha256:")[:12]
 				if ok {
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Enter the key's PIN or passphrase if asked, then touch your security key.")
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "ssh-keygen asks for the key's PIN or passphrase if one is set. Then touch your security key when it blinks; there may be no further prompt.")
 				}
 				return ok
 			})

@@ -82,7 +82,9 @@ An entry with `no-touch-required`, `cert-authority`, or a key type that can
 sign without the device makes the whole file untrusted.
 
 `approval sign` runs in your terminal, where `ssh-keygen` asks for the key's
-PIN or the key file's passphrase when either is set, and then for a touch.
+PIN or the key file's passphrase when either is set. Then touch the key when it
+blinks: after a PIN, `ssh-keygen` prints no further prompt. On macOS, signing
+without `--ssh-keygen` is refused before any prompt.
 
 ### No security key?
 

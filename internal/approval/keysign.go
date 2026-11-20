@@ -38,6 +38,9 @@ var ErrSignerUnsupported = errors.New("signer_unsupported")
 // PATH; verification always uses the system ssh-keygen.
 func SignerPath(path string) (string, error) {
 	if path == "" {
+		if systemSignerLacksSecurityKeys {
+			return "", unsupportedSigner(sshKeygenPath)
+		}
 		if _, err := TrustedFile(sshKeygenPath, 64<<20); err != nil {
 			return "", fmt.Errorf("%w: %v", ErrVerifierUnavailable, err)
 		}
@@ -67,6 +70,20 @@ func SignerPath(path string) (string, error) {
 		}
 	}
 	return resolved, nil
+}
+
+// systemSignerLacksSecurityKeys is true where the system ssh-keygen is built
+// without security-key support. On macOS it is, and Sign runs it with an empty
+// environment, so no provider can be supplied either. Refusing here happens
+// before the confirmation prompt and before ssh-keygen asks for a PIN it
+// cannot use. Tests replace it.
+var systemSignerLacksSecurityKeys = runtime.GOOS == "darwin"
+
+// unsupportedSigner names program and how to choose one that works.
+func unsupportedSigner(program string) error {
+	return fmt.Errorf("%w: %s cannot use security keys. Use an OpenSSH build with security-key support "+
+		"and pass it with --ssh-keygen (on macOS: brew install openssh, then --ssh-keygen /opt/homebrew/bin/ssh-keygen)",
+		ErrSignerUnsupported, program)
 }
 
 // signerOwnerOK accepts this user and root. Tests replace it.
@@ -151,9 +168,7 @@ func signFailure(program string, stderr []byte, err error) error {
 	switch {
 	case strings.Contains(text, "internal security key support not enabled"),
 		strings.Contains(text, "No FIDO SecurityKeyProvider specified"):
-		return fmt.Errorf("%w: %s cannot use security keys. Use an OpenSSH build with security-key support "+
-			"and pass it with --ssh-keygen (on macOS: brew install openssh, then --ssh-keygen /opt/homebrew/bin/ssh-keygen)",
-			ErrSignerUnsupported, program)
+		return unsupportedSigner(program)
 	case strings.Contains(text, "device not found"):
 		return fmt.Errorf("ssh-keygen sign: no security key found; insert the key and try again")
 	}

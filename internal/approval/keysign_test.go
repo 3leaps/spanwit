@@ -42,6 +42,20 @@ func TestSignerPath(t *testing.T) {
 			t.Errorf("%s: SignerPath(%s) = %v", name, in, err)
 		}
 	}
+	// Where the system ssh-keygen has no security-key support, the default is
+	// refused before anything prompts.
+	prevSys := systemSignerLacksSecurityKeys
+	systemSignerLacksSecurityKeys = true
+	t.Cleanup(func() { systemSignerLacksSecurityKeys = prevSys })
+	if _, err := SignerPath(""); !errors.Is(err, ErrSignerUnsupported) || !strings.Contains(err.Error(), "--ssh-keygen") {
+		t.Errorf("default signer without security-key support: %v", err)
+	}
+	systemSignerLacksSecurityKeys = false
+	if got, err := SignerPath(""); err == nil && got != sshKeygenPath {
+		t.Errorf("default signer = %q", got)
+	} else if errors.Is(err, ErrSignerUnsupported) {
+		t.Errorf("default signer with security-key support refused as unsupported: %v", err)
+	}
 	// Another user's binary is refused even when nothing is group writable.
 	prev := signerOwnerOK
 	signerOwnerOK = func(uid uint32) bool { return uid != 0 }
