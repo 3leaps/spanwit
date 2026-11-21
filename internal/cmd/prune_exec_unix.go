@@ -106,13 +106,6 @@ func outcomeError(res approval.Result) error {
 	return nil
 }
 
-func assertionLabel() string {
-	if ResolvedApprovedOnly() {
-		return engine.ExecutionAssertionApprovalBound
-	}
-	return engine.ExecutionAssertionOpen
-}
-
 // checkStateFilesystem refuses, before any discovery, a state directory
 // (or, on a fresh host, its nearest existing ancestor) on a filesystem the
 // journal store does not accept, naming the filesystem and the remedy.

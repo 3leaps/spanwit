@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/3leaps/spanwit/internal/engine"
 	"github.com/3leaps/spanwit/internal/inventory"
 )
 
@@ -308,4 +309,12 @@ func ResolvedReadOnlyAsserted() bool {
 // ResolvedCapability is the leaf capability after mode elevation.
 func ResolvedCapability() string {
 	return resolvedCapability
+}
+
+// assertionLabel is the mutation assertion recorded with an execution.
+func assertionLabel() string {
+	if ResolvedApprovedOnly() {
+		return engine.ExecutionAssertionApprovalBound
+	}
+	return engine.ExecutionAssertionOpen
 }

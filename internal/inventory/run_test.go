@@ -1764,6 +1764,11 @@ func assertRootReconciliation(t *testing.T, summary Summary) {
 	}
 }
 
+func mustWrite(t *testing.T, path string, size int64) {
+	t.Helper()
+	writeSizedAt(t, path, size, time.Now())
+}
+
 func writeSizedAt(t *testing.T, path string, size int64, modTime time.Time) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

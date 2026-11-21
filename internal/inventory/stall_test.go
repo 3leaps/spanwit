@@ -232,11 +232,6 @@ func TestRun_NegativeStallTimeoutWaits(t *testing.T) {
 	}
 }
 
-func mustWrite(t *testing.T, path string, size int64) {
-	t.Helper()
-	writeSizedAt(t, path, size, time.Now())
-}
-
 // Every record of a stream carrying a stalled gap, a remote gap, and the new
 // counters validates against the published profiles.
 func TestRun_StallAndRemoteStreamValidatesAgainstSchemas(t *testing.T) {
