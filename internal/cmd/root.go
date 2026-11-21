@@ -39,7 +39,12 @@ func Initialize(ctx context.Context, identity *appidentity.Identity, logger *log
 		Use:   identity.BinaryName,
 		Short: identity.Description,
 		Long:  identity.Description,
+		// main prints a returned error once, as plain text.
+		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Flags, required flags and arguments are valid by now: a later
+			// error is a refusal or a failure, not misuse, so print no usage.
+			cmd.SilenceUsage = true
 			// Set log level from flag if provided
 			if logLevel != "" {
 				// Parse level: trace, debug, info, warn, error
