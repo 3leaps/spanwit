@@ -74,7 +74,6 @@ func TestIdentifyPlanRejects(t *testing.T) {
 		"no root":          `{"candidates":[]}`,
 		"no candidates":    `{"analysis_root":"/r"}`,
 		"dup path":         `{"analysis_root":"/r","candidates":[{"path":"/r/a","pattern":"p"},{"path":"/r/a","pattern":"p"}]}`,
-		"both kinds":       `{"analysis_root":"/r","candidates":[{"path":"/r/a","pattern":"p","signature":"s"}]}`,
 		"neither kind":     `{"analysis_root":"/r","candidates":[{"path":"/r/a"}]}`,
 		"fraction":         `{"analysis_root":"/r","candidates":[],"min_size":1.5}`,
 		"not object":       `[]`,
@@ -82,5 +81,18 @@ func TestIdentifyPlanRejects(t *testing.T) {
 		if _, err := IdentifyPlan([]byte(in)); err == nil {
 			t.Errorf("%s accepted", name)
 		}
+	}
+}
+
+// A space or profile handoff carries a signature's display pattern next to
+// the signature; the set entry is the signature, as the planner uses it.
+func TestIdentifyPlanSignatureWithDisplayPattern(t *testing.T) {
+	both, err := IdentifyPlan([]byte(`{"analysis_root":"/r","candidates":[{"path":"/r/a","signature":"s","pattern":"**/a"}]}`))
+	if err != nil {
+		t.Fatalf("handoff candidate refused: %v", err)
+	}
+	sigOnly, _ := IdentifyPlan([]byte(`{"analysis_root":"/r","candidates":[{"path":"/r/a","signature":"s"}]}`))
+	if both.CandidateSetDigest != sigOnly.CandidateSetDigest || both.PlanDigest == sigOnly.PlanDigest {
+		t.Errorf("set equal %v, plan differs %v", both.CandidateSetDigest == sigOnly.CandidateSetDigest, both.PlanDigest != sigOnly.PlanDigest)
 	}
 }

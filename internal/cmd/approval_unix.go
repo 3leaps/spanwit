@@ -30,6 +30,7 @@ func newApprovalCmd(identity *appidentity.Identity) *cobra.Command {
 	}
 	stateDir := filepath.Join(home, ".local", "state", binary, "daemon")
 	allowedSigners := approval.DefaultAllowedSigners
+	var sshKeygen string
 
 	parent := &cobra.Command{
 		Use:   "approval",
@@ -119,13 +120,13 @@ signature catalog and, when requested, the active profile activation.`,
 			if !stdinIsTerminal() {
 				return fmt.Errorf("approval sign needs an interactive terminal for confirmation")
 			}
-			sig, err := approval.Sign(cmd.Context(), plan, payload, keyPath, func(p approval.Payload, id approval.PlanIdentity) bool {
+			sig, err := approval.Sign(cmd.Context(), plan, payload, keyPath, sshKeygen, func(p approval.Payload, id approval.PlanIdentity) bool {
 				printApprovalSummary(cmd.OutOrStdout(), p, id, plan)
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nSign approval %s? Type the first 12 characters of the plan digest to confirm: ", p.ApprovalID)
 				line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 				ok := strings.TrimSpace(line) == strings.TrimPrefix(p.PlanDigest, "sha256:")[:12]
 				if ok {
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Touch your security key now.")
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "ssh-keygen asks for the key's PIN or passphrase if one is set. Then touch your security key when it blinks; there may be no further prompt.")
 				}
 				return ok
 			})
@@ -146,6 +147,7 @@ signature catalog and, when requested, the active profile activation.`,
 	sign.Flags().StringVar(&payloadPath, "payload", "", "approval payload (required)")
 	sign.Flags().StringVar(&keyPath, "key", "", "security-key (sk-) private key handle (required)")
 	sign.Flags().StringVar(&outPath, "out", "", "signature output (default <payload>.sig; must not exist)")
+	sign.Flags().StringVar(&sshKeygen, "ssh-keygen", "", "ssh-keygen with security-key support, used only to sign (default "+approval.SystemSSHKeygen+"; on macOS /opt/homebrew/bin/ssh-keygen from Homebrew openssh)")
 	markRequired(sign, "plan", "payload", "key")
 	setCommandCapability(sign, CapabilityPlanning)
 

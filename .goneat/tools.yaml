@@ -23,6 +23,9 @@ scopes:
     description: "Lint support tools (shell, make, GitHub Actions)"
     tools: ["shfmt", "checkmake", "actionlint"]
     replace: true
+  runtime:
+    description: "Programs the spanwit binary execs at run time (never linked). Explain only: not installed by make bootstrap"
+    tools: ["openssh-security-key"]
 tools:
   curl:
     name: "curl"
@@ -176,3 +179,20 @@ tools:
     install_package: "github.com/rhysd/actionlint/cmd/actionlint@latest"
     detect_command: "actionlint -version"
     platforms: ["linux", "darwin", "windows"]
+  openssh-security-key:
+    name: "openssh-security-key"
+    description: "ssh-keygen with security-key support, for spanwit approval sign on macOS (the system ssh-keygen cannot use security keys; verification keeps using /usr/bin/ssh-keygen)"
+    kind: "system"
+    detect_command: "/opt/homebrew/bin/ssh -V"
+    platforms: ["darwin"]
+    installer_priority:
+      darwin: ["manual"]
+    install_commands:
+      manual: |
+        echo 'Not installed automatically. Homebrew openssh links ssh, ssh-keygen and ssh-agent into /opt/homebrew/bin,'
+        echo 'which then come before /usr/bin when /opt/homebrew/bin is earlier on PATH. To install:'
+        echo '  brew install openssh'
+        echo 'and sign with: spanwit approval sign --ssh-keygen /opt/homebrew/bin/ssh-keygen ...'
+        exit 1
+    cooling:
+      enabled: false

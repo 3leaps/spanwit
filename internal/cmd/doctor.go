@@ -85,6 +85,13 @@ func newDoctorCmd(identity *appidentity.Identity) *cobra.Command {
 				loggerInstance.Info("      Config file... "+config.DefaultPath(identity), zap.String("config_file", config.DefaultPath(identity)))
 			}
 
+			// Informational: approvals are optional, so this never fails doctor.
+			loggerInstance.Info("")
+			loggerInstance.Info("Approval signing (optional):")
+			for _, line := range approvalSigningLines() {
+				loggerInstance.Info("      " + line)
+			}
+
 			loggerInstance.Info("")
 			if allChecks {
 				loggerInstance.Info(fmt.Sprintf("✅ All checks passed! Your %s installation is healthy.", identity.BinaryName))

@@ -25,6 +25,11 @@ Standard checklist for spanwit releases to ensure consistency and quality.
   - [ ] `./bin/spanwit scan ~/dev` — read-only scan path
   - [ ] `./bin/spanwit prune --format json` — dry-run plan emits valid JSON
   - [ ] `./bin/spanwit validate --help` — schema validation path
+  - [ ] Approval with a real security key, on macOS and on Linux: create the
+        key, list it in a root-owned allowed-signers file, then `approval
+request`, `sign` (macOS: `--ssh-keygen /opt/homebrew/bin/ssh-keygen`),
+        `issue` and an approved `prune --execute` on a scratch tree. Repeat
+        `sign` with a PIN-protected (`-O verify-required`) key.
 
 ### Documentation
 
