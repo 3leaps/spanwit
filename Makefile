@@ -291,11 +291,15 @@ prepush: license-audit ## Run pre-push hooks
 	@if [ -z "$(GONEAT_BIN)" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi
 	@echo "Running pre-push validation..." && $(GONEAT_BIN) assess --categories format,lint,security,dependencies,dates,tools,maturity,repo-status --fail-on high --package-mode && echo "✅ Pre-push checks passed"
 
+vet-cross:  ## Vet every package, tests included, for each release OS
+	@for os in linux darwin windows; do echo "go vet ($$os)..."; GOOS=$$os go vet ./... || exit 1; done
+	@echo "✅ Cross-platform vet passed"
+
 fmt-check:  ## Check formatting without modifying files (non-mutating)
 	@if [ -z "$(GONEAT_BIN)" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi
 	@echo "Checking format (no changes written)..." && $(GONEAT_BIN) format --check && echo "✅ Format check passed"
 
-pr-final: verify-embedded-identity fmt-check lint validate-schemas test license-audit build-all  ## Final non-mutating PR gate (format/lint/schema/test + license + multi-platform build)
+pr-final: verify-embedded-identity fmt-check lint vet-cross validate-schemas test license-audit build-all  ## Final non-mutating PR gate (format/lint/schema/test + license + multi-platform build)
 	@echo "✅ pr-final gate passed — branch is PR-ready"
 
 # -----------------------------------------------------------------------------

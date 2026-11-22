@@ -63,6 +63,8 @@ jobs:
         run: make fmt-check
       - name: Lint
         run: make lint
+      - name: Vet (linux, darwin, windows)
+        run: make vet-cross
       - name: Test
         run: make test
       - name: Build binary

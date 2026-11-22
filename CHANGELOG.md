@@ -17,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   elsewhere, point `--state-dir` at one. The JSON
   report's `execution` object gains `journal`, `operation_id`, `approval_id`
   and `assertion`.
+- **Error output.** A command that fails or refuses prints its error once, as
+  plain text on stderr, without a stack trace or the command's usage. Usage is
+  still shown for an unknown flag, a missing required flag or a wrong number of
+  arguments.
 - **Platforms.** Journaled execution and approvals are available on macOS and
   Linux. On Windows `prune --execute` keeps the earlier behaviour, unjournaled,
   and reports `journal: unavailable_on_platform`; `--approval` is refused.

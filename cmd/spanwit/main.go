@@ -63,7 +63,9 @@ func main() {
 	// Initialize and execute root command
 	cmd.Initialize(ctx, identity, logger)
 	if err := cmd.Execute(); err != nil {
-		logger.Error("command execution failed", zap.Error(err))
+		// Debug, not Error: the error is printed below, and an Error log
+		// carries a stack trace that is noise to someone reading a refusal.
+		logger.Debug("command execution failed", zap.Error(err))
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(foundry.ExitFailure)
 	}
